@@ -29,6 +29,27 @@ Raw output is written to `tools/gateway-perf/results/<timestamp>/` (Git-ignored)
 
 Only an ephemeral test JWT is used. `ready.json` is deleted on normal teardown. No real credentials are required. The harness binds to `127.0.0.1`; do not expose its unauthenticated fixture metrics endpoint.
 
+## Scripts in this directory
+
+| File | Role |
+|---|---|
+| `run.ps1` | Windows entry point. Resolves the JDK/Maven paths, compiles the reactor, runs `GatewayConfigurationTest` to capture the test classpath, then invokes `run.mjs`. |
+| `run.mjs` | Orchestrator. Starts the mock upstream and the gateway process, prewarms, drives every case through `load.mjs`, writes `results.json` / `report.md` / `*.log`, and removes `ready.json` on teardown. |
+| `load.mjs` | Closed-loop load generator plus the `measure` / `distribution` helpers used by the runner. |
+| `load.test.mjs` | Self-test for the generator (`node --test tools/gateway-perf/load.test.mjs`). |
+| `mock.mjs` | Deterministic upstream fixture (ordinary JSON, 1MiB body, timed SSE) exposing `/__baseline/metrics` for its own CPU/RSS/event-loop lag. |
+| `summarize.mjs` | Re-renders a publishable `report.md` from a saved `results.json`. It refuses incomplete, failed or superseded runs and checks the expected run count. |
+| `compare-basic.mjs` | Builds the Basic coalescing A/B report from two result files. |
+
+`run.mjs` writes both `results.json` and a first-pass `report.md` during the run. To regenerate the report later from saved results, or to build the coalescing comparison:
+
+```powershell
+node tools/gateway-perf/summarize.mjs <results.json> <report.md>
+node tools/gateway-perf/compare-basic.mjs <off-results.json> <on-results.json> <report.md>
+```
+
+Reports produced by `summarize.mjs` link back to this README, so keep the two consistent when the harness changes.
+
 ## Scenario matrix
 
 | Class | Cases | What is exercised |

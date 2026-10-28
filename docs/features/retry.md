@@ -15,9 +15,9 @@ Gateway supports configurable retry strategy, automatically retrying in the foll
 ```
 Request Flow:
   ...
-  Circuit Breaker (-100) → Check circuit state
+  Circuit Breaker (-3) → Check circuit state
        ↓
-  Retry (2147483647) → Retry on failure
+  Retry (-2) → Retry on failure
        ↓
   RouteToRequestUrlFilter (10000) → Forward to backend
 ```
@@ -245,19 +245,35 @@ Critical services need higher fault tolerance:
 
 ## API Endpoints
 
-Configure via Strategy API:
+Configure via the Strategy API. There is **no `/api/strategies/retry` path**: `StrategyController`
+is `@RequestMapping("/api/strategies")` and identifies a strategy by its `strategyId`
+(`PUT /{id}`, `GET /{id}`, `DELETE /{id}`), with `GET /type/{type}` for lookup by type.
+The retry type constant is `StrategyDefinition.TYPE_RETRY = "RETRY"`.
+`POST`/`PUT`/`DELETE` under `/api/**` require the `ADMIN` authority (`SecurityConfig`).
 
 ```bash
-curl -X PUT http://localhost:9090/api/strategies/retry \
+curl -X PUT http://localhost:9090/api/strategies/unstable-api-retry \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{
+    "strategyId": "unstable-api-retry",
+    "strategyName": "Unstable API retry",
+    "strategyType": "RETRY",
+    "scope": "ROUTE",
     "routeId": "unstable-api",
-    "maxAttempts": 3,
-    "retryIntervalMs": 1000,
-    "retryOnStatusCodes": [500, 502, 503, 504],
-    "enabled": true
+    "enabled": true,
+    "config": {
+      "maxAttempts": 3,
+      "retryIntervalMs": 1000,
+      "retryOnStatusCodes": [500, 502, 503, 504]
+    }
   }'
 ```
+
+Other endpoints: `GET /api/strategies`, `GET /api/strategies/{id}`,
+`GET /api/strategies/type/RETRY`, `GET /api/strategies/global`,
+`GET /api/strategies/route/{routeId}`, `DELETE /api/strategies/{id}`,
+`POST /api/strategies/{id}/enable`, `POST /api/strategies/{id}/disable`.
 
 ---
 

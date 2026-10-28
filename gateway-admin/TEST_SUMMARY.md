@@ -1,5 +1,19 @@
 # Gateway Admin API Integration Tests with Namespace Isolation
 
+> **Scope & status (verified 2026-10-28)**
+> - **Coverage**: despite the generic file name, this document covers **only the 7 namespace-isolation
+>   test classes** (plus their shared base class) — **98 `@Test` methods** in total. It is *not* a
+>   summary of the whole `gateway-admin` test suite: `git ls-files 'src/test/**/*.java'` returns **81**
+>   files (**80** of them named `*Test.java`), and a full `mvn test` run of this module executes far more
+>   than 98 tests. A more accurate title would be *"Namespace Integration Test Summary"*.
+> - **Duplicate**: this file overlaps heavily with
+>   [`src/test/README_NamespaceTests.md`](./src/test/README_NamespaceTests.md).
+>   **Treat `src/test/README_NamespaceTests.md` as the authoritative version** (it is the Chinese
+>   counterpart, lives next to the tests, and carries the corrected prerequisite split between
+>   `./run-tests.sh` and `mvn test`).
+> - The 98-test breakdown below was re-counted and is **correct** (10/12/12/13/14/14/23).
+>   The "Test Environment Requirements" section below *was* wrong and has been corrected.
+
 ## Overview
 
 This test suite provides comprehensive integration tests for the Gateway Admin API with **Nacos namespace isolation** to ensure proper tenant separation. All configuration push operations include the `instanceId` parameter, which is critical for multi-tenancy as it determines the Nacos namespace used for configuration storage.
@@ -11,6 +25,13 @@ This test suite provides comprehensive integration tests for the Gateway Admin A
 - Automatically creates test instances with dedicated namespaces
 - Includes cleanup methods to prevent test data pollution
 - Helper methods for extracting response data
+- It is an `abstract` class annotated `@SpringBootTest` + `@AutoConfigureMockMvc` +
+  `@ActiveProfiles("test")` + `@TestMethodOrder(OrderAnnotation)` +
+  `@WithMockUser(username = "test-admin", authorities = {"ADMIN"})` (`NamespaceIntegrationTest.java:28-34`).
+  The `ADMIN` authority is required because `SecurityConfig` enforces `hasAuthority("ADMIN")` on
+  mutating `/api/**` calls.
+- Note: a separate, older `BaseIntegrationTest.java` also exists in the same package; all 7 classes
+  below extend **`NamespaceIntegrationTest`**, not `BaseIntegrationTest`.
 
 ### 2. **RouteNamespaceTest.java** - Route API Tests (10 tests)
 - ✅ Create route with instanceId - isolates to namespace
@@ -126,6 +147,11 @@ This test suite provides comprehensive integration tests for the Gateway Admin A
 
 ## Total Test Count: **98 Integration Tests**
 
+> Re-verified 2026-10-28: the 7 classes contain exactly **98** `@Test` methods
+> (10 + 12 + 12 + 13 + 14 + 14 + 23), so this total and the per-class numbers above are **correct**.
+> Counting caveat: `grep -c "@Test"` over-reports (it also matches the class-level `@TestMethodOrder`
+> and `@TestInstance` annotations, yielding 111 across these files). Use `grep -cE '^\s*@Test\s*$'`.
+
 ## Key Features Tested
 
 ### Namespace Isolation
@@ -154,6 +180,9 @@ Tests verify:
 cd gateway-admin
 mvn test
 ```
+> Note: a bare `mvn test` runs the **entire** `gateway-admin` module (80 `*Test.java` classes), not just
+> the 98 namespace tests documented here. To run only this suite, use the per-class `-Dtest=` forms below
+> or `./run-tests.sh`.
 
 ### Run Specific Test Class
 ```bash
@@ -186,11 +215,30 @@ mvn test -Dtest=RouteNamespaceTest#test01_CreateRoute_WithNamespace
 
 ## Test Environment Requirements
 
-- **Gateway Admin**: Running on port 9090
-- **My-Gateway**: Running on port 80
-- **Database**: MySQL or H2 configured
-- **Nacos**: Available for config center operations
-- **Redis**: Optional (for distributed features)
+> **★ Corrected.** This section previously claimed that a running **Gateway Admin on port 9090** and a
+> running **My-Gateway on port 80** were prerequisites. **That is false for `mvn test`.**
+> The base class is `@SpringBootTest` + `@AutoConfigureMockMvc` + `@ActiveProfiles("test")`
+> (`NamespaceIntegrationTest.java:28-30`), so every request goes through **MockMvc in-process** — no HTTP
+> server is started and no external gateway is contacted. The only place the port-9090 check exists is the
+> `run-tests.sh` wrapper, which `curl`s `http://localhost:9090/api/health` and `exit 1`s if it fails
+> (`run-tests.sh:15-22`); that is a quirk of the script, not a requirement of the tests.
+
+**Actually required** (from `src/test/resources/application-test.yml`):
+
+- **MySQL**: reachable at `127.0.0.1:3306`, database `gateway_admin_test`
+  (`application-test.yml:8`; `createDatabaseIfNotExist=true`, user `root`). JPA is
+  `ddl-auto: create-drop` for the test profile. **This is a hard requirement** — without it the Spring
+  context fails at `entityManagerFactory` with `Communications link failure` / `Connection refused`,
+  which is exactly the cause of the 80 errors seen when `gateway-admin` tests run on a machine with no
+  local MySQL.
+- **Redis**: `127.0.0.1`, port `${REDIS_PORT:30379}` (`application-test.yml:27`). **Not optional** —
+  ShedLock uses the Redis lock provider, so scheduled tasks fail without it. (The yml carries a comment
+  explaining why the port mirrors the main config instead of the usual 6379.)
+- **Nacos**: `127.0.0.1:8848`, namespace `gateway-test` (`application-test.yml:33-41`) for
+  discovery/config operations.
+
+**Not required**: a running `gateway-admin` on port 9090, or a running `my-gateway` on port 80
+(only `run-tests.sh` probes 9090).
 
 ## Important Notes
 

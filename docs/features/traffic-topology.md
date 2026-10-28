@@ -124,5 +124,5 @@ Traffic topology uses ECharts force-directed graph for visualization:
 ## Related Features
 
 - [Monitoring & Alerts](monitoring-alerts.md) - Monitoring data
-- [Request Tracing](request-tracing.md) - Request tracing
-- [Analytics](analytics.md) - Data analysis
+- [Request Tracing](request-tracing.md) - Request tracing (topology traffic metrics are
+  aggregated from the `request_trace` table)

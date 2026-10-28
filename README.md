@@ -78,7 +78,7 @@
 | **Alert System** | Configurable thresholds with email notifications |
 | **SSL Certificate Management** | Upload, monitor expiry, get alerts before certificates expire |
 | **Audit Logs** | Configuration change tracking with diff comparison and rollback |
-| **Stress Test Tool** | Concurrent load testing with AI analysis, export reports (PDF/Excel/JSON/Markdown), and shareable links |
+| **Stress Test Tool** | Concurrent load testing with AI analysis, Markdown export (the `format` query parameter is accepted but ignored - PDF/Excel/JSON export is not implemented), and shareable links |
 
 ### Kubernetes & Multi-Tenancy (New)
 
@@ -279,20 +279,29 @@ The platform supports deploying and managing multiple gateway instances, each wi
 
 ### Instance Configuration
 
-| Spec Type | CPU | Memory | Replicas | Use Case |
-|-----------|-----|--------|----------|----------|
-| `small` | 0.5 core | 512MB | 1 | Development |
-| `medium` | 1 core | 1GB | 2 | Staging |
-| `large` | 2 cores | 2GB | 3 | Production |
-| `xlarge` | 4 cores | 4GB | 5 | High-traffic Production |
-| `custom` | Custom | Custom | Custom | Special requirements |
+| Spec Type | CPU | Memory | Use Case |
+|-----------|-----|--------|----------|
+| `small` | 0.5 core | 512MB | Development |
+| `medium` | 1 core | 1GB | Staging |
+| `large` | 2 cores | 2GB | Production |
+| `xlarge` | 4 cores | 4GB | High-traffic Production |
+| `custom` | Custom | Custom | Special requirements |
+
+The `InstanceSpec` enum carries only `type`, `cpuCores`, `memoryMB` and `description` - a spec does
+**not** imply a replica count. Replicas come from the create request (`InstanceCreateRequest.replicas`,
+default `1`) and are changed afterwards through the scale API.
 
 ### Heartbeat Monitoring
 
-Each gateway instance sends heartbeats to the admin service:
-- **Running**: Heartbeat received within 30 seconds
-- **Warning**: Missed 1-2 heartbeats (30-60 seconds)
-- **Error**: Missed 3+ heartbeats (> 60 seconds)
+Each gateway instance sends heartbeats to the admin service. `InstanceHealthCheckTask` polls every
+10 seconds (`gateway.health.check-interval`):
+- **Running**: Heartbeat received within the last 30 seconds (`gateway.health.heartbeat-timeout`)
+- **Error**: Once the heartbeat is older than that deadline, each poll increments
+  `missedHeartbeats`; at 3 consecutive misses (`gateway.health.missed-heartbeat-threshold`) the
+  instance flips straight to `ERROR`
+
+There is no intermediate "Warning" state - `InstanceStatus` defines exactly five values:
+`STARTING`, `RUNNING`, `ERROR`, `STOPPING`, `STOPPED`.
 
 ---
 
@@ -354,10 +363,16 @@ Traditional gateways route all traffic to a single backend. But what if you want
 ```yaml
 gateway:
   ssl:
-    enabled: true
-    port: 8443
-    cert-path: /opt/certificates
+    enabled: true          # @Value default in SslServerConfig
+    port: 8443             # @Value default in SslServerConfig
 ```
+
+There is **no `cert-path` key** - the gateway never reads certificates off a local directory. It
+subscribes to the config center instead: `SslCertificateRefresher` listens on the
+`config.gateway.metadata.ssl-certificates-index` data-id and then registers a listener per domain
+(`ssl-certificate-{domain}`) for the entries the admin console publishes. `gateway.ssl.auto-load`
+and `gateway.ssl.refresh-interval` are still declared in `application.yml`, but no code binds them -
+refresh is listener-driven, not polled.
 
 **Features:**
 - Hot-reload certificates without restart
@@ -371,13 +386,17 @@ gateway:
 
 ### Integrated AI Providers
 
-| Provider | Models | Best For |
+| Provider ID | Models | Best For |
 |----------|--------|----------|
-| OpenAI | GPT-4, GPT-3.5 | General analysis |
-| Anthropic | Claude 3 | Detailed explanations |
-| Qwen | qwen-plus, qwen-turbo | Cost-effective |
-| DeepSeek | deepseek-chat | Reasoning |
-| Ollama | llama2, mistral | Local deployment |
+| `OPENAI` | gpt-4o, gpt-4-turbo, gpt-4 | General analysis |
+| `CLAUDE` | claude-3.5-sonnet, claude-3-opus, claude-3-haiku | Detailed explanations |
+| `GEMINI` | gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash | Long-context analysis |
+| `BAILIAN` (阿里云百炼) | qwen3.8-max, qwen3.7-plus, qwen3.8-flash, qwen3-coder-next, deepseek-v4-pro, deepseek-v4.1-flash, kimi-k3, kimi-k2.7-code, glm-5.3, glm-5.2 | One domestic entry point for Qwen / DeepSeek / Kimi / GLM |
+
+Source of truth: `AiAnalysisService.DEFAULT_BASE_URLS` and `PROVIDER_MODELS`. These are the only
+four provider IDs `validateApiKey` accepts - anything else returns `false`. There is **no Ollama or
+other self-hosted-runtime provider**, and DeepSeek/Kimi/GLM are reached through `BAILIAN`, not as
+separate providers.
 
 ### AI Analysis Features
 
@@ -400,16 +419,20 @@ gateway:
 
 ### Alert Thresholds
 
-```yaml
-alerts:
-  cpu:
-    process-threshold: 80%
-    system-threshold: 90%
-  memory:
-    heap-threshold: 85%
-  http:
-    error-rate-threshold: 5%
-    response-time-threshold: 2000ms
+Alert thresholds are **not** `application.yml` properties - there is no `alerts:` configuration
+prefix anywhere in the codebase. They are stored per gateway instance in the `alert_config` table
+(`AlertConfig.thresholdConfig`, a JSON column) and edited through `GET/POST /api/alerts/config`
+(`AlertController`). The defaults written by `AlertConfigService.getDefaultThresholdConfig()` are
+camelCase JSON:
+
+```json
+{
+  "cpu":      { "processThreshold": 80, "systemThreshold": 90, "enabled": true },
+  "memory":   { "heapThreshold": 85, "enabled": true },
+  "http":     { "errorRateThreshold": 5, "responseTimeThreshold": 2000, "enabled": true },
+  "instance": { "unhealthyThreshold": 1, "enabled": true },
+  "thread":   { "activeThreshold": 90, "enabled": true }
+}
 ```
 
 ---
@@ -419,7 +442,8 @@ alerts:
 ### Prerequisites
 
 - Java 21+ (`pom.xml` sets `java.version=21` for every module; the images are `eclipse-temurin:21`)
-- Node.js 18+
+- Node.js 22.18+ (`npm run test:routes` imports `.ts` sources directly, which needs Node's built-in
+  type stripping - default-on from 22.18; CI asks `setup-node` for `'22'`)
 - MySQL 8.0+
 - Nacos 2.3.0 (the version `docker-compose.yml` and `k8s/nacos.yaml` pin) or Consul
 - Redis (optional, for distributed rate limiting)
@@ -483,7 +507,7 @@ self-service registration - so if they are missing the console has no user at al
 | **Circuit Breaker** | Resilience4j 2.1 |
 | **Rate Limiting** | Redis + Caffeine (hybrid) |
 | **Authentication** | JJWT 0.12 |
-| **Database** | MySQL 8, Spring Data JPA |
+| **Database** | Spring Data JPA over MySQL 8 (`docker-compose.yml` pins `mysql:8.0`, and CI starts a MySQL 8 service container); the production server actually runs **MariaDB 10.11.18** |
 | **Monitoring** | Prometheus, Micrometer |
 | **Frontend** | React 19, TypeScript, Ant Design 6, Vite |
 | **Container** | Docker, Kubernetes |
@@ -492,30 +516,41 @@ self-service registration - so if they are missing the console has no user at al
 
 ## Testing
 
-Counts below were measured with `mvn -o test` on 2026-10-28 at commit `ed93868` (JDK 21, offline).
+Counts below were measured with `mvn -o -B -ntp -fae test` on 2026-10-28 at commit `b45d40a`
+(JDK 21, offline); the `gateway-ui` row comes from `npm run test:routes` at the same commit.
 "Errors" are tests that could not run at all because an external dependency is absent; the suite
-has zero assertion failures.
+has zero assertion failures. These counts drift with every commit - re-measure rather than trusting
+the table, and read the per-module aggregate line rather than summing surefire reports (`@Nested`
+classes make the sum come out low).
 
 | Module | Tests | Failures | Errors | Status |
 |--------|-------|----------|--------|--------|
-| **my-gateway** | 973 | 0 | 0 | ✅ All passing (2 skipped) |
-| **gateway-admin** | 547 | 0 | 80 | ⚠️ 63 of 75 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
+| **my-gateway** | 1018 | 0 | 0 | ✅ All passing (2 skipped) |
+| **gateway-admin** | 564 | 0 | 80 | ⚠️ 63 of 75 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
 | **gateway-trace-starter** | 160 | 0 | 0 | ✅ All passing |
 | **license-client** | 83 | 0 | 0 | ✅ All passing |
 | **license-server** | 40 | 0 | 0 | ✅ All passing |
+| **gateway-moderation-spi** | 0 | 0 | 0 | ➖ Contract-only module (a single SPI interface), no tests yet |
 | **seckill-core-engine** | 217 | 0 | 4 | ⚠️ 3 need a bare Redis on `localhost:30379`; 1 (`LuaSlidingWindowRateLimitTest`) needs Docker via Testcontainers (4 skipped) |
-| **gateway-ui** | 5 | - | - | ⚠️ Route-contract tests only (`npm run test:routes`); no component coverage |
-| **Total (JVM)** | **2020** | **0** | **84** | ⚠️ Not reproducible on a clean machine without MySQL:3306, Redis:30379 and Docker |
+| **gateway-ui** | 51 | 0 | 0 | ✅ Node `--test` over the `tests/*.test.mjs` files run by `npm run test:routes`; no component coverage |
+| **Total (JVM)** | **2082** | **0** | **84** | ⚠️ Not reproducible on a clean machine without MySQL:3306, Redis:30379 and Docker |
 
 CI (`.github/workflows/ci.yml`) runs on every push to `main` and starts real MySQL 8, Redis 7 and
 Nacos v2.3.0 service containers, so the 84 errors above do not occur there - the Actions tab is the
 authoritative verdict, and it is also the only place those 12 `@SpringBootTest` classes and the 3
 Redis-backed seckill tests actually execute.
 
+That verdict is currently **red**. On the latest commit (`5007d87`, run `40665661510`) the
+`Frontend (gateway-ui)` and `Images build` jobs are `success` while `Backend (Java 21, Maven)` is
+`failure` at its `Build and test` step, so the overall run conclusion is `failure`. The backend job
+logs and annotations are not retrievable without authentication, so the specific failing test is not
+identified here.
+
 Counts are the surefire aggregate lines, not a sum of the per-class reports: `@Nested` classes
 (133 in my-gateway, 27 in gateway-admin) make a per-class sum undercount.
 
-`npm run test:routes` imports `src/features/routes/utils.ts` directly, which needs Node's type
+`npm run test:routes` imports `.ts` sources directly (for example `src/features/routes/utils.ts`),
+which needs Node's type
 stripping - Node 22.18 or newer. CI asks `setup-node` for `'22'`, which floats to a version that
 has it; an older local Node 22 fails with `ERR_UNKNOWN_FILE_EXTENSION` rather than reporting a
 test failure.
@@ -693,13 +728,20 @@ A sample backend service designed for **gateway testing**. Provides endpoints to
 - Multi-service routing
 
 ```bash
-# Start demo service
+# Start demo service (listens on port 9001 - demo-service/src/main/resources/application.yml)
 cd demo-service
 mvn spring-boot:run
 
-# Test endpoints
-curl http://localhost:9000/api/user/info
-curl http://localhost:9000/api/order/list
+# Test endpoints. HelloController is the only controller in this module, so the full surface is:
+#   GET  /hello /headers /health /params /path/** /delay /err
+#   POST /status500 /echo
+# There is no /api/user/** or /api/order/**.
+curl http://localhost:9001/hello
+curl http://localhost:9001/headers
+curl http://localhost:9001/health
+curl "http://localhost:9001/path/some/nested/segment"
+curl "http://localhost:9001/delay?ms=3000"   # timeout testing
+curl http://localhost:9001/err               # always throws - circuit breaker testing
 ```
 
 ### seckill-core-engine
@@ -752,7 +794,11 @@ A **high-concurrency seckill (flash sale) service** showcasing:
 │       │   ├── resilience/     # CircuitBreakerGlobalFilter, TimeoutGlobalFilter, RetryGlobalFilter
 │       │   ├── transform/      # RequestTransformFilter, RequestValidationFilter,
 │       │   │                   # ResponseTransformFilter, MockResponseFilter
-│       │   └── *.java          # AccessLogGlobalFilter, CacheGlobalFilter, TraceIdGlobalFilter, etc.
+│       │   ├── accesslog/      # AccessLogGlobalFilter (+ config/, constants/, detector/, sanitizer/)
+│       │   ├── ai/             # AI-related global filters
+│       │   ├── token/          # TokenQuotaPreCheck, TokenUsageCollector
+│       │   └── *.java          # CacheGlobalFilter, TraceIdGlobalFilter, TraceCaptureGlobalFilter,
+│       │                       # HeaderOpGlobalFilter, ApiVersionGlobalFilter, etc.
 │       ├── auth/               # Authentication processors + JwtValidationCache
 │       ├── constants/          # FilterOrderConstants, GatewayConfigConstants
 │       ├── exception/          # Custom exceptions (AuthenticationException, RateLimitException, etc.)
@@ -801,6 +847,16 @@ A **high-concurrency seckill (flash sale) service** showcasing:
 │
 ├── gateway-trace-starter/      # Distributed tracing starter (minimal intrusion)
 │
+├── gateway-moderation-spi/     # Dependency-free Java contract for AI content-moderation adapters
+│                               #   (a single ModerationAdapter interface; see docs/features/ai-content-security.md)
+│
+├── license-client/             # Offline RSA license validation client (validator/, interceptor/, model/)
+│
+├── license-server/             # License issuing server (controller/, service/, dto/)
+│
+├── plugin-example/             # Standalone sample plugin - has its own pom but is NOT a module
+│                               #   of the root reactor (see <modules> in the root pom.xml)
+│
 ├── k8s/                        # Kubernetes deployment manifests
 │   ├── nacos.yaml              # Nacos deployment
 │   ├── redis.yaml              # Redis deployment
@@ -808,6 +864,8 @@ A **high-concurrency seckill (flash sale) service** showcasing:
 │   └── prometheus.yaml         # Prometheus monitoring
 │
 ├── prometheus/                 # Prometheus configuration
+│
+├── tools/                      # Benchmarking harnesses (gateway-perf/, ai-perf/) + their results/
 │
 └── scripts/                    # Utility scripts
 ```
@@ -822,11 +880,25 @@ You may use, copy and modify this software for personal learning, non-commercial
 development, and evaluation/testing. You may **not** redistribute, sublicense or sell it, and you
 may **not** deploy it in production without a valid license agreement.
 
-The `license-server` / `license-client` modules enforce the edition and quota tiers. Note that a
-gateway started without a reachable license server runs on the BASIC fallback edition (1 instance,
-10 routes, 5 services, 100 QPS), and `LICENSE_ENABLED=false` does **not** unlock features - the
-admin console consults the gatekeeper unconditionally, so ENTERPRISE-only surfaces such as audit
-export stay blocked either way.
+The `license-server` / `license-client` modules enforce the edition and quota tiers. Note that
+license validation is **pure offline RSA signature verification** of the configured license code or
+file - `license-client` contains no HTTP client at all, so nothing ever "phones home" and there is
+no "license server unreachable" code path. When no license is configured, both applications load a
+locally built fallback license whose edition comes from `license.client.fallback-edition`, which
+`my-gateway/src/main/resources/application.yml:471` and
+`gateway-admin/src/main/resources/application.yml:421` both default to **ENTERPRISE**
+(`${LICENSE_FALLBACK_EDITION:ENTERPRISE}`) - all quotas `-1`, i.e. unlimited. The restrictive
+BASIC tier (1 instance, 10 routes, 5 services, 100 QPS, per `LicenseValidator.buildFallbackLicense`)
+only applies if you explicitly set `LICENSE_FALLBACK_EDITION=BASIC`.
+
+`LICENSE_ENABLED=false` does **not** unlock features either - it breaks startup. The flag gates the
+whole `LicenseAutoConfiguration` (`@ConditionalOnProperty(prefix = "license.client", name =
+"enabled", ...)`), removing the `LicenseValidator` / `LicenseStore` / `FeatureGatekeeper` beans,
+while `LicenseFeatureHelper` is an unconditional `@Component` in both `gateway-admin` and
+`my-gateway` that constructor-injects them. Both applications therefore fail to start with
+`required a bean of type 'com.leoli.license.client.validator.LicenseStore' that could not be found`.
+That is why `docker-compose.yml` ships `LICENSE_ENABLED: "true"` together with
+`LICENSE_FALLBACK_EDITION: "ENTERPRISE"`.
 
 For licensing inquiries: https://github.com/leoli5695
 

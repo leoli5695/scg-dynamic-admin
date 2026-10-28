@@ -79,7 +79,9 @@ All queries support filtering by instance:
 ### List Error Traces
 
 ```bash
-curl "http://localhost:9090/api/traces/errors?instanceId=gateway-1&page=0&size=20"
+# Requires a logged-in JWT (all /api/** requests must be authenticated)
+curl -H "Authorization: Bearer <JWT>" \
+  "http://localhost:9090/api/traces/errors?instanceId=gateway-1&page=0&size=20"
 ```
 
 Response:
@@ -111,7 +113,8 @@ Response:
 ### Get Trace Statistics
 
 ```bash
-curl "http://localhost:9090/api/traces/stats?instanceId=gateway-1"
+curl -H "Authorization: Bearer <JWT>" \
+  "http://localhost:9090/api/traces/stats?instanceId=gateway-1"
 ```
 
 Response:
@@ -192,11 +195,19 @@ Retain by days, default cleans up traces older than specified days.
 
 ## Route Performance Statistics
 
-Route-level statistics available for AI Copilot:
+Route-level statistics are exposed **only as an AI Copilot tool**, not as an
+HTTP endpoint (there is no `/internal/traces/route-metrics`; the tool
+`get_route_metrics` is dispatched by `ToolExecutor` to
+`PerformanceToolHandler.getRouteMetrics`):
 
-```bash
-# AI Tool: get_route_metrics
-GET /internal/traces/route-metrics?hours=1&sortBy=count&limit=10
+```json
+// AI Copilot tool call: get_route_metrics
+{
+  "instanceId": "gateway-1",
+  "hours": 1,
+  "sortBy": "count",
+  "limit": 10
+}
 ```
 
 Response:
@@ -273,13 +284,22 @@ AI Copilot can call the following tools to analyze traces:
 ```yaml
 gateway:
   trace:
-    enabled: true
-    error-trace-enabled: true
-    slow-trace-threshold-ms: 1000
-    max-trace-count: 1000
-    retention-days: 7
-    max-body-size: 65536  # 64KB
+    capture-all: true               # set to false in production
+    capture-errors: true
+    capture-slow: true
+    slow-threshold-ms: 3000
+    sampling-rate: 50               # trace metadata sampling (%)
+    sampling-rate-for-errors: 100
+    body-sampling-rate: 10          # body capture sampling (%)
+    max-inflight-body-bytes: 16777216  # 16 MiB in-flight body budget
+    max-body-size: 65536            # 64KB
+    include-filter-chain: true
 ```
+
+There is no `enabled` / `error-trace-enabled` / `slow-trace-threshold-ms` /
+`max-trace-count` / `retention-days` key. Retention is enforced by calling
+`DELETE /api/traces/old?daysToKeep=N` (see Data Retention above), not by
+configuration.
 
 ---
 
@@ -303,7 +323,7 @@ Request/response body automatically truncated when exceeding 64KB:
 | **Route Optimization** | `/route/{routeId}` | Analyze specific route issues |
 | **Client Tracking** | `/client/{ip}` | Identify abnormal clients |
 | **Time Period Analysis** | `/time-range` | Analyze fault periods |
-| **Capacity Planning** | `/stats` + `/route-metrics` | Evaluate traffic distribution |
+| **Capacity Planning** | `/stats` + AI tool `get_route_metrics` | Evaluate traffic distribution |
 
 ---
 

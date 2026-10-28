@@ -38,6 +38,9 @@ GET/HEAD Request
 
 ## Configuration
 
+Keys read from the strategy's `config` map by `CacheGlobalFilter` (`routeId` and `enabled` are
+strategy-level fields, see [API Endpoints](#api-endpoints)):
+
 ```json
 {
   "routeId": "static-api",
@@ -108,11 +111,17 @@ ttlSeconds: 60
 
 ### Manual Clear
 
-Clear cache via API:
+There is **no cache-clear HTTP endpoint**: `DELETE /api/cache/{routeId}` does not exist in
+`gateway-admin` or `my-gateway` (no `CacheController`, and no `api/cache` route anywhere).
+A per-route cache entry can only be dropped by TTL expiry/eviction, or by invalidating the
+route's `CACHE` strategy. That strategy-driven path is real: `CacheGlobalFilter.initCacheInvalidation`
+registers a `StrategyManager.StrategyChangeListener`, and `invalidateIfCache` removes the route's
+Caffeine instance whenever a `CACHE` (or `CORS`) strategy for that route changes or is removed,
+and drops every route cache when the strategy set is cleared. So updating, disabling or deleting
+the route's `CACHE` strategy through the Strategy API forces a rebuild with the new
+`ttlSeconds` / `maxSize` / `maxCacheBytes`.
 
-```bash
-DELETE /api/cache/{routeId}
-```
+The originally documented on-demand "clear cache via API" endpoint is **not implemented**.
 
 ### Skip Cache
 
@@ -138,23 +147,63 @@ Requests with a verified authentication identity also bypass the shared cache, e
 
 ## API Endpoints
 
-Configure via Strategy API:
+Configure via the Strategy API. There is **no `/api/strategies/cache` path**: `StrategyController`
+is `@RequestMapping("/api/strategies")` and identifies a strategy by its `strategyId`
+(`PUT /{id}`, `GET /{id}`, `DELETE /{id}`), with `GET /type/{type}` for lookup by type.
+The cache type constant is `StrategyDefinition.TYPE_CACHE = "CACHE"`.
+`POST`/`PUT`/`DELETE` under `/api/**` require the `ADMIN` authority (`SecurityConfig`), so every
+example below must carry a JWT.
+
+Create:
 
 ```bash
-curl -X PUT http://localhost:9090/api/strategies/cache \
+curl -X POST http://localhost:9090/api/strategies \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{
+    "strategyId": "static-api-cache",
+    "strategyName": "Static API cache",
+    "strategyType": "CACHE",
+    "scope": "ROUTE",
     "routeId": "static-api",
-    "ttl": 300,
-    "maxSize": 1000,
-    "enabled": true
+    "enabled": true,
+    "config": {
+      "ttlSeconds": 300,
+      "maxSize": 1000,
+      "varyHeaders": ["Accept", "Accept-Language"]
+    }
   }'
 ```
 
-Clear cache:
+Update (`{strategyId}`, not a type name). The config key is `ttlSeconds`, not `ttl`
+(`CacheGlobalFilter` reads `ttlSeconds`, `maxSize`, `maxCacheBytes` and `varyHeaders`):
+
 ```bash
-curl -X DELETE http://localhost:9090/api/cache/static-api
+curl -X PUT http://localhost:9090/api/strategies/static-api-cache \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategyId": "static-api-cache",
+    "strategyName": "Static API cache",
+    "strategyType": "CACHE",
+    "scope": "ROUTE",
+    "routeId": "static-api",
+    "enabled": true,
+    "config": {
+      "ttlSeconds": 300,
+      "maxSize": 1000
+    }
+  }'
 ```
+
+Other endpoints: `GET /api/strategies`, `GET /api/strategies/{id}`,
+`GET /api/strategies/type/CACHE`, `GET /api/strategies/global`,
+`GET /api/strategies/route/{routeId}`, `DELETE /api/strategies/{id}`,
+`POST /api/strategies/{id}/enable`, `POST /api/strategies/{id}/disable`.
+
+Clearing a route's cache: no endpoint exists. Disable or delete the `CACHE` strategy
+(`POST /api/strategies/{id}/disable`, `DELETE /api/strategies/{id}`) to invalidate that route's
+cache instance — see [Manual Clear](#manual-clear).
 
 ---
 
@@ -164,7 +213,7 @@ curl -X DELETE http://localhost:9090/api/cache/static-api
 2. **Cache Size**: Set based on memory constraints
 3. **Vary Headers**: Differentiate cache for different clients
 4. **Monitor Hit Rate**: Optimize caching strategy
-5. **Proactive Invalidation**: Clear cache when data is updated
+5. **Proactive Invalidation**: Update/disable the route's `CACHE` strategy when data is updated — there is no cache-clear endpoint
 
 ---
 

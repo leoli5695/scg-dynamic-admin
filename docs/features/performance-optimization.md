@@ -115,8 +115,10 @@ return false;  // Prevents EventLoop thread starvation
 
 ### Implementation Locations
 
-- **Local Rate Limiter**: `LocalRateLimiter.java` - Counter updates
-- **Health Check Batch**: `HealthCheckScheduler.java` - Semaphore for concurrent control
+- **Local Rate Limiter**: `my-gateway/src/main/java/com/leoli/gateway/util/RateLimiterWindow.java` - lock-free counter updates through `AtomicReference<WindowState>` + `compareAndSet` (`:20`, `:55`). There is **no `LocalRateLimiter.java` in the repository**; this window is consumed by `HybridRateLimiterFilter` (`:80`, `:185`, `:267-276`) and `MultiDimRateLimiterFilter.applyLocalWindow` (`:321-331`).
+- **Health Check Batch**: `HealthCheckScheduler.java` - Semaphore for concurrent control (`:70`, `:82`, `:235-244`)
+
+> **Accuracy note**: the `tryLock()` slow path in the snippet above is illustrative, not shipped code. The local rate limiter is CAS-only - `tryLock` appears nowhere in the rate-limiting path (in `my-gateway` it is used only by `filter/token/TokenUsageOutbox.java` and `limiter/TokenQuotaLedgerStore.java`).
 
 ---
 
@@ -154,8 +156,10 @@ Atomic approach:
   counter.getAndIncrement();  // Never blocks!
 
 Performance comparison (10 million operations):
+  !! Estimate from a historical measurement - no date, JVM/hardware, or
+     reproduction steps were recorded, so the numbers are indicative only.
   synchronized: ~300ms
-  AtomicInteger: ~50ms (6x faster)
+  AtomicInteger: ~50ms (reported as ~6x faster in that measurement)
 ```
 
 ### CAS Update for Statistics
@@ -306,6 +310,8 @@ Different instance states require different check frequencies:
 ```
 
 ### Check Frequency Benefits
+
+> **Accuracy note**: the table below is an illustrative estimate, not a recorded measurement - no date, node population, or reproduction method was captured. The reduction percentages follow arithmetically from the assumed stable/degraded split (700 of 1000 nodes stable), not from a benchmark run.
 
 | Metric | Without Levels | With Levels | Improvement |
 |--------|----------------|-------------|-------------|
@@ -645,7 +651,9 @@ For route cache specifically, we chose incremental update because:
 Redis KEYS command is O(N) and blocks the entire Redis server:
 
 ```
-Scenario: Rate limiter shadow quota update (every 1 second)
+Scenario: Rate limiter shadow quota snapshot refresh
+          (every 10 seconds by default - gateway.shadow-quota.snapshot-interval-ms=10000,
+           ShadowQuotaManager.java:263; each route costs one SCAN + one ZCARD per matching key)
 
 Using KEYS command:
   KEYS rate_limit:*:route-123*
@@ -795,7 +803,7 @@ Without node count cache:
 │                                                                     │
 │  Level 3: YAML Config Fallback (Static)                             │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  gateway.rate-limiter.shadow-quota.fallback-node-count: 3    │   │
+│  │  gateway.rate-limiter.shadow-quota.fallback-node-count: 1    │   │
 │  │                                                              │   │
 │  │  Used when:                                                  │   │
 │  │  - Discovery client unavailable                              │   │
@@ -807,6 +815,8 @@ Without node count cache:
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Accuracy note**: the code default of `gateway.rate-limiter.shadow-quota.fallback-node-count` is **1** (`ShadowQuotaManager.java:71` - `@Value("${gateway.rate-limiter.shadow-quota.fallback-node-count:1}")`), and the key is not set in `my-gateway/src/main/resources/application.yml`. Values such as `3` shown elsewhere in this document are *examples for a 3-node cluster*, not defaults - with the shipped default of 1, a total discovery failure leaves every node computing `shadowQuota = globalQPS / 1` (the spike scenario described above). The effective node count is `max(min-node-count, max(discovered, fallback-node-count))` (`ShadowQuotaManager.java:201`, `:209`, `:215`).
 
 ### Implementation
 
@@ -892,7 +902,7 @@ Without shadow quota (naive fallback):
 │                                                                     │
 │  Phase 1: Redis Healthy (Pre-calculation)                           │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Every 1 second:                                             │   │
+│  │  Every 10 seconds (snapshot cadence):                        │   │
 │  │                                                              │   │
 │  │  1. Read global QPS from Redis                               │   │
 │  │     ZCARD rate_limit:route:xxx → 10,000                      │   │
@@ -945,6 +955,12 @@ Without shadow quota (naive fallback):
 3. **No counter reset**: Use last snapshot, not reset to zero
 4. **Gradual recovery**: Shift traffic back slowly to prevent Redis overload
 
+> **Accuracy note (cadence)**: Phase 1 above does **not** run every second. Two separate schedules exist in `ShadowQuotaManager`:
+> - `updateShadowQuotas()` - `@Scheduled(fixedRate = ScheduleConstants.QUOTA_UPDATE_INTERVAL_MS)` = **1s** (`ShadowQuotaManager.java:230`, `ScheduleConstants.java:124`). It only probes Redis liveness and advances the Phase-3 recovery ramp; it does **not** read per-route global QPS.
+> - `refreshGlobalQpsSnapshots()` - `@Scheduled(fixedRateString = "${gateway.shadow-quota.snapshot-interval-ms:10000}")` = **10s** by default (`ShadowQuotaManager.java:263`, `ScheduleConstants.QUOTA_SNAPSHOT_INTERVAL_MS = 10000` at `:135`, `application.yml:336`). This is the job that performs the SCAN/ZCARD reads of global QPS described in step 1, and it is skipped entirely while Redis is unhealthy.
+>
+> Note the key is `gateway.shadow-quota.snapshot-interval-ms` (directly under `gateway:`), not under `gateway.rate-limiter.shadow-quota`.
+
 ### Configuration
 
 ```yaml
@@ -953,7 +969,11 @@ gateway:
     shadow-quota:
       enabled: true                    # Enable shadow quota
       min-node-count: 1                # Minimum node count (safety)
-      fallback-node-count: 3           # YAML fallback (Level 3)
+      fallback-node-count: 3           # EXAMPLE for a 3-node cluster; code default is 1
+                                       # (ShadowQuotaManager.java:71) - set it explicitly
+  # snapshot cadence for the global-QPS reads (10s default):
+  shadow-quota:
+    snapshot-interval-ms: 10000
 ```
 
 **Summary**: Shadow quota method ensures smooth degradation when Redis fails by pre-calculating `globalQPS / nodeCount` for each gateway node. Combined with three-level node count detection, the system is resilient to both Redis and service discovery failures.
@@ -961,6 +981,8 @@ gateway:
 ---
 
 ## Performance Benchmarks
+
+> **Accuracy note**: both tables below are estimates from historical/illustrative measurements. No date, hardware, JVM, gateway build, load profile, or reproduction procedure was recorded alongside them, so they cannot be re-run or compared against a current build - read them as order-of-magnitude indications only. The "Blocking Lock" column describes a design that was never shipped (the local limiter is CAS-only, see section 1), so those latencies are modelled rather than measured.
 
 ### Health Check Optimization Impact
 
@@ -1000,10 +1022,22 @@ gateway:
     degraded-check-threshold: 5     # Enter degraded after 5 unhealthy checks
     
   rate-limiter:
-    local-mode: true                # Enable local rate limiting
+    batch-enabled: true               # Batch (multi-key) Redis evaluation in
+                                      # MultiDimRateLimiterFilter:72,219
+                                      # (GATEWAY_RATE_LIMIT_BATCH_ENABLED, application.yml:314)
+    redis:
+      enabled: true                   # REDIS_LIMITER_ENABLED (application.yml:316-317) -
+                                      # Redis limiter switch. Set false to FORCE local
+                                      # rate limiting. NOTE: there is no
+                                      # `gateway.rate-limiter.local-mode` key in the codebase.
     shadow-quota:
-      enabled: true                  # Shadow quota for Redis failover
-      fallback-node-count: 3         # Level 3 YAML fallback when Redis+Nacos both fail
+      enabled: true                  # Shadow quota for Redis failover (code default: true)
+      min-node-count: 1              # code default: 1 (ShadowQuotaManager.java:64)
+      fallback-node-count: 3         # EXAMPLE for a 3-node cluster - code default is 1
+                                     # (ShadowQuotaManager.java:71); Level 3 fallback when
+                                     # Redis + service discovery both fail
+  shadow-quota:
+    snapshot-interval-ms: 10000      # global-QPS snapshot cadence (ShadowQuotaManager.java:263)
 ```
 
 ---
@@ -1017,7 +1051,7 @@ gateway:
 
 ---
 
-## 10. GC Tuning and Promotion Rate Monitoring (New Feature)
+## 11. GC Tuning and Promotion Rate Monitoring (New Feature)
 
 **Added: 2026-04-25**
 

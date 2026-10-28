@@ -2,6 +2,9 @@
 
 > 使用网关控制台的压测功能模块对秒杀接口进行性能测试
 
+> **适用范围**：本指南面向本地开发与 K8s `test` 命名空间的测试环境。`seckill-core-engine` **不在生产运行**
+> （生产服务器上只有 `gateway-admin`、`my-gateway` 两个容器），示例中的地址与端口请按实际部署替换。
+
 ---
 
 ## 前置条件
@@ -9,6 +12,13 @@
 1. **库存预热**: 先调用预热接口将库存加载到 Redis
 2. **活动配置**: 确保秒杀活动状态为"进行中"
 3. **网关配置**: 在网关控制台配置秒杀服务的路由实例
+4. **身份凭证**: `/seckill/**` 受 OAuth2 JWT 资源服务器保护（`SeckillIdentitySecurity.java:59`
+   `.requestMatchers("/seckill/**","/refund/**","/order/**").authenticated()`），压测请求的 `headers`
+   必须带上 `Authorization: Bearer <jwt>`；若 `SECKILL_IDENTITY_ISSUER` / `SECKILL_IDENTITY_AUDIENCE`
+   与公钥（`public-key-pem` 或 `jwk-set-uri`）未配置，解码器会拒绝一切令牌
+   （`application.yml:175-182`），所有请求都会失败。
+5. **控制台接口鉴权**: 下文 `/api/stress-test/**` 属于 gateway-admin 接口，`SecurityConfig` 要求
+   已登录（GET）/ ADMIN 权限（写操作），curl 示例中的 Cookie 或 `Authorization` 头需自行补齐。
 
 ---
 
@@ -19,15 +29,16 @@
 ```json
 {
   "testName": "秒杀核心引擎压测",
-  "targetUrl": "http://gateway:80",
+  "targetUrl": "http://<gateway-host>:8080",
   "path": "/seckill/do",
   "method": "POST",
   "headers": {
     "Content-Type": "application/json",
-    "X-Trace-Id": "{{randomTraceId}}"
+    "Authorization": "Bearer <jwt>",
+    "X-Trace-Id": "seckill-stress-run-1"
   },
   "body": {
-    "userId": "{{randomUserId}}",
+    "userId": {{randomInt:10001-99999}},
     "seckillId": 1,
     "productId": 1,
     "quantity": 1,
@@ -40,6 +51,17 @@
   "requestTimeoutSeconds": 30
 }
 ```
+
+> - `targetUrl` 中的主机名与端口需替换为实际网关地址：网关容器监听 **8080**
+>   （仓库根 `k8s/my-gateway.yaml` 的 containerPort 8080，生产网关也是 `SERVER_PORT=8080`），
+>   `gateway` 这类服务名只能在 K8s / docker 网络内部解析，本机压测请用 `http://localhost:8080`
+>   或节点 IP。
+> - **占位符只在 request body 中生效**（`StressTestService.java:517-520` 只对 `body` 调用
+>   `placeholderResolver.resolve(...)`，headers 原样发出），所以 `X-Trace-Id` 只能写固定值；
+>   秒杀侧读到空 `X-Trace-Id` 时会自行生成 UUID 兜底（`SeckillController.java:89-91`）。
+> - body 里的 `userId` 会被服务端用 JWT 身份覆盖
+>   （`SeckillController.java:86` → `TrustedUserIdentity.requireUserId()`），随机化 userId
+>   **不会**产生多用户压测效果；需要多用户请准备多个令牌。
 
 ### 参数说明
 
@@ -55,27 +77,53 @@
 
 ## 动态参数模板
 
-网关压测工具支持动态参数替换：
+网关压测工具支持在 **request body** 中做动态参数替换（`StressTestPlaceholderResolver`）。
+支持的占位符**只有**下列几种，写错的占位符不会被报错，而是**原样保留发送出去**
+（`StressTestPlaceholderResolver.java:50-51` “Unknown placeholders are preserved as-is”，
+`:103-107` 只打一条 warn），所以拼写错误是静默失败：
+
+| 占位符 | 说明 |
+|--------|------|
+| `{{randomInt}}` | 1 ~ 1,000,000 的随机整数 |
+| `{{randomInt:min-max}}` | 指定闭区间内的随机整数 |
+| `{{randomString}}` | 16 位随机字母数字串 |
+| `{{randomString:length}}` | 指定长度的随机字母数字串 |
+| `{{randomUuid}}` | UUID v4 |
+| `{{timestamp}}` | 当前毫秒时间戳 |
 
 ### 用户ID随机化
 
+数值型字段不要加引号，否则会变成字符串：
+
 ```json
 {
-  "userId": "{{randomUserId}}"
+  "userId": {{randomInt:10001-99999}}
 }
 ```
 
-生成范围：10001 - 99999
+字符串型字段才需要引号：
+
+```json
+{
+  "token": "{{randomString:32}}"
+}
+```
 
 ### TraceId 自动生成
 
+**当前实现无法为每个请求生成随机 TraceId**：headers 不做占位符解析
+（`StressTestService.java:517-520` 只解析 body），写成 `"X-Trace-Id": "{{randomUuid}}"`
+会把字面量 `{{randomUuid}}` 原样发出去；而 body 里的 `traceId` 字段又会被服务端用 header 值覆盖
+（`SeckillController.java:89-93`）。因此 header 里只能写固定值，
+秒杀侧读不到 `X-Trace-Id` 时会自己生成 UUID 兜底。
+
+body 中需要唯一串时可用 `{{randomUuid}}`：
+
 ```json
 {
-  "X-Trace-Id": "{{randomTraceId}}"
+  "requestId": "{{randomUuid}}"
 }
 ```
-
-自动生成 UUID 格式的追踪ID
 
 ---
 
@@ -166,11 +214,18 @@
 
 ### Step 1: 预热库存
 
+预热接口是 `POST /warmup/manual`，`seckillId` 是 **query 参数**（不是 JSON body），
+库存数量与分片数由服务端从 MySQL 活动配置读取，不接受外部传入
+（`WarmupController.java:32,48-51`）。该接口标注 `@InternalApi`，
+`seckill.internal-api.enabled=true` 时只允许白名单 IP 调用（默认白名单含 `127.0.0.1`）。
+
 ```bash
-curl -X POST http://localhost:8080/warmup/stock \
-  -H "Content-Type: application/json" \
-  -d '{"seckillId": 1, "stockCount": 1000, "shardCount": 8}'
+curl -X POST "http://localhost:8080/warmup/manual?seckillId=1"
 ```
+
+配套接口：`GET /warmup/status?seckillId=1`（是否已预热）、
+`GET /warmup/verify?seckillId=1`（Redis 与 MySQL 库存一致性）、
+`POST /warmup/cleanup?seckillId=1`（清理预热数据）。
 
 ### Step 2: 启动压测
 
@@ -197,9 +252,14 @@ curl -X GET http://localhost:9090/api/stress-test/{testId}/analyze
 
 ### Step 5: 导出报告
 
+导出**只支持 Markdown**。`GET /api/stress-test/{testId}/export` 虽然声明了 `format` 参数，
+但实现中从不使用它，恒定调用 `exportAsMarkdown`、`Content-Type: text/markdown`、
+文件名 `stress-test-report-{testId}.md`（`StressTestController.java:194-207`）；
+仓库中也没有任何 PDF/Excel 生成依赖。
+
 ```bash
-curl -X GET "http://localhost:9090/api/stress-test/{testId}/export?format=pdf" \
-  --output seckill-stress-test-report.pdf
+curl -X GET "http://localhost:9090/api/stress-test/{testId}/export" \
+  --output seckill-stress-test-report.md
 ```
 
 ---

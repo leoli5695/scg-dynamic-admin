@@ -290,35 +290,49 @@ Selection Sequence: A -> B -> B -> C -> A -> B -> B -> C -> ...
 
 ## API Endpoints
 
-Configure multi-service routing through Route API, set in route's `strategies`:
+Configure multi-service routing through the Route API. `mode`, `services` and `grayRules` are
+**top-level fields of the route**, siblings of `id` / `routeName` / `uri` / `predicates` / `filters` /
+`metadata`.
+
+> **`RouteDefinition` has no `strategies` field, and the key `multiService` does not exist anywhere in
+> the codebase.** Wrapping the configuration as `"strategies": {"multiService": {...}}` makes the
+> gateway's `RouteRefresher` skip it entirely — it only parses the config when the route map contains
+> a top-level `services` or `mode` key (`RouteRefresher` builds a `MultiServiceConfig` from those and
+> stores it in the route metadata under `MultiServiceConfig.METADATA_KEY = "multiServiceConfig"`, which
+> is what `MultiServiceLoadBalancerFilter.extractMultiServiceConfig(route)` later reads). With the
+> nesting below, `extractMultiServiceConfig` returns `null`, the filter logs
+> `"Route {} has no multi-service config"` and just calls `chain.filter(exchange)` — so the route
+> **silently degrades to single-service behaviour** with no error at creation time.
 
 ```bash
 curl -X POST http://localhost:9090/api/routes \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{
+    "id": "user-api",
     "routeName": "User API",
     "uri": "lb://user-service",
     "predicates": [
       {"name": "Path", "args": {"pattern": "/api/user/**"}}
     ],
-    "strategies": {
-      "multiService": {
-        "enabled": true,
-        "mode": "MULTI",
-        "services": [
-          {"serviceId": "user-v1", "weight": 90},
-          {"serviceId": "user-v2", "weight": 10}
-        ],
-        "grayRules": {
-          "enabled": true,
-          "rules": [
-            {"type": "HEADER", "name": "X-Version", "value": "v2", "targetVersion": "user-v2"}
-          ]
-        }
-      }
+    "mode": "MULTI",
+    "services": [
+      {"serviceId": "user-v1", "serviceName": "user-v1", "weight": 90, "enabled": true, "type": "STATIC"},
+      {"serviceId": "user-v2", "serviceName": "user-v2", "weight": 10, "enabled": true, "type": "STATIC"}
+    ],
+    "grayRules": {
+      "enabled": true,
+      "rules": [
+        {"type": "HEADER", "name": "X-Version", "value": "v2", "targetVersion": "user-v2"}
+      ]
     }
   }'
 ```
+
+Notes on the `services` entries (`MultiServiceConfig.ServiceBinding`): `weight` defaults to **100**
+(not 1) and is documented as a 1-100 range, `enabled` defaults to `true`, `type` defaults to `STATIC`
+(the other value is `DISCOVERY`), and `version`, `serviceNamespace` and `serviceGroup` are optional
+(the latter two only apply when `type` is `DISCOVERY`). `POST /api/routes` requires an `ADMIN` JWT.
 
 ---
 

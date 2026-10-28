@@ -1,5 +1,14 @@
 # Namespace-Aware Integration Tests
 
+> **状态（2026-10-28 逐条核实）**
+> - 本文件与 [`gateway-admin/TEST_SUMMARY.md`](../../TEST_SUMMARY.md) 内容高度重复，
+>   **以本文件为准**（TEST_SUMMARY.md 顶部已注明）。
+> - **覆盖范围**：本文只讲 7 个 namespace 隔离测试类，共 **98 个 `@Test`**（已复核，数字正确）。
+>   整个 `gateway-admin` 测试目录实为 **81 个 `.java` / 80 个 `*Test.java`**，
+>   `mvn test` 跑的是全部而不只是这 98 个。
+> - **⚠️ 前置条件已修正**：`mvn test` **不需要** gateway-admin:9090 或 my-gateway:80 在运行
+>   （走 MockMvc，进程内）；只有 `./run-tests.sh` 会去 curl 9090。详见下方"前置条件"。
+
 ## 概述
 
 这套测试用例专门用于验证 Gateway Admin API 的 **Nacos 命名空间隔离**功能。所有涉及配置推送的操作都包含 `instanceId` 参数，这是租户隔离的关键。
@@ -25,9 +34,15 @@
 ### 测试覆盖范围
 
 - ✅ **98 个集成测试**，覆盖所有核心 API
+  （2026-10-28 复核：10+12+12+13+14+14+23 = **98**，数字正确。
+  注意 `grep -c "@Test"` 会多数出来——它同时匹配类上的 `@TestMethodOrder`/`@TestInstance`，
+  得用 `grep -cE '^\s*@Test\s*$'`）
 - ✅ **Namespace 隔离验证**，确保多租户数据不泄露
 - ✅ **配置推送验证**，确认配置写入正确的 Nacos namespace
 - ✅ **生命周期管理**，测试实例的创建、启动、停止、删除
+
+> 范围说明：这 98 个只是本 README 覆盖的 7 个 namespace 测试类。`gateway-admin/src/test` 下实为
+> **81 个 `.java`（80 个 `*Test.java`）**，`mvn test` 会跑全部。
 
 ## 测试文件清单
 
@@ -41,17 +56,48 @@
 | AuditLogTest | 14 | 审计日志、差异对比、回滚、导出 |
 | MonitoringTest | 23 | 健康检查、诊断、链路追踪 |
 
+7 个类全部 `extends NamespaceIntegrationTest`（例：`MonitoringTest.java:22`、`AuditLogTest.java:19`）。
+
 ## 快速开始
 
 ### 前置条件
 
-确保以下服务已启动：
-- **gateway-admin**: 运行在端口 9090
-- **my-gateway**: 运行在端口 80
-- **MySQL/H2**: 数据库已配置
-- **Nacos**: 配置中心可用
+> **★ 已修正。** 本节原来写"确保 gateway-admin:9090、my-gateway:80 已启动"，
+> 这对 `mvn test` **不成立**。基类是 `@SpringBootTest` + `@AutoConfigureMockMvc` +
+> `@ActiveProfiles("test")`（`NamespaceIntegrationTest.java:28-30`），所有请求走 **MockMvc 进程内**，
+> 既不起 HTTP 服务也不连任何外部网关。
+> 9090 那个检查只存在于 `run-tests.sh` 里。**两条路径的前置条件不同，下面分开写。**
+
+#### A. 用 `mvn test` 跑（推荐；不依赖任何运行中的服务）
+
+真实前置来自 `src/test/resources/application-test.yml`：
+
+- **MySQL**：`127.0.0.1:3306`，库 `gateway_admin_test`（`:8`，`createDatabaseIfNotExist=true`，
+  用户 `root`）；test profile 是 `ddl-auto: create-drop`。**硬依赖**——连不上时 Spring context 会在
+  `entityManagerFactory` 处报 `Communications link failure` / `Connection refused`
+  （本机没有 MySQL 时 gateway-admin 那 80 个 error 就是这么来的）。
+- **Redis**：`127.0.0.1:${REDIS_PORT:30379}`（`:27`）。**不是可选**——ShedLock 用 Redis 锁提供者，
+  缺了定时任务会失败。
+- **Nacos**：`127.0.0.1:8848`，namespace `gateway-test`（`:33-41`）。
+- **不需要**：运行中的 gateway-admin(9090)、my-gateway(80)。
+
+#### B. 用 `./run-tests.sh` / `run-tests.bat` 跑
+
+除了 A 里的 MySQL / Redis / Nacos，脚本**额外**会先探活：
+
+```bash
+# run-tests.sh:15-22
+if curl -s http://localhost:9090/api/health > /dev/null 2>&1; then ... else exit 1; fi
+```
+
+即 **gateway-admin 必须已在 9090 端口运行**，否则脚本直接 `exit 1`（哪怕测试本身根本不需要它）。
+脚本不检查 my-gateway:80。
 
 ### 运行所有测试
+
+> ⚠️ 下面这条是**路径 B**（脚本），需要 gateway-admin 已在 9090 运行，否则 `exit 1`。
+> 若只想跑测试本身，用**路径 A**：`cd gateway-admin && mvn test`（跑整个模块）
+> 或 `mvn test -Dtest=RouteNamespaceTest,...`（只跑这 7 个类）。
 
 ```bash
 # Linux/Mac
@@ -198,11 +244,18 @@ static void cleanup() {
 
 ### Q: 为什么有些测试失败了？
 
-A: 检查以下几点：
-1. gateway-admin 是否在 9090 端口运行
-2. 数据库连接是否正常
-3. Nacos 是否可访问
-4. 是否有足够的权限创建/删除资源
+A: 检查以下几点（**按实际失败率排序**）：
+1. **MySQL 是否可达**：`127.0.0.1:3306/gateway_admin_test`（`application-test.yml:8`）。
+   连不上会表现为 `entityManagerFactory` 创建失败 → `Communications link failure` →
+   `Connection refused`，随后同一个 context 的其余测试报
+   `ApplicationContext failure threshold exceeded`（级联，不是独立缺陷）。
+2. **Redis 是否可达**：`127.0.0.1:${REDIS_PORT:30379}`（`application-test.yml:27`）。
+   ShedLock 用 Redis 锁提供者，缺了会 `RedisConnectionFailureException`。
+3. **Nacos 是否可访问**：`127.0.0.1:8848`，namespace `gateway-test`。
+4. 是否有足够的权限创建/删除资源。
+
+> ❗ **不要**去检查"gateway-admin 是否在 9090 端口运行"——`mvn test` 走 MockMvc，根本不连它。
+> 只有 `./run-tests.sh` 会 curl 9090 并在失败时 `exit 1`。
 
 ### Q: 测试会污染生产数据吗？
 
@@ -210,6 +263,7 @@ A: 不会。测试使用：
 - 专用的测试 namespace（随机生成）
 - 专用的测试实例
 - 自动清理机制
+- 独立的测试库 `gateway_admin_test`（`ddl-auto: create-drop`），不是生产库 `gateway_admin`
 
 ### Q: 如何查看详细的测试输出？
 
@@ -256,8 +310,12 @@ A: 全部 98 个测试大约需要 2-5 分钟，具体取决于：
 
 ## 参考资料
 
-- [TEST_SUMMARY.md](../TEST_SUMMARY.md) - 详细测试总结
-- [BaseIntegrationTest.java](./com/leoli/gateway/admin/NamespaceIntegrationTest.java) - 基础测试类
+- [TEST_SUMMARY.md](../../TEST_SUMMARY.md) - 同一批测试的英文版总结（内容与本文重复，**以本文为准**）
+  ⚠️ 原文写的是 `../TEST_SUMMARY.md`，从 `src/test/` 出发会指向不存在的 `src/TEST_SUMMARY.md`，
+  正确相对路径是 `../../TEST_SUMMARY.md`
+- [NamespaceIntegrationTest.java](./java/com/leoli/gateway/admin/NamespaceIntegrationTest.java) - 基础测试类
+  （原链接文字误写为 `BaseIntegrationTest.java`；同包下确实另有一个 `BaseIntegrationTest.java`，
+  但这 7 个测试类继承的是 `NamespaceIntegrationTest`）
 - 各测试类的 JavaDoc 注释
 
 ## 贡献

@@ -88,8 +88,8 @@ Gateway uses a hybrid rate limiting architecture:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `qps` | Requests per second limit | - |
-| `burstCapacity` | Burst capacity | `2 * qps` |
-| `keyType` | Rate limiting key type | `ip` |
+| `burstCapacity` | Burst capacity (added on top of `qps`) | `200` |
+| `keyType` | Rate limiting key type | `combined` |
 | `enabled` | Whether to enable | `true` |
 
 ### Key Types
@@ -193,7 +193,7 @@ Redis fails (naive fallback):
 │         SHADOW QUOTA FAILOVER                │
 │                                              │
 │   Redis Healthy:                             │
-│   - Record global QPS snapshot every 1s      │
+│   - Record global QPS snapshot every 10s     │
 │   - Monitor cluster node count               │
 │   - Calculate: shadowQuota = globalQPS/nodes │
 │                                              │
@@ -229,19 +229,24 @@ Second 9:  100% traffic to Redis, fully recovered
 
 Uses sliding window for precise rate limiting:
 
+Redis uses a sorted set (ZSET) as a precise sliding window - there are no
+fixed sub-windows:
+
 ```
 ┌─────────────────────────────────────────────┐
-│         SLIDING WINDOW                       │
+│      SLIDING WINDOW (Redis ZSET + Lua)       │
 │                                              │
 │   Window Size: 1 second                      │
-│   Sub-windows: 10 (100ms each)               │
+│   Each request = one ZSET member, scored     │
+│   by Redis TIME in ms (clock-synced)         │
 │                                              │
-│   Time: ─────────────────────────────▶       │
-│         [0][1][2][3][4][5][6][7][8][9]       │
-│                              ^ current       │
-│                                              │
-│   Count = sum of sub-windows                 │
-│   If Count > limit → reject                  │
+│   Atomic Lua script per request:             │
+│   1. ZREMRANGEBYSCORE: drop members older    │
+│      than (now - windowSize)                 │
+│   2. ZCARD: count requests left in window    │
+│   3. count < qps + burstCapacity             │
+│      → ZADD request, allow                   │
+│      else → reject (429)                     │
 └─────────────────────────────────────────────┘
 ```
 
@@ -253,11 +258,12 @@ Returned when rate limit is triggered:
 
 ```json
 {
+  "httpStatus": 429,
   "code": 52901,
   "error": "Too Many Requests",
-  "message": "Rate limit exceeded. Limit: 100 requests per 1000ms",
+  "message": "Rate limit exceeded. Limit: 100 requests per 1 s",
   "data": null,
-  "retryAfter": 1
+  "retryAfter": "1 s"
 }
 ```
 
@@ -265,7 +271,6 @@ Headers:
 ```
 X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1234567890
 Retry-After: 1
 ```
 
@@ -273,19 +278,40 @@ Retry-After: 1
 
 ## API Endpoints
 
-Rate limiting configuration is managed via Strategy API:
+Rate limiting configuration is managed via Strategy API. Creating/updating
+strategies requires an ADMIN JWT (`POST/PUT/PATCH/DELETE /api/**` demand the
+`ADMIN` authority; `GET` requires login). The strategy type constant is
+`RATE_LIMITER` (uppercase); there is no `PUT /api/strategies/rate-limiter`
+endpoint - updates go by strategy ID.
 
 ```bash
-# Configure rate limiting
-curl -X PUT http://localhost:9090/api/strategies/rate-limiter \
+# Create a rate limiting strategy
+curl -X POST http://localhost:9090/api/strategies \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
   -d '{
+    "strategyId": "rate-limiter-public-api",
+    "strategyName": "Public API rate limit",
+    "strategyType": "RATE_LIMITER",
+    "scope": "ROUTE",
     "routeId": "public-api",
-    "qps": 100,
-    "burstCapacity": 200,
-    "keyType": "ip",
-    "enabled": true
+    "enabled": true,
+    "config": {
+      "qps": 100,
+      "burstCapacity": 200,
+      "keyType": "ip"
+    }
   }'
+
+# Update an existing strategy (by strategyId, full StrategyDefinition body)
+curl -X PUT http://localhost:9090/api/strategies/rate-limiter-public-api \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
+  -d '{ ... }'
+
+# List strategies of a type
+curl -H "Authorization: Bearer <JWT>" \
+  http://localhost:9090/api/strategies/type/RATE_LIMITER
 ```
 
 ---

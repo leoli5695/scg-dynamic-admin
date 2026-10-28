@@ -91,9 +91,12 @@ System automatically detects request type, determining if replayable:
 |--------|------|-------------|
 | `GET` | `/api/replay/prepare/{traceId}` | Prepare replay request (detect type) |
 | `POST` | `/api/replay/execute/{traceId}` | Execute single replay |
-| `POST` | `/api/replay/batch` | Batch replay |
-| `GET` | `/api/replay/batch/{sessionId}` | Query batch status |
-| `DELETE` | `/api/replay/batch/{sessionId}` | Cancel batch replay |
+| `POST` | `/api/replay/batch/start` | Batch replay |
+| `GET` | `/api/replay/batch/status/{sessionId}` | Query batch status |
+| `DELETE` | `/api/replay/batch/cancel/{sessionId}` | Cancel batch replay |
+
+All `/api/**` endpoints require an authenticated login; `POST`/`DELETE` calls
+additionally require an ADMIN JWT (`Authorization: Bearer <token>`).
 
 ### Prepare Replay
 
@@ -189,7 +192,7 @@ Response:
 Batch replay multiple requests with concurrency control and progress tracking:
 
 ```bash
-POST /api/replay/batch?instanceId=gateway-1
+POST /api/replay/batch/start?instanceId=gateway-1
 {
   "traceIds": [123, 124, 125, 126],
   "maxConcurrent": 5,
@@ -210,7 +213,7 @@ Response (Session ID):
 ### Query Batch Status
 
 ```bash
-GET /api/replay/batch/batch-replay-abc123
+GET /api/replay/batch/status/batch-replay-abc123
 ```
 
 Response:
@@ -234,7 +237,7 @@ Response:
 ### Cancel Batch Replay
 
 ```bash
-DELETE /api/replay/batch/batch-replay-abc123
+DELETE /api/replay/batch/cancel/batch-replay-abc123
 ```
 
 ---

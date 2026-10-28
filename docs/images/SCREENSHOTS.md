@@ -1,6 +1,11 @@
 # Feature Screenshots Guide
 
 > Complete visual documentation of all API Gateway features - 66 annotated screenshots covering the entire platform.
+>
+> **Scope:** the screenshot set reflects the UI as of **2026-04** and does **not** cover features added since,
+> whose controllers already exist: AI gateway (token quota / usage ledger / reconciliation, semantic cache,
+> provider routing, AI content moderation), the plugin system, License management, JWT revocation, and
+> multi-instance comparison.
 
 ---
 
@@ -34,7 +39,10 @@
 
 ## 1. Login (01.png)
 
-System login interface with username/password authentication. Default admin credentials: admin/admin123.
+System login interface with username/password authentication. There is **no built-in default account**
+(no `admin`/`admin123`): the initial administrator is created only on first startup and only when both
+`ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables are set, and the password must be at least
+12 characters (`AuthService.java:151-165`). If they are not set, initial admin creation is skipped.
 
 ![01.png](01.png)
 
@@ -132,7 +140,10 @@ Certificate upload, certificate details, validity monitoring.
 
 ## 10. Request Tracing (23.png)
 
-Jaeger distributed tracing integration, showing complete request chain.
+Request Tracing page. The screenshot shows its **Distributed Tracing** tab (Jaeger-backed trace query,
+service `jaeger-all-in-one`) with the Distributed Trace Details drawer open — span timeline / span details /
+call chain. Note this is the Request Tracing page (`RequestTraceController`); the separate Jaeger query
+integration (`JaegerController`) is what powers the Distributed Tracing tab shown here.
 
 ![23.png](23.png)
 
@@ -218,7 +229,9 @@ Filter performance analysis with bottleneck identification and optimization reco
 
 ## 18. Stress Testing (42-49.png)
 
-Stress test configuration, execution, real-time monitoring (including Pod resource changes), and report export.
+Stress test configuration, execution, real-time monitoring (including Pod resource changes), and report
+export (**Markdown only** — `StressTestController.java:197-205` accepts a `format` parameter but always
+renders Markdown).
 
 ![42.png](42.png)
 

@@ -6,15 +6,17 @@
 
 ## Overview
 
-Request validation executes after transformation, before authentication:
+Request validation executes **after authentication and after transformation**
+(`AUTHENTICATION = -256` → `REQUEST_TRANSFORM = -255` →
+`REQUEST_VALIDATION = -254`, see `FilterOrderConstants`):
 
 ```
 Request Flow:
+  Authentication (-256) → Auth check (signs the original body)
+       ↓
   Request Transform (-255) → Modify request body
        ↓
   Request Validation (-254) → Validate schema
-       ↓
-  Authentication (-250) → Auth check
 ```
 
 ---
@@ -23,163 +25,159 @@ Request Flow:
 
 | Type | Description |
 |------|-------------|
-| **JSON Schema** | Validate complete structure per specification |
-| **Required Fields** | Check required fields |
-| **Type Constraints** | Field type validation |
-| **Format Validation** | Format validation (email, date) |
-| **Range Validation** | Numeric range validation |
+| **JSON Schema** | Validate complete structure per specification (`schemaValidation`) |
+| **Required Fields** | Check required fields (`fieldValidation.requiredFields`) |
+| **Type Constraints** | Field type, range, length and regex validation (`fieldValidation.typeConstraints`) |
+| **Enum Constraints** | Allowed-value lists (`fieldValidation.enumConstraints`) |
+| **Custom Validators** | SCRIPT / BEAN / HTTP validators (`customValidators`) |
 
 ---
 
 ## Configuration
 
+The real configuration (`RequestValidationConfig`) consists of
+`schemaValidation`, `fieldValidation`, and `customValidators`, selected by
+`validationMode` (`SCHEMA` / `CUSTOM` / `HYBRID`, default `HYBRID`).
+
+> **Note**: An earlier design used a flat `validationRules` array with rule
+> types `FORMAT` / `RANGE` / `REQUIRED` / `REGEX` plus a top-level `jsonSchema`
+> object. That structure is **not implemented** - configuring it has no effect.
+> The equivalent capabilities exist as the nested objects below.
+
 ```json
 {
   "routeId": "user-api",
   "enabled": true,
-  "validationRules": [
-    {
-      "path": "$.email",
-      "type": "FORMAT",
-      "format": "email",
-      "errorMessage": "Invalid email format"
-    },
-    {
-      "path": "$.age",
-      "type": "RANGE",
-      "min": 0,
-      "max": 150,
-      "errorMessage": "Age must be between 0 and 150"
-    },
-    {
-      "path": "$.username",
-      "type": "REQUIRED",
-      "errorMessage": "Username is required"
-    },
-    {
-      "path": "$.phone",
-      "type": "REGEX",
-      "pattern": "^\\d{11}$",
-      "errorMessage": "Phone must be 11 digits"
-    }
-  ],
-  "requiredFields": ["username", "email"],
-  "jsonSchema": {
-    "type": "object",
-    "properties": {
-      "username": {"type": "string", "minLength": 3},
-      "email": {"type": "string", "format": "email"}
-    },
-    "required": ["username", "email"]
-  }
+  "validationMode": "HYBRID",
+  "schemaValidation": {
+    "enabled": true,
+    "schemaSource": "INLINE",
+    "inlineSchema": "{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\",\"minLength\":3},\"email\":{\"type\":\"string\",\"format\":\"email\"}},\"required\":[\"username\",\"email\"]}"
+  },
+  "fieldValidation": {
+    "enabled": true,
+    "requiredFields": ["username", "email"],
+    "typeConstraints": [
+      { "fieldPath": "age", "expectedType": "integer", "min": 0, "max": 150,
+        "errorMessage": "Age must be between 0 and 150" },
+      { "fieldPath": "phone", "expectedType": "string", "pattern": "^\\d{11}$",
+        "errorMessage": "Phone must be 11 digits" }
+    ],
+    "enumConstraints": [
+      { "fieldPath": "status", "allowedValues": ["ACTIVE", "DISABLED"] }
+    ]
+  },
+  "customValidators": [
+    { "name": "nonEmptyEmail", "fieldPath": "email", "validatorType": "SCRIPT",
+      "script": "value != null && value.length() > 0" }
+  ]
 }
 ```
+
+Other top-level fields: `validateOnMethods` (default `POST, PUT, PATCH`),
+`validateOnContentTypes` (default `application/json`), `stopOnFirstError`
+(default `true`), `errorResponse` (`format` STANDARD/DETAILED,
+`includeSchemaErrors`, `customMessage`, `statusCode` default 400).
 
 ---
 
-## Validation Rules
+## Validation Mechanisms
 
-### FORMAT
+### Schema Validation
 
-Format validation:
+`schemaValidation.schemaSource` selects the schema origin:
 
-```json
-{
-  "path": "$.email",
-  "type": "FORMAT",
-  "format": "email"
-}
-```
+- `INLINE` - schema string in `inlineSchema`
+- `REF` - `schemaRef` references a schema stored in gateway-admin
+- `URL` - `schemaUrl` fetched remotely (cached `schemaCacheTtl` seconds, default 300)
 
-Supported formats:
-- `email` - Email address
-- `date` - ISO date format
-- `uri` - URL format
-- `uuid` - UUID format
+Format checks (`email`, `date`, `uri`, `uuid`, ...) are expressed inside the
+JSON Schema itself, not as standalone rules.
 
-### RANGE
+### Required Fields
 
-Numeric range:
+`fieldValidation.requiredFields` is a plain list of field paths:
 
 ```json
-{
-  "path": "$.age",
-  "type": "RANGE",
-  "min": 0,
-  "max": 150
-}
+{ "requiredFields": ["username", "email", "items[*].productId"] }
 ```
 
-### REQUIRED
+### Type Constraints (range / length / regex)
 
-Required field:
+Each `typeConstraints[]` entry carries `fieldPath`, `expectedType`
+(`string`, `number`, `integer`, `boolean`, `array`, `object`), numeric
+`min`/`max`, string `minLength`/`maxLength`, regex `pattern`, and an optional
+`errorMessage`:
 
 ```json
-{
-  "path": "$.username",
-  "type": "REQUIRED"
-}
+{ "fieldPath": "age", "expectedType": "integer", "min": 0, "max": 150 }
 ```
-
-### REGEX
-
-Regular expression:
 
 ```json
-{
-  "path": "$.phone",
-  "type": "REGEX",
-  "pattern": "^\\d{11}$"
-}
+{ "fieldPath": "phone", "expectedType": "string", "pattern": "^\\d{11}$" }
 ```
 
-### JSON_SCHEMA
-
-Complete JSON Schema:
+### Enum Constraints
 
 ```json
-{
-  "jsonSchema": {
-    "type": "object",
-    "properties": {
-      "username": {"type": "string", "minLength": 3, "maxLength": 50},
-      "age": {"type": "integer", "minimum": 0, "maximum": 150}
-    },
-    "required": ["username"]
-  }
-}
+{ "fieldPath": "status", "allowedValues": ["ACTIVE", "DISABLED"],
+  "errorMessage": "Invalid status" }
 ```
+
+### Custom Validators
+
+`customValidators[]`: `name`, `fieldPath`, `validatorType`
+(`SCRIPT` - Groovy/SpEL expression, `BEAN` - Spring bean method, `HTTP` -
+external validation service), and `script`.
 
 ---
 
 ## Error Response
 
-Validation failure returns:
+Validation failure returns HTTP status `errorResponse.statusCode` (default
+400). With the default `errorResponse.format: DETAILED` the body is:
 
 ```json
 {
-  "status": 400,
-  "error": "Validation Failed",
-  "details": [
+  "error": "Validation Error",
+  "message": "Request validation failed",
+  "errors": [
     {"field": "email", "message": "Invalid email format"},
     {"field": "age", "message": "Age must be between 0 and 150"}
   ]
 }
 ```
 
+With `format: STANDARD` only `error` and `message` are returned (no `errors`
+array). `message` can be overridden via `errorResponse.customMessage`.
+
 ---
 
 ## API Endpoints
 
-Configure via Strategy API:
+Configure via Strategy API. There is no `PUT /api/strategies/request-validation`
+endpoint: create with `POST /api/strategies` (type constant
+`REQUEST_VALIDATION`, uppercase), update by strategy ID with
+`PUT /api/strategies/{strategyId}`, and list by type with
+`GET /api/strategies/type/REQUEST_VALIDATION`. Writes require an ADMIN JWT.
 
 ```bash
-curl -X PUT http://localhost:9090/api/strategies/request-validation \
+curl -X POST http://localhost:9090/api/strategies \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
   -d '{
+    "strategyId": "validation-user-api",
+    "strategyName": "User API validation",
+    "strategyType": "REQUEST_VALIDATION",
+    "scope": "ROUTE",
     "routeId": "user-api",
     "enabled": true,
-    "validationRules": [...]
+    "config": {
+      "fieldValidation": {
+        "enabled": true,
+        "requiredFields": ["username", "email"]
+      }
+    }
   }'
 ```
 

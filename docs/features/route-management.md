@@ -8,7 +8,10 @@
 
 Routing is the core functionality of API Gateway, defining the mapping between request URL patterns and backend services.
 
-**Configuration Location:** Nacos `gateway-routes.json`
+**Configuration Location:** routes are stored in MySQL by `gateway-admin` and published to Nacos as
+incremental data IDs in group `DEFAULT_GROUP` — `config.gateway.metadata.routes-index` (route ID list)
+plus one `config.gateway.route-{routeId}` per route (`GatewayConfigConstants.ROUTES_INDEX` /
+`ROUTE_PREFIX`). There is **no** single `gateway-routes.json` data ID.
 
 ---
 
@@ -75,7 +78,9 @@ Uses a statically configured instance list:
 }
 ```
 
-Requires instance configuration in `gateway-services.json`:
+Requires a service definition published to Nacos as `config.gateway.service-{serviceId}` (listed in
+`config.gateway.metadata.services-index`, see `GatewayConfigConstants.SERVICE_PREFIX` /
+`SERVICES_INDEX`). There is **no** `gateway-services.json` data ID. The service body looks like:
 
 ```json
 {
@@ -293,10 +298,15 @@ Request `/api/user/123` -> forwarded as `/user/123`
 | `POST` | `/api/routes/{id}/enable` | Enable route |
 | `POST` | `/api/routes/{id}/disable` | Disable route |
 
+All `/api/**` requests require an authenticated JWT, and `POST`/`PUT`/`PATCH`/`DELETE` additionally
+require the `ADMIN` authority (`SecurityConfig`), so the examples below carry
+`Authorization: Bearer $ADMIN_JWT`. Responses are wrapped in `ApiResponse` (`{code,message,data}`).
+
 ### Create Route
 
 ```bash
 curl -X POST http://localhost:9090/api/routes \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{
     "routeName": "My First Route",
@@ -315,6 +325,7 @@ curl -X POST http://localhost:9090/api/routes \
 
 ```bash
 curl -X PUT http://localhost:9090/api/routes/user-service-route \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{
     "routeName": "Updated Route",
@@ -330,10 +341,12 @@ curl -X PUT http://localhost:9090/api/routes/user-service-route \
 
 ```bash
 # Enable
-curl -X POST http://localhost:9090/api/routes/user-service-route/enable
+curl -X POST http://localhost:9090/api/routes/user-service-route/enable \
+  -H "Authorization: Bearer $ADMIN_JWT"
 
 # Disable
-curl -X POST http://localhost:9090/api/routes/user-service-route/disable
+curl -X POST http://localhost:9090/api/routes/user-service-route/disable \
+  -H "Authorization: Bearer $ADMIN_JWT"
 ```
 
 ---

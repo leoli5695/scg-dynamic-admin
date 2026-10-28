@@ -6,16 +6,17 @@
 
 ## Overview
 
-Request body transformation executes before authentication, modifying request content:
+Request body transformation executes **after** authentication, so HMAC body
+signatures cover the original wire payload (`AUTHENTICATION = -256` runs before
+`REQUEST_TRANSFORM = -255`, see `FilterOrderConstants`):
 
 ```
 Request Flow:
-  ...
+  Authentication (-256) → Auth check (signs the original body)
+       ↓
   Request Transform (-255) → Modify request body
        ↓
   Request Validation (-254) → Validate schema
-       ↓
-  Authentication (-250) → Auth check
 ```
 
 ---
@@ -24,60 +25,72 @@ Request Flow:
 
 | Operation | Description |
 |-----------|-------------|
-| **Protocol Conversion** | JSON ↔ XML |
-| **Field Mapping** | Rename, add, delete fields |
-| **Data Masking** | Mask sensitive fields (password, token) |
-| **Field Injection** | Inject static or dynamic values |
+| **Protocol Conversion** | JSON ↔ XML (`protocolTransform`) |
+| **Field Mapping** | Rename / copy fields (`fieldMapping.mappings`, RENAME/COPY) |
+| **Field Removal** | Delete fields (`fieldMapping.removeFields`) |
+| **Data Masking** | Mask sensitive fields (`dataMasking.rules`: password, token) |
+| **Field Injection** | Inject static values (`fieldMapping.addFields`) |
 
 ---
 
 ## Configuration
 
+The real configuration (`RequestTransformConfig`) consists of three nested
+objects: `protocolTransform`, `fieldMapping`, and `dataMasking`.
+
+> **Note**: An earlier design used a flat `transformRules` array with rule
+> types `FIELD_MAP` / `FIELD_MASK` / `FIELD_INJECT` / `FIELD_REMOVE` /
+> `XML_TO_JSON`. That structure is **not implemented** - configuring it has no
+> effect. The equivalent capabilities exist as the nested objects below.
+
 ```json
 {
   "routeId": "legacy-api",
   "enabled": true,
-  "transformRules": [
-    {
-      "type": "FIELD_MAP",
-      "sourcePath": "$.user_name",
-      "targetPath": "$.username"
-    },
-    {
-      "type": "FIELD_MASK",
-      "path": "$.password",
-      "maskChar": "***"
-    },
-    {
-      "type": "FIELD_INJECT",
-      "path": "$.request_time",
-      "value": "${timestamp}"
-    },
-    {
-      "type": "FIELD_REMOVE",
-      "path": "$.debug_info"
-    },
-    {
-      "type": "XML_TO_JSON",
-      "rootElement": "request"
-    }
-  ]
+  "protocolTransform": {
+    "enabled": true,
+    "sourceFormat": "XML",
+    "targetFormat": "JSON"
+  },
+  "fieldMapping": {
+    "enabled": true,
+    "mappings": [
+      { "sourcePath": "user_name", "targetPath": "username", "transform": "RENAME" }
+    ],
+    "removeFields": ["debug_info"],
+    "addFields": { "channel": "open-api" }
+  },
+  "dataMasking": {
+    "enabled": true,
+    "rules": [
+      { "fieldPath": "password", "maskType": "FULL", "replacement": "***" }
+    ]
+  }
 }
 ```
 
+Other top-level fields: `transformOnContentTypes`, `skipOnMethods`,
+`maxBodySize` (default 1 MB), `validateAfterTransform`.
+
 ---
 
-## Transform Rules
+## Transform Mechanisms
 
-### FIELD_MAP
+### Field Mapping (RENAME / COPY)
 
-Field mapping/renaming:
+`fieldMapping.mappings[]` entries carry `sourcePath`, `targetPath`,
+`transform` (`RENAME` keeps no original field, `COPY` keeps both) and an
+optional `defaultValue` used when the source field is missing. Paths use
+simple dot notation (e.g. `user.name`, `data.items.id`).
 
 ```json
 {
-  "type": "FIELD_MAP",
-  "sourcePath": "$.user_name",
-  "targetPath": "$.username"
+  "fieldMapping": {
+    "enabled": true,
+    "mappings": [
+      { "sourcePath": "user_name", "targetPath": "username", "transform": "RENAME" }
+    ]
+  }
 }
 ```
 
@@ -91,15 +104,50 @@ Output:
 {"username": "john"}
 ```
 
-### FIELD_MASK
+### Field Removal
 
-Data masking:
+`fieldMapping.removeFields[]` deletes fields from the body:
 
 ```json
 {
-  "type": "FIELD_MASK",
-  "path": "$.password",
-  "maskChar": "***"
+  "fieldMapping": {
+    "enabled": true,
+    "removeFields": ["internal_id"]
+  }
+}
+```
+
+### Field Injection (addFields)
+
+`fieldMapping.addFields` is a `path → value` map of fields added to the body.
+Values are inserted **as static strings**; the previously documented dynamic
+expressions (`${timestamp}`, `${request.header.X-Id}`, `${route.id}`) are
+**not implemented**.
+
+```json
+{
+  "fieldMapping": {
+    "enabled": true,
+    "addFields": { "channel": "open-api" }
+  }
+}
+```
+
+### Data Masking
+
+`dataMasking.rules[]` (`MaskingRule`): `fieldPath`, `maskType`
+(`FULL` / `PARTIAL` / `CUSTOM`), `replacement` (default `"***"`),
+`pattern` (regex for CUSTOM), and for PARTIAL: `keepLength` / `keepPosition`
+(`START` / `END`).
+
+```json
+{
+  "dataMasking": {
+    "enabled": true,
+    "rules": [
+      { "fieldPath": "password", "maskType": "FULL", "replacement": "***" }
+    ]
+  }
 }
 ```
 
@@ -113,43 +161,22 @@ Output:
 {"password": "***"}
 ```
 
-### FIELD_INJECT
+### Protocol Conversion (XML ↔ JSON)
 
-Field injection:
-
-```json
-{
-  "type": "FIELD_INJECT",
-  "path": "$.request_time",
-  "value": "${timestamp}"
-}
-```
-
-Injectable values:
-- `${timestamp}` - Current timestamp
-- `${request.header.X-Id}` - Request header value
-- `${route.id}` - Route ID
-- Static strings
-
-### FIELD_REMOVE
-
-Delete field:
-
-```json
-{
-  "type": "FIELD_REMOVE",
-  "path": "$.internal_id"
-}
-```
-
-### XML_TO_JSON
+Handled by `protocolTransform`, not by `XML_TO_JSON` / `JSON_TO_XML` rule
+types (which are not implemented). Fields: `sourceFormat` (`JSON`, `XML`,
+`FORM`), `targetFormat` (`JSON`, `XML`), `preserveOriginalContentType`,
+`customContentType`.
 
 XML to JSON:
 
 ```json
 {
-  "type": "XML_TO_JSON",
-  "rootElement": "request"
+  "protocolTransform": {
+    "enabled": true,
+    "sourceFormat": "XML",
+    "targetFormat": "JSON"
+  }
 }
 ```
 
@@ -166,17 +193,6 @@ Output:
 {"user_name": "john", "age": 30}
 ```
 
-### JSON_TO_XML
-
-JSON to XML:
-
-```json
-{
-  "type": "JSON_TO_XML",
-  "rootElement": "request"
-}
-```
-
 ---
 
 ## Use Cases
@@ -187,10 +203,13 @@ Modern API calling legacy system (different field names):
 
 ```json
 {
-  "transformRules": [
-    {"type": "FIELD_MAP", "sourcePath": "$.userId", "targetPath": "$.user_id"},
-    {"type": "FIELD_MAP", "sourcePath": "$.createTime", "targetPath": "$.created_at"}
-  ]
+  "fieldMapping": {
+    "enabled": true,
+    "mappings": [
+      { "sourcePath": "userId", "targetPath": "user_id", "transform": "RENAME" },
+      { "sourcePath": "createTime", "targetPath": "created_at", "transform": "RENAME" }
+    ]
+  }
 }
 ```
 
@@ -200,11 +219,16 @@ Remove sensitive fields before forwarding:
 
 ```json
 {
-  "transformRules": [
-    {"type": "FIELD_REMOVE", "path": "$.password"},
-    {"type": "FIELD_REMOVE", "path": "$.token"},
-    {"type": "FIELD_MASK", "path": "$.credit_card", "maskChar": "****"}
-  ]
+  "fieldMapping": {
+    "enabled": true,
+    "removeFields": ["password", "token"]
+  },
+  "dataMasking": {
+    "enabled": true,
+    "rules": [
+      { "fieldPath": "credit_card", "maskType": "FULL", "replacement": "****" }
+    ]
+  }
 }
 ```
 
@@ -214,9 +238,11 @@ XML system connecting to JSON API:
 
 ```json
 {
-  "transformRules": [
-    {"type": "XML_TO_JSON", "rootElement": "data"}
-  ]
+  "protocolTransform": {
+    "enabled": true,
+    "sourceFormat": "XML",
+    "targetFormat": "JSON"
+  }
 }
 ```
 
@@ -224,15 +250,31 @@ XML system connecting to JSON API:
 
 ## API Endpoints
 
-Configure via Strategy API:
+Configure via Strategy API. There is no `PUT /api/strategies/request-transform`
+endpoint: create with `POST /api/strategies` (type constant `REQUEST_TRANSFORM`,
+uppercase), update by strategy ID with `PUT /api/strategies/{strategyId}`, and
+list by type with `GET /api/strategies/type/REQUEST_TRANSFORM`. Writes require
+an ADMIN JWT.
 
 ```bash
-curl -X PUT http://localhost:9090/api/strategies/request-transform \
+curl -X POST http://localhost:9090/api/strategies \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_JWT>" \
   -d '{
+    "strategyId": "transform-legacy-api",
+    "strategyName": "Legacy API transform",
+    "strategyType": "REQUEST_TRANSFORM",
+    "scope": "ROUTE",
     "routeId": "legacy-api",
     "enabled": true,
-    "transformRules": [...]
+    "config": {
+      "fieldMapping": {
+        "enabled": true,
+        "mappings": [
+          { "sourcePath": "user_name", "targetPath": "username", "transform": "RENAME" }
+        ]
+      }
+    }
   }'
 ```
 
@@ -240,7 +282,7 @@ curl -X PUT http://localhost:9090/api/strategies/request-transform \
 
 ## Best Practices
 
-1. **Path Expressions**: Use JSONPath format (`$.field`)
+1. **Path Expressions**: Use simple dot notation (`user.name`, `data.items.id`)
 2. **Sequential Execution**: Rules execute in configuration order
 3. **Performance Considerations**: Large JSON transformations may impact performance
 4. **Testing Validation**: Thoroughly test transformation results before production

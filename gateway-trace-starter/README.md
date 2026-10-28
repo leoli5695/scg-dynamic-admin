@@ -32,7 +32,7 @@ gateway:
 
 | Component | Auto-Trace | Description |
 |-----------|------------|-------------|
-| **Service Methods** | ✅ | All methods annotated with `@Service` |
+| **Service Methods** | ✅ | All methods of classes annotated with `@Service` (`@within`), plus classes in `com..service` / `com..services` packages |
 | **Redis Operations** | ✅ | `RedisTemplate`/`StringRedisTemplate` |
 | **RocketMQ** | ✅ | `RocketMQTemplate` message sending |
 | **Kafka** | ✅ | `KafkaTemplate` message sending |
@@ -92,14 +92,30 @@ gateway:
     report-batch-size: 100                 # Batch size for reporting
     report-interval-ms: 100                # Reporting interval (milliseconds)
     report-timeout-ms: 1000               # Reporting timeout (milliseconds)
-    
-    # === New: Async Thread Trace Propagation ===
-    async-trace-enabled: false             # Enable async thread trace propagation (must be explicitly enabled)
+
+    # Back-pressure / disk fallback (shared by queued, in-flight, delayed-retry and fallback snapshots)
+    max-retained-bytes: 8388608            # Max bytes retained in the reporter (8 MiB)
+    max-record-bytes: 262144               # Max size of one encoded trace record (256 KiB)
+    fallback-directory: ./trace-fallback   # Directory for the on-disk fallback log
+
+    # Security: shared secret for the admin internal report endpoints.
+    # Sent as the X-Internal-Token header on trace / middleware-metadata uploads
+    # and must match gateway.admin.security.internal-token on the admin console.
+    internal-token: ""                     # Default empty (admin-side enforcement is optional)
+
+    # X-Forwarded-For spoofing prevention (only these proxies may set client IP)
+    trusted-proxy-ips: []                  # Default: no proxy explicitly trusted (CIDR supported)
+    trust-private-networks: true           # Also trust private ranges (10/8, 172.16/12, 192.168/16, 127/8)
+
+    # === Async Thread Trace Propagation ===
+    async-thread-pool-enabled: false       # Create the traceTaskExecutor bean (must be explicitly enabled)
+    # NOTE: `async-trace-enabled` is a deprecated alias that nothing in the
+    # auto-configuration reads. Setting it will NOT create the thread pool.
 ```
 
 ---
 
-## New Features (v1.1)
+## New Features (v1.0.0)
 
 ### 1. Async Thread TraceId Propagation
 
@@ -110,10 +126,15 @@ Solves the issue of child threads losing TraceId when using `@Async` or `Complet
 ```yaml
 gateway:
   trace:
-    async-trace-enabled: true
+    async-thread-pool-enabled: true
 ```
 
 Then use `@Async("traceTaskExecutor")` in your async methods:
+
+> The `traceTaskExecutor` bean is created only when `async-thread-pool-enabled` is
+> `true` (`TraceThreadPoolConfig` `@ConditionalOnProperty`). The old
+> `async-trace-enabled` key is a deprecated alias that no auto-configuration reads —
+> setting it will **not** create the thread pool.
 
 ```java
 @Async("traceTaskExecutor")
@@ -159,19 +180,23 @@ When reporting fails, infinite retries are prevented with these protections:
 
 | Protection Measure | Description |
 |--------------------|-------------|
-| Max Retry Count | 3 retries, then write to local disk log |
+| Max Retry Count | 3 attempts (i.e. 2 retries), then write to local disk log |
 | Local Disk Log | `./trace-fallback/trace-fallback-{date}.log` |
 | Statistics Monitoring | `getDroppedCount()`, `getFallbackCount()` |
 
-### 4. High-Performance WebClient Connection Pool
+### 4. WebClient Connection Pool (single connection, serial reporting)
 
-Auto-configured 50-connection high-performance connection pool to resolve high-concurrency reporting bottlenecks.
+The reporter deliberately uses a **one-connection** pool: a single sender thread
+performs serial batch reporting, so that trace upload can never open many
+concurrent connections to the admin console under load.
 
 | Configuration | Value |
 |---------------|-------|
-| maxConnections | 50 |
-| pendingAcquireTimeout | 5 seconds |
-| idleTimeout | 30 seconds |
+| maxConnections | 1 |
+| pendingAcquireMaxCount | 1 |
+| pendingAcquireTimeout | 200 milliseconds |
+
+No `maxIdleTime` / idle-timeout is configured on this pool.
 
 ---
 
@@ -227,8 +252,8 @@ legacy flat key — they are nested-only.
 ```
 Request Flow:
 ┌─────────────────────────────────────────────────────────┐
-│ Gateway generates TraceId → Header: X-Trace-Id         │
-│                              + W3C traceparent          │
+│ my-gateway generates TraceId (not this starter)        │
+│  → Header: X-Trace-Id + W3C traceparent                 │
 │     ↓                                                    │
 │ Starter interceptor extracts TraceId → ThreadLocal      │
 │     ↓                                                    │
@@ -240,6 +265,14 @@ Request Flow:
 │ Gateway Admin aggregates → AI Copilot queries          │
 └─────────────────────────────────────────────────────────┘
 ```
+
+> **Where each piece runs.** TraceId generation is done by `my-gateway` itself
+> (`TraceIdGlobalFilter`, a Spring Cloud Gateway WebFlux global filter) — **not** by
+> this starter. `gateway-trace-starter` is installed in the **downstream business
+> services** only; its `TraceWebInterceptor` is a `jakarta.servlet`
+> `HandlerInterceptor`, so it works on the servlet stack and cannot be registered in
+> the reactive gateway. In this repository the only module that depends on the
+> starter is `seckill-core-engine`; neither `my-gateway` nor `gateway-admin` does.
 
 **W3C Trace Context**: the gateway emits `traceparent: 00-{32hex trace-id}-{16hex parent-id}-{flags}`
 alongside the legacy headers, and Feign propagates it downstream. Inbound priority:
@@ -400,7 +433,14 @@ A: Minimal impact. Async batch reporting doesn't block business threads. Samplin
 
 ### Q: What if the Gateway Admin is unavailable?
 
-A: Trace data is buffered in a queue; when full, data is dropped (no impact on business). Middleware metadata reporting failures are only logged.
+A: Reporting never blocks or fails the business request. Send failures are retried
+(up to 3 attempts with backoff + jitter) and then written to a local disk fallback
+log under `fallback-directory` (`./trace-fallback/trace-fallback-{yyyyMMdd}.log`,
+rotated to `.old` at 50 MiB, files older than 7 days are deleted). Records are only
+*dropped* when reporter admission control refuses them — the queue slots are
+exhausted or the `max-retained-bytes` budget is exceeded — or when the disk write
+itself fails; counters are exposed via `getDroppedCount()`, `getFallbackCount()` and
+`getFallbackDroppedCount()`. Middleware metadata reporting failures are only logged.
 
 ### Q: Does it support non-Spring Boot projects?
 
@@ -484,9 +524,9 @@ A: No. The Starter reports directly to Gateway Admin via HTTP, bypassing Nacos. 
 
 | Dependency | Version Requirement |
 |------------|---------------------|
-| Java | 17+ |
-| Spring Boot | 3.2+ |
-| Spring Cloud Gateway | 4.1+ |
+| Java | 21+ |
+| Spring Boot | 3.5.16 |
+| Spring Cloud Gateway | not required — this starter does not depend on Spring Cloud Gateway. It targets the servlet stack (`jakarta.servlet` `HandlerInterceptor`); `spring-webflux` is only used for the reporting `WebClient`. |
 
 ---
 

@@ -38,8 +38,8 @@ System diagnostic checks all critical components:
 
 | Type | Duration | Description |
 |------|----------|-------------|
-| `quick` | ~2-5 seconds | Quick check of critical components |
-| `full` | ~30-60 seconds | Full diagnostic with detailed analysis |
+| `quick` | ~2-5 seconds | Essential checks only: database, config center, Redis |
+| `full` | up to ~30 seconds | All components, checked in parallel under a 30s timeout |
 
 ---
 
@@ -116,7 +116,11 @@ New API endpoints for diagnosing individual components:
 | `GET` | `/api/diagnostic/auth` | Authentication only |
 | `GET` | `/api/diagnostic/instances` | Gateway instances only |
 | `GET` | `/api/diagnostic/performance` | Performance metrics only |
-| `GET` | `/api/diagnostic/filter-chain` | Filter chain analysis only |
+
+> There is **no** `/api/diagnostic/filter-chain` endpoint. The filter-chain self-time
+> analysis runs only as part of `/full` (`DiagnosticService.runFullDiagnostic()` schedules
+> `diagnoseFilterChain()` together with the other checks); `/quick` covers database,
+> config center and Redis only.
 
 ### 5. Compare with Previous
 
@@ -160,10 +164,15 @@ Response includes:
 |--------|------|-------------|
 | `GET` | `/api/diagnostic/quick` | Quick diagnostic |
 | `GET` | `/api/diagnostic/full` | Full diagnostic |
-| `GET` | `/api/diagnostic/history` | Diagnostic history (trend) |
-| `GET` | `/api/diagnostic/score-trend` | Health score trend for charts |
-| `GET` | `/api/diagnostic/{component}` | Single component diagnosis |
+| `GET` | `/api/diagnostic/history` | Diagnostic history + trend (`?hours=24`, optional `instanceId`) |
+| `GET` | `/api/diagnostic/trend` | Health score trend for charts (`?hours=24`) |
+| `GET` | `/api/diagnostic/score` | Overall health score (runs a quick diagnostic) |
 | `GET` | `/api/diagnostic/compare` | Compare with previous |
+
+Single-component diagnosis uses the fixed paths listed above
+(`/database`, `/redis`, `/config-center`, `/routes`, `/auth`, `/instances`,
+`/performance`) — there is no generic `/api/diagnostic/{component}` mapping, and the
+trend endpoint is `/trend`, not `/score-trend`.
 
 ### Full Diagnostic Response Example
 

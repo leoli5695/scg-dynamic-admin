@@ -39,7 +39,7 @@ Stress test features:
 | **Detailed Statistics** | P50, P90, P95, P99 latency distribution |
 | **AI Analysis** | AI analysis of test results |
 | **Quick Test** | One-click quick test |
-| **Export Reports** | Export test results to PDF, Excel, JSON, Markdown |
+| **Export Reports** | Export the test report as Markdown (the only implemented format) |
 | **Share Results** | Generate shareable links for test results |
 
 ---
@@ -72,6 +72,7 @@ Stress test features:
 | `body` | Request body (POST/PUT) | - |
 | `concurrentUsers` | Number of concurrent users | `10` |
 | `totalRequests` | Total number of requests | `1000` |
+| `durationSeconds` | Duration-based test; when > 0 it wins and `totalRequests` is left null | - |
 | `targetQps` | Target QPS limit | - |
 | `rampUpSeconds` | Ramp-up duration | `0` |
 | `requestTimeoutSeconds` | Request timeout | `30` |
@@ -102,6 +103,7 @@ Stress test features:
 
 | Status | Description |
 |--------|-------------|
+| `CREATED` | Record persisted, execution not started yet (initial status) |
 | `RUNNING` | Currently executing |
 | `COMPLETED` | Successfully completed |
 | `STOPPED` | Stopped by user |
@@ -126,37 +128,64 @@ Stress test features:
 
 ### Start Test
 
+`instanceId` is a **query parameter** holding the instance's string ID (e.g. `gateway-1`),
+not a body field; the JSON body is the configuration described above. `POST /api/**`
+requires an authenticated user with the `ADMIN` authority, and starting a test also
+requires the `STRESS_TEST` license feature.
+
 ```bash
-curl -X POST http://localhost:9090/api/stress-test/start \
+curl -X POST "http://localhost:9090/api/stress-test/start?instanceId=gateway-1" \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "instanceId": 1,
     "testName": "Load Test",
     "concurrentUsers": 20,
     "totalRequests": 5000
   }'
 ```
 
-### Test Result Example
+Response:
 
 ```json
 {
-  "id": 1,
-  "testName": "API Gateway Load Test",
-  "status": "COMPLETED",
-  "actualRequests": 10000,
-  "successfulRequests": 9950,
-  "failedRequests": 50,
-  "minResponseTimeMs": 5,
-  "maxResponseTimeMs": 2500,
-  "avgResponseTimeMs": 45,
-  "p50ResponseTimeMs": 35,
-  "p90ResponseTimeMs": 80,
-  "p95ResponseTimeMs": 120,
-  "p99ResponseTimeMs": 500,
-  "requestsPerSecond": 833.3,
-  "errorRate": 0.5,
-  "throughputKbps": 1250
+  "code": 200,
+  "message": "Stress test started",
+  "timestamp": 1735689600000,
+  "data": {"testId": 1, "status": "CREATED"}
+}
+```
+
+### Test Result Example
+
+Test records are returned inside the same `ApiResponse` envelope; latency fields are
+floating point (`Double`), not integers:
+
+```json
+{
+  "code": 200,
+  "message": "Success",
+  "timestamp": 1735689600000,
+  "data": {
+    "id": 1,
+    "instanceId": "gateway-1",
+    "testName": "API Gateway Load Test",
+    "status": "COMPLETED",
+    "actualRequests": 10000,
+    "successfulRequests": 9950,
+    "failedRequests": 50,
+    "minResponseTimeMs": 5.0,
+    "maxResponseTimeMs": 2500.0,
+    "avgResponseTimeMs": 45.2,
+    "p50ResponseTimeMs": 35.0,
+    "p90ResponseTimeMs": 80.0,
+    "p95ResponseTimeMs": 120.0,
+    "p99ResponseTimeMs": 500.0,
+    "requestsPerSecond": 833.3,
+    "errorRate": 0.5,
+    "throughputKbps": 1250.0,
+    "startTime": "2026-10-28T10:00:00",
+    "endTime": "2026-10-28T10:00:12"
+  }
 }
 ```
 
@@ -291,50 +320,62 @@ public StressTest createAndStartTest(...) {
 
 ### stress_test Table
 
+The table is created by JPA (`ddl-auto=update`) from the `StressTest` entity — there are
+no Flyway/Liquibase migrations. Column defaults such as `GET`, `10`, `0`, `30` and
+`CREATED` are applied in Java (entity field initializers / `createAndStartTest`), not by
+the database:
+
 ```sql
 CREATE TABLE stress_test (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    instance_id BIGINT NOT NULL,
-    test_name VARCHAR(255),
-    target_url VARCHAR(500),
-    path VARCHAR(500),
-    method VARCHAR(10) DEFAULT 'GET',
-    headers TEXT,
+    instance_id VARCHAR(100) NOT NULL,        -- gateway instance ID (string), no foreign key
+    test_name VARCHAR(100),
+    target_url VARCHAR(500) NOT NULL,
+    method VARCHAR(10),                       -- 'GET' when not specified
+    headers TEXT,                             -- JSON
     body TEXT,
-    concurrent_users INT DEFAULT 10,
-    total_requests INT DEFAULT 1000,
-    target_qps INT,
-    ramp_up_seconds INT DEFAULT 0,
-    request_timeout_seconds INT DEFAULT 30,
-    
+    concurrent_users INT NOT NULL,            -- 10 when not specified
+    total_requests INT,                       -- NULL for duration-based tests
+    duration_seconds INT,                     -- alternative to total_requests
+    ramp_up_seconds INT,                      -- 0 when not specified
+    request_timeout_seconds INT,              -- 30 when not specified
+    target_qps INT,                           -- NULL = unlimited
+
     -- Results
-    status VARCHAR(20) DEFAULT 'PENDING',
-    actual_requests INT DEFAULT 0,
-    successful_requests INT DEFAULT 0,
-    failed_requests INT DEFAULT 0,
-    min_response_time_ms BIGINT,
-    max_response_time_ms BIGINT,
-    avg_response_time_ms DOUBLE,
-    p50_response_time_ms BIGINT,
-    p90_response_time_ms BIGINT,
-    p95_response_time_ms BIGINT,
-    p99_response_time_ms BIGINT,
-    requests_per_second DOUBLE,
+    status VARCHAR(20),                       -- CREATED | RUNNING | COMPLETED | STOPPED | FAILED
+    start_time DATETIME,
+    end_time DATETIME,
+    actual_requests INT,
+    successful_requests INT,
+    failed_requests INT,
     error_rate DOUBLE,
+    min_response_time_ms DOUBLE,
+    max_response_time_ms DOUBLE,
+    avg_response_time_ms DOUBLE,
+    p50_response_time_ms DOUBLE,
+    p90_response_time_ms DOUBLE,
+    p95_response_time_ms DOUBLE,
+    p99_response_time_ms DOUBLE,
+    requests_per_second DOUBLE,
     throughput_kbps DOUBLE,
-    
+    response_time_distribution TEXT,          -- JSON histogram
+    error_distribution TEXT,                  -- JSON error breakdown
+
     -- AI Analysis
     ai_analysis_result TEXT,
-    
+
     -- Metadata
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    started_at DATETIME,
-    completed_at DATETIME,
-    
-    CONSTRAINT fk_stress_test_instance FOREIGN KEY (instance_id) 
-        REFERENCES gateway_instance(id) ON DELETE CASCADE
+    created_by VARCHAR(100),
+    created_at DATETIME,
+    updated_at DATETIME
 );
 ```
+
+Two differences worth noting versus earlier revisions of this document: `instance_id` is
+a `VARCHAR(100)` string with **no** `gateway_instance` foreign key, and there is **no
+`path` column** — the configured `path` is folded into `target_url` when the test starts
+and used while dispatching requests. Latency columns are `DOUBLE`, and the timestamps are
+`start_time` / `end_time`.
 
 ### stress_test_share Table
 
@@ -371,41 +412,50 @@ CREATE INDEX idx_stress_test_share_test ON stress_test_share(test_id);
 
 ## Export Reports
 
-Export stress test results in multiple formats for reporting and analysis.
+Export a stress test report for documentation and analysis.
 
 ### Supported Formats
 
-| Format | Description | Use Case |
-|--------|-------------|----------|
-| **PDF** | Professional formatted report | Presentations, documentation |
-| **Excel** | Spreadsheet with charts | Data analysis, custom reports |
-| **JSON** | Raw data export | Integration, automation |
-| **Markdown** | Text-based report | Documentation, README files |
+**Markdown is the only implemented export format.** `GET /api/stress-test/{testId}/export`
+declares a `format` query parameter (default `markdown`) and logs it, but the value is
+never used: the handler always calls `exportAsMarkdown(testId)` and returns
+`MediaType.TEXT_MARKDOWN` with a `stress-test-report-{testId}.md` attachment
+(`StressTestController.exportReport`). PDF, Excel and JSON exports do **not** exist — no
+PDF/spreadsheet library (iText, PDFBox, OpenPDF, POI, EasyExcel) is declared in any module
+`pom.xml`.
+
+| Format | Status |
+|--------|--------|
+| **Markdown** | Implemented — always returned, regardless of `format` |
+| **PDF** | Not implemented (`format=pdf` still returns Markdown) |
+| **Excel** | Not implemented |
+| **JSON** | Not implemented as an export; use `GET /api/stress-test/{testId}` or `/{testId}/metrics` for structured data |
 
 ### Export API
 
 ```bash
-curl -X GET "http://localhost:9090/api/stress-test/{testId}/export?format=pdf" \
-  -H "Accept: application/pdf" \
-  --output stress-test-report.pdf
+curl -X GET "http://localhost:9090/api/stress-test/{testId}/export" \
+  -H "Authorization: Bearer <token>" \
+  --output stress-test-report.md
 ```
 
 ### Export Parameters
 
 | Parameter | Description | Values |
 |-----------|-------------|--------|
-| `format` | Export format | `pdf`, `excel`, `json`, `markdown` |
+| `format` | Accepted but **ignored**; the response is always Markdown | default `markdown` |
 
 ### Export Content
 
-Exported reports include:
+The generated Markdown report contains:
 
-- **Test Configuration**: Target URL, method, concurrency settings
-- **Summary Statistics**: Total requests, success rate, error rate
-- **Latency Distribution**: Min, max, avg, P50, P90, P95, P99
-- **Performance Metrics**: QPS, throughput
-- **AI Analysis**: Intelligent analysis and recommendations (if available)
-- **Charts**: Visual representation of results
+- **Header**: test name, target URL, method, status, start/end time
+- **Test Configuration**: concurrent users, total requests or duration, ramp-up, target QPS, request timeout
+- **Test Results**: total/successful/failed requests, error rate, requests per second, throughput
+- **Response Time Distribution**: min, max, avg, P50, P90, P95, P99 (ms)
+- **AI Analysis**: included only when an analysis result is stored for the test
+
+Reports are plain text — there are no embedded charts or images.
 
 ---
 
@@ -417,45 +467,60 @@ Generate shareable links to collaborate with team members.
 
 | Feature | Description |
 |---------|-------------|
-| **Unique URL** | Generate unique shareable link |
-| **Expiration** | Links expire after configurable period |
-| **Access Control** | View-only access to shared results |
-| **Full Report** | Includes all test details and AI analysis |
+| **Unique URL** | Random UUID share ID, unique per link |
+| **Expiration** | Optional, in **hours**; omitted (or `<= 0`) means the link never expires |
+| **Access Control** | `GET /api/stress-test/share/{shareId}` is permit-all (no token); creating a link requires `ADMIN` |
+| **Full Report** | Returns the test record plus the generated Markdown report |
+| **Completed Only** | Sharing is rejected unless the test status is `COMPLETED` |
 
 ### Share API
 
+`expiresIn` is a **query parameter** (hours), not a JSON body field:
+
 ```bash
-# Create share link
+# Create a share link that expires in 24 hours
+curl -X POST "http://localhost:9090/api/stress-test/{testId}/share?expiresIn=24" \
+  -H "Authorization: Bearer <token>"
+
+# Permanent link (no expiresIn)
 curl -X POST "http://localhost:9090/api/stress-test/{testId}/share" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "expiresInDays": 7
-  }'
+  -H "Authorization: Bearer <token>"
 ```
 
 **Response:**
 
 ```json
 {
-  "shareId": "abc123def456",
-  "shareUrl": "http://localhost:9090/share/abc123def456",
-  "expiresAt": "2024-01-15T00:00:00Z"
+  "code": 200,
+  "message": "Success",
+  "timestamp": 1735689600000,
+  "data": {
+    "shareId": "3f2b8c1e-6d4a-4c9e-9b7a-1e5d0a2c7b88",
+    "shareUrl": "/api/stress-test/share/3f2b8c1e-6d4a-4c9e-9b7a-1e5d0a2c7b88",
+    "expiresIn": "24 hours"
+  }
 }
 ```
 
+`shareUrl` is a relative API path (resolve it against the admin base URL); the response
+carries no `expiresAt` field. `expiresIn` is the string `"permanent"` when no expiry was
+requested. The computed expiry timestamp is stored in `stress_test_share.expires_at`.
+
 ### Access Shared Results
 
-Navigate to the share URL to view the test results:
+```bash
+curl http://localhost:9090/api/stress-test/share/{shareId}
+```
 
-```
-http://localhost:9090/share/{shareId}
-```
+Returns `{"test": {...}, "markdown": "# Stress Test Report..."}` and increments
+`view_count`. Expired or unknown share IDs return an error payload. A link can be revoked
+with `DELETE /api/stress-test/share/{shareId}`.
 
 ### Share Configuration
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `expiresInDays` | Number of days until link expires | `7` |
+| `expiresIn` | Query parameter, link lifetime in **hours**; `null` or `<= 0` = never expires | permanent |
 
 ---
 
@@ -474,21 +539,31 @@ The stress test tool includes AI-powered analysis capabilities for intelligent i
 ### Analysis API
 
 ```bash
-curl -X GET "http://localhost:9090/api/stress-test/{testId}/analyze"
+curl -X GET "http://localhost:9090/api/stress-test/{testId}/analyze?provider=BAILIAN&language=zh" \
+  -H "Authorization: Bearer <token>"
 ```
+
+`provider` (default `BAILIAN`) and `language` (default `zh`) are optional query
+parameters. The test must be `COMPLETED`, and the call requires the `AI_COPilot` license
+feature. The result is cached in `ai_analysis_result`: once stored, later calls return
+the cached text instead of invoking the model again.
 
 **Response:**
 
 ```json
 {
-  "analysis": "## Performance Analysis\n\n### Summary\nThe test shows good overall performance...",
-  "recommendations": [
-    "Consider increasing connection pool size",
-    "Enable response caching for frequently accessed endpoints"
-  ],
-  "score": 85
+  "code": 200,
+  "message": "Success",
+  "timestamp": 1735689600000,
+  "data": {
+    "analysis": "## Performance Analysis\n\n### Summary\nThe test shows good overall performance..."
+  }
 }
 ```
+
+`data.analysis` is the only field returned — the analysis text (Markdown, produced from the
+test statistics plus Prometheus metrics for the test window) is a single string; there is
+no separate `recommendations` array or numeric `score` field.
 
 ---
 

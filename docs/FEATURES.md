@@ -24,6 +24,7 @@
 | **Circuit Breaker** | Resilience4j protection against cascading failures | [circuit-breaker.md](features/circuit-breaker.md) |
 | **IP Filtering** | Blacklist/whitelist with CIDR support | [ip-filtering.md](features/ip-filtering.md) |
 | **Timeout Control** | Connection and response timeout configuration | [timeout-control.md](features/timeout-control.md) |
+| **Retry** | Configurable retry with fixed interval on 500/502/503/504 | [retry.md](features/retry.md) |
 
 ---
 
@@ -44,13 +45,19 @@
 | Feature | Description | Document |
 |---------|-------------|----------|
 | **Monitoring & Alerts** | JVM, CPU, HTTP metrics with threshold alerts | [monitoring-alerts.md](features/monitoring-alerts.md) |
-| **Access Log** | JSON logging with K8S real-time viewing & ES integration | [access-log.md](features/access-log.md) |
+| **Access Log** | JSON logging with K8S real-time viewing; entries are shipped to `POST /api/access-log/collect` and stored in the `access_log_entries` table (no Elasticsearch integration — not implemented) | [access-log.md](features/access-log.md) |
 | **Request Tracing** | Error/slow request capture with replay | [request-tracing.md](features/request-tracing.md) |
 | **AI-Powered Analysis** | GPT/Claude/Qwen metrics analysis | [ai-analysis.md](features/ai-analysis.md) |
-| **Email Notifications** | SMTP alerts with AI-generated content | [email-notifications.md](features/email-notifications.md) |
+| **Email Notifications** | SMTP alerts rendered by `AlertEmailBuilder` (not AI-generated) | [email-notifications.md](features/email-notifications.md) |
 | **System Diagnostic** | Comprehensive health checks | [system-diagnostic.md](features/system-diagnostic.md) |
 | **Traffic Topology** | Real-time traffic visualization | [traffic-topology.md](features/traffic-topology.md) |
 | **Filter Chain Analysis** | Filter execution statistics | [filter-chain-analysis.md](features/filter-chain-analysis.md) |
+| **Historical Comparison** | Period-over-period comparison of metrics, filter stats and config changes | [historical-comparison.md](features/historical-comparison.md) |
+| **Performance Optimization** | JWT cache, shadow quota, non-blocking locks and other throughput optimizations | [performance-optimization.md](features/performance-optimization.md) |
+| **AI Token Quota Ledger** | Per-request UUID ledger for AI token pre-deduction, settlement, refund and local degradation | [ai-quota-ledger.md](features/ai-quota-ledger.md) |
+| **AI Usage Delivery** | Durable local outbox with `eventId` for reliable AI token-usage reporting to the admin | [ai-usage-delivery.md](features/ai-usage-delivery.md) |
+| **AI Usage Reconciliation** | Reconcile and compensate `UNKNOWN`/`ESTIMATED` usage and `PENDING`/`FAILED` settlements | [ai-usage-reconciliation.md](features/ai-usage-reconciliation.md) |
+| **AI Content Security** | `AI_SECURITY` in-flight text moderation: word lists, regex, PII handling and optional external moderators behind the `gateway-moderation-spi` contract | [ai-content-security.md](features/ai-content-security.md) |
 
 ---
 
@@ -69,69 +76,131 @@
 | Feature | Description | Document |
 |---------|-------------|----------|
 | **Request Replay Debugger** | Modify and replay captured requests | [request-replay.md](features/request-replay.md) |
+| **Route Debug Page** | Per-route debug page that pre-fills a request from the route's Path/Method/Host/Header predicates and streams the response | [route-debug.md](features/route-debug.md) |
 | **AI Copilot Assistant** | Intelligent configuration assistant | [ai-copilot.md](features/ai-copilot.md) |
-| **Stress Test Tool** | Concurrent load testing with AI analysis, export (PDF/Excel/JSON/Markdown), and shareable reports | [stress-test.md](features/stress-test.md) |
+| **Stress Test Tool** | Concurrent load testing with AI analysis, Markdown export (the `format` query parameter is accepted but currently ignored — PDF/Excel/JSON export is not implemented), and shareable reports | [stress-test.md](features/stress-test.md) |
 
 ---
 
 ## Filter Chain Summary
 
 ```
-Request Flow:
+Request Flow (GlobalFilter order, ascending = execution order):
 ┌─────────────────────────────────────────────────────────────┐
-│ Security (-500)        → Security hardening first           │
+│ TraceId (HIGHEST_PRECEDENCE)  → Trace ID first, sees all    │
 ├─────────────────────────────────────────────────────────────┤
-│ IP Filter (-490)       → Fast rejection (before logging)    │
+│ FilterChainTracking (MIN+2)   → Per-filter timing stats     │
 ├─────────────────────────────────────────────────────────────┤
-│ AccessLog (-400)       → Log all requests                   │
+│ IP Filter (-490)              → Fast rejection before WAF   │
 ├─────────────────────────────────────────────────────────────┤
-│ CORS (-300)            → Handle preflight requests          │
+│ Security (-480)               → XSS/SQLi hardening          │
 ├─────────────────────────────────────────────────────────────┤
-│ TraceId (-300)         → Full visibility                    │
+│ AccessLog (-400)              → Log all requests            │
 ├─────────────────────────────────────────────────────────────┤
-│ Request Transform (-255) → Modify request body              │
+│ CORS (-301)                   → Handle preflight requests   │
 ├─────────────────────────────────────────────────────────────┤
-│ Request Validation (-254) → Validate request schema         │
+│ Authentication (-256)         → JWT/Key/Basic/HMAC/OAuth2   │
 ├─────────────────────────────────────────────────────────────┤
-│ Authentication (-250)  → User identity                      │
+│ Request Transform (-255)      → Modify request body         │
 ├─────────────────────────────────────────────────────────────┤
-│ Mock Response (-249)   → Return mock data for testing       │
+│ Request Validation (-254)     → Validate request schema     │
 ├─────────────────────────────────────────────────────────────┤
-│ Timeout (-200)         → Protect downstream                 │
+│ Mock Response (-249)          → Return mock data (testing)  │
 ├─────────────────────────────────────────────────────────────┤
-│ API Version (-150)     → Version-based routing              │
+│ AI Security Guard (-246)      → Content moderation in/out   │
 ├─────────────────────────────────────────────────────────────┤
-│ Circuit Breaker (-100) → Prevent cascade failure            │
+│ Hybrid Rate Limiter (-245)    → Redis + local rate limiting │
 ├─────────────────────────────────────────────────────────────┤
-│ Header Op (-50)        → Add/modify headers                 │
+│ Multi-Dim RateLimit (-244)    → Per-identity rate limiting  │
 ├─────────────────────────────────────────────────────────────┤
-│ Response Transform (-45) → Modify response body             │
+│ AI Context Limit (-243)       → Reject oversized AI inputs  │
 ├─────────────────────────────────────────────────────────────┤
-│ Cache (50)             → Response caching                   │
+│ AI Semantic Cache (-242)      → Cache hit skips quota spend │
 ├─────────────────────────────────────────────────────────────┤
-│ Trace Capture (100)    → Capture error/slow requests        │
+│ Token Quota PreCheck (-241)   → Pre-deduct token quota      │
 ├─────────────────────────────────────────────────────────────┤
-│ Filter Chain Tracking (N/A) → Performance monitoring         │
+│ Timeout (-200)                → Protect downstream          │
 ├─────────────────────────────────────────────────────────────┤
-│ Retry (9999)           → Retry on failure                   │
+│ API Version (-150)            → Version-based routing       │
 ├─────────────────────────────────────────────────────────────┤
-│ Multi-Service LB (10001) → Multi-service routing            │
+│ Header Op (-50)               → Add/modify headers          │
 ├─────────────────────────────────────────────────────────────┤
-│ Nacos Discovery LB (10100) → Namespace/group override       │
+│ Trace Capture (-47)           → Capture error/slow requests │
 ├─────────────────────────────────────────────────────────────┤
-│ Discovery LB (10150)   → Forward to backend                 │
+│ Cache (-46)                   → Response caching            │
 ├─────────────────────────────────────────────────────────────┤
-│ Actuator Endpoint (N/A) → Protect actuator endpoints        │
+│ Response Transform (-45)      → Modify response body        │
+├─────────────────────────────────────────────────────────────┤
+│ Token Usage Collector (-44)   → Parse LLM token usage       │
+├─────────────────────────────────────────────────────────────┤
+│ AI Statistics (-43)           → TTFT / usage statistics     │
+├─────────────────────────────────────────────────────────────┤
+│ Circuit Breaker (-3)          → Prevent cascade failure     │
+├─────────────────────────────────────────────────────────────┤
+│ Retry (-2)                    → Retry on failure            │
+├─────────────────────────────────────────────────────────────┤
+│ NettyWriteResponse (-1)       → SCG built-in write phase    │
+├─────────────────────────────────────────────────────────────┤
+│ Multi-Service LB (10001)      → Multi-service routing       │
+├─────────────────────────────────────────────────────────────┤
+│ API Version Routing (10002)   → Apply version targets       │
+├─────────────────────────────────────────────────────────────┤
+│ AI Prompt Template (10004)    → Prompt decoration           │
+├─────────────────────────────────────────────────────────────┤
+│ AI Provider Routing (10005)   → Rewrite target LLM URL      │
+├─────────────────────────────────────────────────────────────┤
+│ Nacos Discovery LB (10100)    → Namespace/group override    │
+├─────────────────────────────────────────────────────────────┤
+│ Discovery LB (10140)          → Service discovery + LB      │
+├─────────────────────────────────────────────────────────────┤
+│ Reactive LB Client (10150)    → SCG built-in lb:// resolve  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+Source of truth: `my-gateway/src/main/java/com/leoli/gateway/constants/FilterOrderConstants.java`
+(an `interface`, so the constants carry no explicit `public static final`).
+
+Two `WebFilter`s are **not** part of the `GlobalFilter` ordering above and therefore run ahead of the
+whole chain: `InternalApiAuthWebFilter` (`Ordered.HIGHEST_PRECEDENCE + 10`, guards `/internal/**`)
+and `ActuatorEndpointFilter` (`Ordered.HIGHEST_PRECEDENCE + 10`, only active when
+`management.server.port` is explicitly set). Likewise `FilterOrderConstants.TRACE_ID` (-300) is only
+a historical reference — `TraceIdGlobalFilter.getOrder()` actually returns
+`Ordered.HIGHEST_PRECEDENCE`, so TraceId executes first.
+
+**Why Cache is -46 and Trace Capture is -47, not positive values:** SCG only routes the client-bound
+response body through `ServerHttpResponseDecorator`s installed by filters ordered *before*
+`NettyWriteResponseFilter` (-1). Both filters used to sit at +50 and +100, where their `writeWith`
+was never invoked on the real Netty proxy path — the response cache was never populated (every
+request went back to origin) and every captured trace had `responseBody == null`. Those were two P0
+bugs, fixed by moving them inside -1; the reasoning is recorded in the javadoc of
+`FilterOrderConstants.CACHE` and `FilterOrderConstants.TRACE_CAPTURE`.
+
 **Design Philosophy:**
-1. Security first → Block malicious requests early
+1. Cheap rejection first → IP filter (-490) runs *before* the WAF (-480), so an already-blacklisted address never makes the gateway buffer and regex-scan a request body
 2. Fast rejection → IP filter before logging and auth
-3. Observability → TraceId sees everything for debugging
+3. Observability → TraceId runs at `HIGHEST_PRECEDENCE` and sees everything for debugging
 4. Protection → Timeout/Circuit Breaker before routing
-5. Retry before routing → Retry at 9999, before LB filters
+5. Retry before routing → Retry at **-2** (post-phase runs after `NettyWriteResponseFilter` at -1), still ahead of the LB filters at 10001+
 6. Namespace isolation → Nacos Discovery LB for cross-namespace routing
+
+---
+
+## Implemented Surface Without a Dedicated Feature Document
+
+The tables above index the 36 documents under `docs/features/` (count at commit `b45d40a`;
+re-count with `ls docs/features/*.md | wc -l`). The following implemented pieces have
+no standalone feature document yet and are only described in the code / console UI:
+
+**`gateway-admin` REST controllers** (44 in total; the ones not covered above):
+`PluginController`, `RoutePluginBindingController`, `LicenseController`,
+`GatewayTokenRevocationController`, `TokenQuotaController`, `TokenUsageController`,
+`TokenUsageReconciliationController`, `ProviderCredentialController`, `ServiceMiddlewareController`,
+`MultiInstanceComparisonController`, `FullChainTraceController`
+
+**Maven modules**: `seckill-core-engine` (standalone flash-sale workload engine — Redis Lua rate
+limiting, MQ order delivery/stock release; **not deployed to production**, and it is the only module
+that depends on `gateway-trace-starter`) and `license-server` (license issuing service backing the
+offline RSA verification performed by `license-client`).
 
 ---
 

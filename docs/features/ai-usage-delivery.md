@@ -8,7 +8,7 @@
 
 1. 已有数据库先执行 `gateway-admin/src/main/resources/sql/alter-token-usage-outcome.sql`（若尚未执行），再执行 `alter-token-usage-event-id.sql`。两份脚本均只执行一次。
 2. 先升级管理端，再升级网关，确保接收端已经支持去重。
-3. 设置 `GATEWAY_INTERNAL_TOKEN`，并为每个网关进程配置独立的持久化目录 `GATEWAY_USAGE_OUTBOX_DIRECTORY`。默认目录为 `${user.dir}/data/token-usage/${gateway.instance-id}`。同一目录只能被一个进程持有，重复使用或无法初始化目录时启动失败。
+3. 设置 `GATEWAY_INTERNAL_TOKEN`，并为每个网关进程配置独立的持久化目录 `GATEWAY_USAGE_OUTBOX_DIRECTORY`。默认目录为 `${user.dir}/data/token-usage/${gateway.instance-id}`。同一目录只能被一个进程持有，重复使用或无法初始化目录时启动失败。outbox 目录与配额账本目录同属 `${user.dir}/data`，因此属主必须是容器运行用户；模块目录属 root 时应用建不出 `data/`，需在宿主机预建，详见 [ai-quota-ledger.md](ai-quota-ledger.md) 部署第 4 条。
 4. 根据管理端不可用的容忍时长配置容量。默认最多 4096 条、64MiB，每条最多 16KiB。环境变量为 `GATEWAY_USAGE_OUTBOX_MAX_RECORDS` 和 `GATEWAY_USAGE_OUTBOX_MAX_BYTES`。恢复的积压超过新配置容量时，需要提高容量才能启动并排空。
 
 ## 观测与边界

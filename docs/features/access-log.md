@@ -54,7 +54,7 @@ For Kubernetes deployments, you can view logs directly from Pod stdout without d
 4. Select Namespace and Pod
 5. View real-time logs (last 500 lines)
 
-**Note:** Logs are collected in real-time, not stored in database. For persistent storage and historical queries, integrate with Elasticsearch.
+**Note:** This tab streams Pod stdout in real-time and does not persist anything. Persistence is a separate, built-in path: log records are POSTed to `POST /api/access-log/collect`, written as `AccessLogEntryEntity` rows into the `access_log_entries` table, and queried through `GET /api/access-log/history/entries`, `GET /api/access-log/history/stats` and cleaned up with `POST /api/access-log/history/cleanup`. There is no Elasticsearch client anywhere in this repository.
 
 ## API Endpoints
 
@@ -79,6 +79,21 @@ GET /api/access-log/entries?page=0&size=50
 ```
 
 Returns log entries from local file.
+
+### Persisted History (Database)
+
+```
+POST /api/access-log/collect
+```
+
+Ingests a JSON array of log records into the `access_log_entries` table (`AccessLogEntryEntity`). This is the endpoint the built-in Fluent Bit templates forward to.
+
+```
+GET /api/access-log/history/entries?instanceId=&startTime=&endTime=&method=&statusCode=&path=&traceId=&page=0&size=50
+GET /api/access-log/history/stats?instanceId=&startTime=&endTime=
+GET /api/access-log/history/cleanup/stats?instanceId=&retentionDays=7
+POST /api/access-log/history/cleanup?instanceId=&retentionDays=7
+```
 
 ## Log Entry Structure
 
@@ -106,7 +121,7 @@ Each log entry is a JSON object:
 
 ## Advanced Configuration (Optional)
 
-For persistent storage with Elasticsearch, you can deploy Fluent Bit to collect and forward logs:
+For persistent storage, deploy Fluent Bit to collect and forward logs into the built-in ingestion endpoint `POST /api/access-log/collect` (table `access_log_entries`). The templates served by `GET /api/access-log/fluent-bit-templates` all use an `http` output pointing at that endpoint — they do not target Elasticsearch, and this repository ships no Elasticsearch client.
 
 ### Kubernetes DaemonSet
 
@@ -129,11 +144,12 @@ data:
         Tag               gateway.access
 
     [OUTPUT]
-        Name              elasticsearch
+        Name              http
         Match             gateway.*
-        Host              elasticsearch
-        Port              9200
-        Index             gateway-access
+        Host              gateway-admin-service
+        Port              8080
+        URI               /api/access-log/collect
+        Format            json
 ```
 
 ## Configuration Options
@@ -144,6 +160,7 @@ data:
 | `deployMode` | Deployment mode | `LOCAL` |
 | `logToConsole` | Output to stdout | `true` (K8S) |
 | `logDirectory` | File log directory | `./logs/access` |
+| `fileNamePattern` | Log file name pattern, supports `{yyyy}`, `{MM}`, `{dd}` | `access-{yyyy-MM-dd}.log` |
 | `logFormat` | JSON or TEXT | `JSON` |
 | `logLevel` | MINIMAL, NORMAL, VERBOSE | `NORMAL` |
 | `logRequestHeaders` | Include request headers | `true` |
@@ -153,13 +170,18 @@ data:
 | `maxBodyLength` | Max body characters to log | `2048` |
 | `samplingRate` | Sampling rate (0-100%) | `100` |
 | `sensitiveFields` | Fields to mask | `password, token, secret...` |
+| `maxFileSizeMb` | File size before rotation (MB) | `100` |
+| `maxBackupFiles` | Backup files kept after rotation | `30` |
+| `includeAuthInfo` | Include auth info in log entries | `true` |
+| `customBinaryContentTypes` | Extra content types treated as binary (gateway-side `AccessLogConfig`) | `[]` |
+| `customBinaryExtensions` | Extra file extensions treated as binary (gateway-side `AccessLogConfig`) | `[]` |
 
 ## Sensitive Data Masking
 
 The gateway automatically masks sensitive fields in request/response bodies:
 
-- `password`, `token`, `authorization`
-- `apiKey`, `api_key`, `accessKey`
+- `password`, `token`, `authorization`, `secret`
+- `apiKey`, `api_key`, `accessKey`, `access_key`
 - `clientSecret`, `client_secret`
 - `cookie`
 

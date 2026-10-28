@@ -138,12 +138,14 @@ Supports cross-namespace/group service discovery:
 {
   "routeId": "cross-namespace-route",
   "uri": "lb://external-service",
-  "strategies": {
-    "serviceNamespace": "external-ns",
-    "serviceGroup": "EXTERNAL_GROUP"
-  }
+  "serviceNamespace": "external-ns",
+  "serviceGroup": "EXTERNAL_GROUP"
 }
 ```
+
+`serviceNamespace` / `serviceGroup` are **top-level** route fields (`RouteDefinition.serviceNamespace`,
+`.serviceGroup`; parsed by `RouteRefresher` from the top level of the route map). There is no
+`"strategies": {...}` wrapper — a nested `strategies` object is ignored.
 
 **Use Cases:**
 - Gateway is in `gateway-prod` namespace
@@ -163,7 +165,10 @@ Use the `static://` protocol:
 }
 ```
 
-Then define instances in `gateway-services.json`:
+Then define the service (created through `POST /api/services`) — it is published to Nacos as
+`config.gateway.service-{serviceId}` and listed in `config.gateway.metadata.services-index`
+(`GatewayConfigConstants.SERVICE_PREFIX` / `SERVICES_INDEX`). There is **no** `gateway-services.json`
+data ID. The service body looks like:
 
 ```json
 {
@@ -231,14 +236,20 @@ Result: A -> B -> B -> C -> A -> B -> B -> C -> ...
 
 ### Consistent Hash
 
-Hash based on client IP or Header:
+Hash based on client IP or an explicit request header:
 
 ```json
 {
-  "loadBalancer": "consistent-hash",
-  "hashKey": "ip"  // or "header:X-Session-Id"
+  "loadBalancer": "consistent-hash"
 }
 ```
+
+The hash key is not a service config field. `InstanceSelector.getHashKey` uses the request header
+`X-Hash-Key` when present, otherwise the client IP resolved through `ClientIpResolver` (which only
+honours `X-Forwarded-For` when the TCP peer is a configured `gateway.trusted-proxy.proxy-ips`
+entry). If no trusted proxy is configured behind a reverse proxy, every request hashes on the proxy
+address and the service is pinned to one instance. The documented `hashKey: "ip" | "header:..."`
+config option is **not implemented**.
 
 **Use Cases:**
 - Session persistence
@@ -509,32 +520,57 @@ gateway:
 
 ### Error Response Examples
 
-When all instances are unavailable, gateway returns proper error responses:
+When all instances are unavailable, gateway returns proper error responses. Gateway-generated error
+bodies always carry `httpStatus`, `code`, `error` (the HTTP reason phrase), `message` and `data`
+(`GatewayResponseHelper`); those routed through `ScgGlobalExceptionHandler` also carry `traceId`, and
+for non-`GatewayException` failures `code` equals the HTTP status value. Raw host/port and exception
+details stay in the gateway log — the client-facing `message` is a safe text from `GatewayErrorMessages`.
 
-**All instances disabled:**
+**All instances disabled** (`DiscoveryLoadBalancerFilter` reason "All service instances are disabled for service: x"):
 ```json
 {
-  "status": 503,
+  "httpStatus": 503,
+  "code": 503,
   "error": "Service Unavailable",
-  "message": "All instances are DISABLED for service xxx"
+  "message": "The service has no enabled backend instance. Enable at least one instance and confirm the gateway has applied the configuration.",
+  "data": null,
+  "traceId": "..."
 }
 ```
 
-**All instances unhealthy and failed:**
+**No instance registered / none available** (reason "No available instances for service: x"):
 ```json
 {
-  "status": 503,
+  "httpStatus": 503,
+  "code": 503,
   "error": "Service Unavailable",
-  "message": "Failed to connect to service instance [host=127.0.0.1, port=9001] - Instance is UNHEALTHY (Gateway request failed 8 times consecutively)"
+  "message": "No backend instance is available for the selected service. Check service registration, namespace/group, instance enablement and configuration synchronization.",
+  "data": null,
+  "traceId": "..."
+}
+```
+
+**Unhealthy instance, retries exhausted** (`InstanceRetryExecutor` reason "Failed to connect to service instance ..."):
+```json
+{
+  "httpStatus": 503,
+  "code": 503,
+  "error": "Service Unavailable",
+  "message": "The gateway could not connect to the selected backend and no further instance retry is available. Check backend availability and network connectivity.",
+  "data": null,
+  "traceId": "..."
 }
 ```
 
 **Connection timeout:**
 ```json
 {
-  "status": 504,
+  "httpStatus": 504,
+  "code": 504,
   "error": "Gateway Timeout",
-  "message": "Request took longer than timeout threshold"
+  "message": "The backend connection or response exceeded the gateway timeout. Check backend latency, network connectivity and timeout settings.",
+  "data": null,
+  "traceId": "..."
 }
 ```
 
@@ -542,19 +578,35 @@ When all instances are unavailable, gateway returns proper error responses:
 
 ## API Endpoints
 
+`ServiceController` is `@RequestMapping("/api/services")`:
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/services` | List all services |
 | `GET` | `/api/services/{name}` | Get service details |
+| `GET` | `/api/services/{name}/usage` | Routes that reference this service |
 | `POST` | `/api/services` | Create service (static) |
 | `PUT` | `/api/services/{name}` | Update service |
 | `DELETE` | `/api/services/{name}` | Delete service |
-| `GET` | `/api/services/{name}/instances` | Get instances |
+| `POST` | `/api/services/{name}/instances` | Add an instance |
+| `DELETE` | `/api/services/{name}/instances/{instanceId}` | Remove an instance |
+| `PUT` | `/api/services/{name}/instances/{instanceId}/status` | Set instance `enabled` / `healthy` |
+| `GET` | `/api/services/nacos-discovery` | Service names registered in Nacos |
+| `POST` | `/api/services/sync-to-nacos` | Sync all services from DB to Nacos |
+
+There is **no** `GET /api/services/{name}/instances` endpoint — instances are returned inside the
+service body of `GET /api/services/{name}`; the instance-level routes above are the mutating ones.
+
+`GET` requires any authenticated user; `POST`/`PUT`/`DELETE` under `/api/**` require the `ADMIN`
+authority (`SecurityConfig`). Responses are wrapped in `ApiResponse` (`{code,message,data}`).
+The optional `instanceId` / `gatewayInstanceId` query parameter scopes the change to one gateway
+instance's configuration.
 
 ### Create Static Service
 
 ```bash
 curl -X POST http://localhost:9090/api/services \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "legacy-backend",
@@ -566,6 +618,15 @@ curl -X POST http://localhost:9090/api/services \
   }'
 ```
 
+### Update Instance Status
+
+```bash
+curl -X PUT http://localhost:9090/api/services/legacy-backend/instances/inst-1/status \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
+```
+
 ---
 
 ## Service Discovery SPI
@@ -573,13 +634,17 @@ curl -X POST http://localhost:9090/api/services \
 Gateway supports extensible service discovery SPI:
 
 ```
-┌─────────────────────────────────────────────┐
-│       DiscoveryService (SPI Interface)       │
-│                                              │
-│   + getInstances(serviceId): List<Instance>  │
-│   + watch(serviceId, listener): void         │
-└─────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                DiscoveryService (SPI Interface)                │
+│                                                                │
+│   + getInstances(serviceName): List<ServiceInstance>           │
+│   + getHealthyInstances(serviceName): List<ServiceInstance>    │
+│   + getCenterType(): CenterType                                │
+└───────────────────────────────────────────────────────────────┘
                   │
+        ┌─────────┴─────────┐
+        │  AbstractDiscoveryService (shared base)  │
+        └─────────┬─────────┘
     ┌─────────────┼─────────────┐
     │             │             │
     ▼             ▼             ▼
@@ -589,6 +654,12 @@ Gateway supports extensible service discovery SPI:
 │ Service │ │ Service │ │ Service │
 └─────────┘ └─────────┘ └─────────┘
 ```
+
+The interface is pull-based: `my-gateway/.../discovery/spi/DiscoveryService.java` declares only
+`getInstances`, `getHealthyInstances` and `getCenterType`. There is **no** `watch(serviceId, listener)`
+method (that push-style design is not implemented) — no implementation subscribes to registry events,
+so freshness comes from per-request queries plus the outage fallback cache described in
+[Nacos outage fallback](#nacos-outage-fallback).
 
 ---
 

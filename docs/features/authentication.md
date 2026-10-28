@@ -270,13 +270,21 @@ Authentication strategy bound to route:
 
 ### API Endpoints
 
+All endpoints live under `AuthPolicyController`'s base mapping `@RequestMapping("/api/auth")`
+(`AuthPolicyController.java:26`). There is no `/api/auth-policies` prefix and no
+`/api/routes/{routeId}/auth-binding` endpoint (`auth-binding` has zero hits at controller level;
+`RouteController` only maps `/api/routes` CRUD + `/{id}/enable|disable` + `/reload`).
+
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/auth-policies` | List auth policies |
-| `POST` | `/api/auth-policies` | Create auth policy |
-| `PUT` | `/api/auth-policies/{id}` | Update auth policy |
-| `DELETE` | `/api/auth-policies/{id}` | Delete auth policy |
-| `POST` | `/api/routes/{routeId}/auth-binding` | Bind auth to route |
+| `GET` | `/api/auth/policies` | List auth policies (`:38`) |
+| `POST` | `/api/auth/policies` | Create auth policy (`:94`) |
+| `PUT` | `/api/auth/policies/{policyId}` | Update auth policy (`:114`) |
+| `DELETE` | `/api/auth/policies/{policyId}` | Delete auth policy (`:135`) |
+| `POST` | `/api/auth/bindings` | Bind auth policy to route (`:248`) |
+| `POST` | `/api/auth/bindings/batch` | Batch bind (`:274`) |
+| `DELETE` | `/api/auth/bindings/{bindingId}` | Delete a binding (`:297`) |
+| `DELETE` | `/api/auth/bindings/policy/{policyId}/route/{routeId}` | Unbind policy from route (`:315`) |
 
 ---
 

@@ -11,7 +11,7 @@ Mock response executes after authentication, can skip backend calls:
 ```
 Request Flow:
   ...
-  Authentication (-250) → Auth check
+  Authentication (-256) → Auth check
        ↓
   Mock Response (-249) → Return mock data (skip backend)
        ↓
@@ -32,11 +32,19 @@ Request Flow:
 
 ## Configuration
 
+Every JSON block below is the content of a strategy's `config` map — i.e. what gets deserialized into
+`com.leoli.gateway.model.MockResponseConfig`. That class has **no `routeId` field**: route binding is
+done by the strategy-level `scope` / `routeId` fields on `StrategyDefinition`, and
+`MockResponseFilter` looks the config up by the matched route ID
+(`strategyManager.getConfig(routeId, StrategyDefinition.TYPE_MOCK_RESPONSE, MockResponseConfig.class)`,
+result cached per strategy version).
+Because `ObjectMapperConfig` disables `FAIL_ON_UNKNOWN_PROPERTIES`, a stray `routeId` inside `config`
+is silently ignored rather than rejected — so it looks like it works while doing nothing.
+
 ### Static Mock
 
 ```json
 {
-  "routeId": "test-api",
   "enabled": true,
   "mockMode": "STATIC",
   "staticMock": {
@@ -62,7 +70,6 @@ Request Flow:
 
 ```json
 {
-  "routeId": "test-api",
   "enabled": true,
   "mockMode": "DYNAMIC",
   "dynamicMock": {
@@ -118,7 +125,6 @@ Request Flow:
 
 ```json
 {
-  "routeId": "test-api",
   "enabled": true,
   "mockMode": "TEMPLATE",
   "templateMock": {
@@ -181,7 +187,6 @@ Request Flow:
 
 ```json
 {
-  "routeId": "test-api",
   "enabled": true,
   "mockMode": "STATIC",
   "staticMock": {
@@ -212,7 +217,6 @@ Request Flow:
 
 ```json
 {
-  "routeId": "test-api",
   "enabled": true,
   "mockMode": "STATIC",
   "staticMock": {
@@ -262,7 +266,6 @@ Request Flow:
 
 ```json
 {
-  "routeId": "test-api",
   "enabled": true,
   "passThrough": {
     "enabled": true,
@@ -374,21 +377,68 @@ Different versions return different responses:
 
 ## API Endpoints
 
-Configure via Strategy API:
+Configure via the Strategy API. There is **no `/api/strategies/mock-response` path**:
+`StrategyController` is `@RequestMapping("/api/strategies")` and identifies a strategy by its
+`strategyId` (`PUT /{id}`, `GET /{id}`, `DELETE /{id}`), with `GET /type/{type}` for lookup by type.
+The mock-response type constant is `StrategyDefinition.TYPE_MOCK_RESPONSE = "MOCK_RESPONSE"`.
+`POST`/`PUT`/`DELETE` under `/api/**` require the `ADMIN` authority.
+
+Create:
 
 ```bash
-curl -X PUT http://localhost:9090/api/strategies/mock-response \
+curl -X POST http://localhost:9090/api/strategies \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{
+    "strategyId": "mock-test-api",
+    "strategyName": "Mock test-api",
+    "strategyType": "MOCK_RESPONSE",
+    "scope": "ROUTE",
     "routeId": "test-api",
     "enabled": true,
-    "mockMode": "STATIC",
-    "staticMock": {
-      "statusCode": 200,
-      "body": "{\"id\": 1}"
+    "config": {
+      "enabled": true,
+      "mockMode": "STATIC",
+      "staticMock": {
+        "statusCode": 200,
+        "body": "{\"id\": 1}"
+      }
     }
   }'
 ```
+
+Update (`{strategyId}`, not a type name):
+
+```bash
+curl -X PUT http://localhost:9090/api/strategies/mock-test-api \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategyId": "mock-test-api",
+    "strategyName": "Mock test-api",
+    "strategyType": "MOCK_RESPONSE",
+    "scope": "ROUTE",
+    "routeId": "test-api",
+    "enabled": true,
+    "config": {
+      "enabled": true,
+      "mockMode": "STATIC",
+      "staticMock": {
+        "statusCode": 200,
+        "body": "{\"id\": 1}"
+      }
+    }
+  }'
+```
+
+Other endpoints: `GET /api/strategies`, `GET /api/strategies/{id}`,
+`GET /api/strategies/type/MOCK_RESPONSE`, `GET /api/strategies/global`,
+`GET /api/strategies/route/{routeId}`, `DELETE /api/strategies/{id}`,
+`POST /api/strategies/{id}/enable`, `POST /api/strategies/{id}/disable`.
+
+Note there are **two** `enabled` flags with different meanings: the strategy-level one controls whether
+the strategy is published at all, while `config.enabled` (`MockResponseConfig.enabled`, default
+`false`) is what `MockResponseFilter` checks per request.
 
 ---
 

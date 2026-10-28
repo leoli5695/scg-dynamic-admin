@@ -122,10 +122,10 @@ startTime ──── preEndTime          postStartTime ──── endTime
 
 | Filter | totalTime | selfTime | Interpretation |
 |--------|-----------|----------|----------------|
-| FilterChainTracking | 430ms | **6ms** | Filter is fast, totalTime includes backend response |
-| RemoveCachedBody | 424ms | **1ms** | Filter is very fast |
-| LoadBalancerFilter | 45ms | **45ms** | Filter itself is slow (needs optimization) |
-| AuthenticationFilter | 200ms | **5ms** | Filter is fast, totalTime includes downstream |
+| FilterChainTrackingGlobalFilter | 430ms | **6ms** | Filter is fast, totalTime includes backend response |
+| RemoveCachedBodyFilter (SCG built-in) | 424ms | **1ms** | Filter is very fast |
+| MultiServiceLoadBalancerFilter | 45ms | **45ms** | Filter itself is slow (needs optimization) |
+| AuthenticationGlobalFilter | 200ms | **5ms** | Filter is fast, totalTime includes downstream |
 
 > **Key insight**: Most filters show similar totalTime because they share the same downstream service response time. The difference between adjacent filters' totalTime equals the first filter's selfTime.
 
@@ -219,7 +219,7 @@ Single request's Filter Chain record now includes both selfTime and totalTime:
   "executions": [
     {
       "filter": "AuthenticationGlobalFilter",
-      "order": -250,
+      "order": -256,
       "totalDurationMs": 250,      // Cumulative time (includes downstream)
       "selfTimeMs": 5,             // Filter's own logic time ← KEY METRIC
       "downstreamMs": 245,         // Time spent in downstream chain
@@ -227,8 +227,8 @@ Single request's Filter Chain record now includes both selfTime and totalTime:
       "error": null
     },
     {
-      "filter": "LoadBalancerFilter",
-      "order": -100,
+      "filter": "MultiServiceLoadBalancerFilter",
+      "order": 10001,
       "totalDurationMs": 200,      // Cumulative time
       "selfTimeMs": 45,            // This filter is slow! ← Optimize this
       "downstreamMs": 155,
@@ -236,8 +236,8 @@ Single request's Filter Chain record now includes both selfTime and totalTime:
       "error": null
     },
     {
-      "filter": "RateLimiterFilter",
-      "order": -200,
+      "filter": "HybridRateLimiterFilter",
+      "order": -245,
       "totalDurationMs": 247,
       "selfTimeMs": 2,             // Filter is fast
       "downstreamMs": 245,
@@ -253,7 +253,7 @@ Single request's Filter Chain record now includes both selfTime and totalTime:
       "selfTimePercentage": "2.0%"   // Percentage of total request time
     },
     {
-      "filter": "LoadBalancerFilter",
+      "filter": "MultiServiceLoadBalancerFilter",
       "totalDurationMs": 200,
       "selfTimeMs": 45,
       "selfTimePercentage": "18.0%"  // This filter contributes 18% of overhead
@@ -281,10 +281,26 @@ Single request's Filter Chain record now includes both selfTime and totalTime:
 | `POST` | `/internal/filter-chain/threshold` | Set slow request threshold |
 | `DELETE` | `/internal/filter-chain/stats` | Clear statistics |
 
+> **Authentication required**: every `/internal/**` path is guarded by
+> `InternalApiAuthWebFilter` (a `WebFilter` at `HIGHEST_PRECEDENCE + 10`). Requests without a valid
+> `X-Internal-Token` header are rejected with HTTP 401 and the body
+> `{"success":false,"message":"Missing or invalid internal token"}`. If
+> `gateway.admin.internal-token` / `GATEWAY_INTERNAL_TOKEN` is not configured the gateway **refuses to
+> start**, so these endpoints can never be reached anonymously.
+>
+> The controller (`InternalFilterChainController`, `@RequestMapping("/internal/filter-chain")`) exposes
+> 22 more mappings beyond the six above, including `/records`, `/filters`, `GET /threshold`,
+> `/historical`, `/historical/all`, `/historical/trend`, `DELETE /historical`, `/ai-analysis`,
+> `/ai-analysis/quick`, `/ai-analysis/recommendations`, `/prediction`, `/prediction/quick`,
+> `/prediction/alerts`, `/optimization`, `/optimization/prioritized`, `/optimization/filter/{filterName}`,
+> `/optimization/order`, `/optimization/cache`, `/optimization/resources`, `/comparison`,
+> `/comparison/quick` and `POST /comparison`.
+
 ### Get Summary Report
 
 ```bash
-curl http://localhost:8080/internal/filter-chain/stats
+curl -H "X-Internal-Token: $GATEWAY_INTERNAL_TOKEN" \
+  http://localhost:8080/internal/filter-chain/stats
 ```
 
 Response now includes both selfTime and totalTime metrics:
@@ -298,7 +314,7 @@ Response now includes both selfTime and totalTime metrics:
   "filters": [
     {
       "filterName": "AuthenticationGlobalFilter",
-      "order": -250,
+      "order": -256,
       "totalCount": 10000,
       "successCount": 9900,
       "failureCount": 100,
@@ -313,8 +329,8 @@ Response now includes both selfTime and totalTime metrics:
       "p99Ms": "650.300"
     },
     {
-      "filterName": "LoadBalancerFilter",
-      "order": -100,
+      "filterName": "MultiServiceLoadBalancerFilter",
+      "order": 10001,
       "totalCount": 10000,
       "successCount": 10000,
       "failureCount": 0,
@@ -331,13 +347,13 @@ Response now includes both selfTime and totalTime metrics:
   ],
   "slowestFiltersBySelfTime": [
     {
-      "filterName": "LoadBalancerFilter",
+      "filterName": "MultiServiceLoadBalancerFilter",
       "avgSelfTimeMs": "45.200"
     }
   ],
   "slowestFiltersByTotalTime": [
     {
-      "filterName": "FilterChainTracking",
+      "filterName": "FilterChainTrackingGlobalFilter",
       "avgDurationMs": "430.977"
     }
   ]
@@ -347,7 +363,8 @@ Response now includes both selfTime and totalTime metrics:
 ### Get Slowest Filters Ranking
 
 ```bash
-curl http://localhost:8080/internal/filter-chain/slowest-filters?limit=10
+curl -H "X-Internal-Token: $GATEWAY_INTERNAL_TOKEN" \
+  "http://localhost:8080/internal/filter-chain/slowest-filters?limit=10"
 ```
 
 Sort by **selfTime** average, accurately identify filters that need optimization.
@@ -398,7 +415,8 @@ Analysis content:
 2. **Watch for Anomalies**: Investigate Filters with failure rate > 5%
 3. **Time Percentage**: Focus on Filters with > 30% in timeBreakdown
 4. **Threshold Adjustment**: Adjust slowThresholdMs based on business response time requirements
-5. **Rolling Window**: 1000 records is sufficient for analysis, no need to increase
+5. **Rolling Window**: Up to 1000 trace records are retained (`MAX_RECORDS`); the percentile sliding
+   window is a separate limit of the last 100 executions (`PERCENTILE_WINDOW`). Neither needs increasing.
 
 ---
 
@@ -427,15 +445,24 @@ Automatically protect the system from cascading failures by isolating problemati
 | **Configurable Thresholds** | Failure rate threshold, timeout threshold |
 
 ```java
-// Circuit breaker configuration
+// Circuit breaker configuration - GLOBAL, not per-filter.
+// Submitted to POST /internal/filter-circuit-breaker/config (X-Internal-Token required);
+// read back from GET /internal/filter-circuit-breaker/config.
+// These are exactly the keys returned by FilterCircuitBreakerManager.getConfig().
 {
-  "filterName": "ExternalAuthFilter",
-  "failureRateThreshold": 50,    // Open circuit when 50% failures
-  "slowCallThreshold": 2000,     // Consider slow if > 2s
-  "waitDurationInOpenState": 30, // Wait 30s before half-open
-  "permittedCallsInHalfOpen": 5  // Test 5 calls in half-open
+  "healthScoreThreshold": 60,     // Health score below which the circuit OPENs
+  "failureRateThreshold": 50.0,   // Open circuit when 50% of calls fail
+  "waitDurationMs": 30000,        // Wait 30s in OPEN before trying HALF_OPEN
+  "halfOpenRequestCount": 5,      // Requests allowed through in HALF_OPEN
+  "enabled": false                // Disabled by default; core filters are always excluded
 }
 ```
+
+> `filterName` is **not** a configuration key: the thresholds above apply to all non-core filters at
+> once. Per-filter operations use the filter name as a *path* segment instead —
+> `GET /internal/filter-circuit-breaker/status/{filterName}`,
+> `POST /internal/filter-circuit-breaker/force-open/{filterName}`,
+> `POST /internal/filter-circuit-breaker/force-close/{filterName}`.
 
 ### Filter Health Monitor
 
@@ -492,7 +519,7 @@ Output format:
 ┌─────────────────────────────────────────────────────────────┐
 │ PERIOD COMPARISON REPORT                                     │
 │                                                              │
-│ Filter: LoadBalancerFilter                                   │
+│ Filter: MultiServiceLoadBalancerFilter                       │
 │ Current Period: avgSelfTime=45ms, errorRate=2%               │
 │ Previous Period: avgSelfTime=30ms, errorRate=1%              │
 │ Change: +50% slower, +100% error rate                        │
@@ -512,27 +539,27 @@ Visual representation of filter execution sequence:
 │ Total Duration: 250ms                                               │
 ├────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│ AuthenticationFilter  │███│ 5ms (self)                              │
-│                       │   ├─────────────────────────────────────────│
-│ RouteMatchingFilter   │█│   2ms (self)                              │
-│                       │   ├─────────────────────────────────────────│
-│ LoadBalancerFilter    │████████████████████████│ 45ms (self) ← SLOW │
-│                       │                       ├─────────────────────│
-│ RateLimiterFilter     │██│ 8ms (self)                               │
-│                       │   ├─────────────────────────────────────────│
-│ BackendService        │████████████████████████████████████████████│ │
-│                       │                                              │
-│ (Backend Response)    │████████████████████████████████████████████│ │
-│                       │████████████████████████████████████████████│ │
-│                       │████████████████████████████████████████████│ │
-│                       │████████████████████████████████████████████│ │
-│                       │████████████████████████████████████████████│ │
-│                       │████████████████████████████████████████████│ │
-│                       │████████████████████████████████████████████│ │
-│                       │████████████████████████████████████████████│ │
-│                       │████████████████████████████████████████████│ │
-│                       │████████████████████████████████████████████│ │
-│                       │   195ms (backend response)                   │
+│ AuthenticationGlobalFilter    │███│ 5ms (self)                              │
+│                              │   ├─────────────────────────────────────────│
+│ RouteToRequestUrlFilter       │█│   2ms (self)                              │
+│                              │   ├─────────────────────────────────────────│
+│ MultiServiceLoadBalancerFilter│████████████████████████│ 45ms (self) ← SLOW │
+│                              │                       ├─────────────────────│
+│ HybridRateLimiterFilter       │██│ 8ms (self)                               │
+│                              │   ├─────────────────────────────────────────│
+│ BackendService                │████████████████████████████████████████████│ │
+│                              │                                              │
+│ (Backend Response)            │████████████████████████████████████████████│ │
+│                              │████████████████████████████████████████████│ │
+│                              │████████████████████████████████████████████│ │
+│                              │████████████████████████████████████████████│ │
+│                              │████████████████████████████████████████████│ │
+│                              │████████████████████████████████████████████│ │
+│                              │████████████████████████████████████████████│ │
+│                              │████████████████████████████████████████████│ │
+│                              │████████████████████████████████████████████│ │
+│                              │████████████████████████████████████████████│ │
+│                              │   195ms (backend response)                   │
 ├────────────────────────────────────────────────────────────────────┤
 │ Legend: ████ Filter self-time, Backend response time               │
 └────────────────────────────────────────────────────────────────────┘
@@ -540,13 +567,33 @@ Visual representation of filter execution sequence:
 
 ### Waterfall Chart API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/internal/filter-chain/waterfall/{traceId}` | Get waterfall chart data |
+**There is no dedicated waterfall endpoint.** `/internal/filter-chain/waterfall/{traceId}` does not
+exist — `InternalFilterChainController` (`@RequestMapping("/internal/filter-chain")`) declares no
+`waterfall` mapping, and neither does the admin-side proxy
+(`FilterChainController`, `@RequestMapping("/api/filter-chain")`).
+
+The waterfall is rendered **client-side** by
+`gateway-ui/src/features/filter-chain/components/WaterfallChart.tsx` from the per-trace execution data:
+
+| Method | Path (admin) | Path (gateway) | Description |
+|--------|--------------|----------------|-------------|
+| `GET` | `/api/filter-chain/{instanceId}/trace/{traceId}` | `/internal/filter-chain/trace/{traceId}` | Per-filter `executions` / `timeBreakdown` for one trace — this is what the waterfall draws |
+| `GET` | `/api/filter-chain/{instanceId}/records` | `/internal/filter-chain/records` | Recent trace records |
+| `GET` | `/api/filter-chain/{instanceId}/stats` | `/internal/filter-chain/stats` | Statistics summary |
 
 ### UI Features
 
-- **Interactive Chart**: Click on filter bar to see detailed metrics
-- **Zoom In/Out**: Focus on specific time range
-- **Export**: Export chart as PNG or SVG
-- **Comparison**: Compare multiple traces side by side
+Implemented (`gateway-ui/src/features/filter-chain/`):
+
+- **Waterfall Chart**: Gantt-style per-filter self-time / cumulative-time bars, rendered in the browser
+  from the trace detail payload above.
+- **Hover Tooltip**: mouse-following tooltip on each bar showing the filter's order and timings.
+- **Export**: the waterfall chart is exported as **PNG** via `html2canvas`
+  (`filter-waterfall-chart-<timestamp>.png`); the statistics table can be exported as **JSON** or **CSV**.
+
+Not implemented:
+
+- ~~**Zoom In/Out**: Focus on specific time range~~ — no zoom control exists.
+- ~~**Export as SVG**~~ — export is PNG only (there is no SVG serializer in `gateway-ui/package.json`).
+- ~~**Comparison**: Compare multiple traces side by side~~ — the chart renders a single trace.
+- ~~Click on a filter bar to open detailed metrics~~ — interaction is hover-tooltip only.

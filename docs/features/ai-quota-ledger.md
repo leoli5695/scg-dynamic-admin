@@ -32,11 +32,12 @@ Redis 恢复后，尚未结束的本地请求可以先按预扣量回补；请�
 
 1. 在前序迁移完成后执行 `gateway-admin/src/main/resources/sql/alter-token-quota-ledger.sql`，先升级管理端，再升级网关。
 2. 升级前确认旧版本内存中的本地降级积压已经清空。已随旧进程丢失的内存用量无法由新账本追溯恢复。
-3. 为每个网关进程设置独立的 `GATEWAY_QUOTA_LEDGER_DIRECTORY` 持久卷，同时保留已有用量 outbox 持久卷。默认账本目录 `${user.dir}/data/token-quota/${gateway.instance-id}`，同目录不能被多个进程占用。目录不可初始化时启动失败。
-4. 配置 `GATEWAY_INTERNAL_TOKEN`。未配置用量上报 Token 时，账本管理的配额请求返回 503，避免记录无法可靠交付后堆满磁盘；不绑定 Token 配额策略的流量不走此路径。
-5. `GATEWAY_QUOTA_LEDGER_MAX_PENDING` 默认 4096，每条意图最多 16KiB；保留更新记录所需的逻辑容量，不逐出未完成的财务意图。基线文件另行限量，每个最多 1KiB。
-6. `GATEWAY_QUOTA_LEDGER_REPLAY_HOURS` 默认 168，可设 1..720。Redis 请求回执保留到请求截止时间后至少 24 小时；原周期额度桶保留到周期结束加重放时长。应按请求速率评估 Redis 回执容量，不能在窗口内逐出或清理回执。键格式沿用现有部署，跨槽 Redis Cluster 尚不支持。
-7. `GATEWAY_QUOTA_LEDGER_RETRY_MS` 默认 5000。过期、无效桶或冲突会转待人工复核；网络错误保留原操作继续恢复。
+3. 为每个网关进程设置独立的 `GATEWAY_QUOTA_LEDGER_DIRECTORY` 持久卷，同时保留已有用量 outbox 持久卷。默认账本目录 `${user.dir}/data/token-quota/${gateway.instance-id}`，同目录不能被多个进程占用。目录不可初始化时启动失败。初始化权限见下条。
+4. 账本和 outbox 目录由**容器运行用户**创建。若 `${user.dir}`（即模块目录）本身属 root——为了让 root:600 的 env 文件不落在应用用户可写的目录里，通常正是这种属主——应用无法自行创建 `data/`，启动会以 `AccessDeniedException` 连带 `tokenQuotaLedger`、`tokenUsageReporter`、`tokenQuotaPreCheckFilter` 一起失败，表现为健康检查超时而不是明显的配置错误。必须在宿主机预建并交给运行用户：`install -d -o <uid> -g <gid> -m 755 <模块目录>/data`，uid/gid 取 `docker inspect -f '{{.Config.User}}'`。不要把模块目录整体 chown 给应用用户，那会让容器进程能改写 env 与 run.sh。`scripts/deploy-gateway.sh` 的 jar 前置检查会在目录缺失时按容器运行用户自动补建、属主不符时直接中止。
+5. 配置 `GATEWAY_INTERNAL_TOKEN`。未配置用量上报 Token 时，账本管理的配额请求返回 503，避免记录无法可靠交付后堆满磁盘；不绑定 Token 配额策略的流量不走此路径。
+6. `GATEWAY_QUOTA_LEDGER_MAX_PENDING` 默认 4096，每条意图最多 16KiB；保留更新记录所需的逻辑容量，不逐出未完成的财务意图。基线文件另行限量，每个最多 1KiB。
+7. `GATEWAY_QUOTA_LEDGER_REPLAY_HOURS` 默认 168，可设 1..720。Redis 请求回执保留到请求截止时间后至少 24 小时；原周期额度桶保留到周期结束加重放时长。应按请求速率评估 Redis 回执容量，不能在窗口内逐出或清理回执。键格式沿用现有部署，跨槽 Redis Cluster 尚不支持。
+8. `GATEWAY_QUOTA_LEDGER_RETRY_MS` 默认 5000。过期、无效桶或冲突会转待人工复核；网络错误保留原操作继续恢复。
 
 文件采用刷盘和原子替换恢复进程崩溃；机器掉电、Redis 主从切换后的保留能力仍取决于文件系统、持久卷及 Redis 持久化/复制配置。账本和 outbox 必须跟随同一网关身份迁移。
 

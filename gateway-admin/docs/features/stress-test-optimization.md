@@ -1,5 +1,16 @@
 # Stress Test Module Optimization Plan
 
+> **STATUS (verified against code on 2026-10-28)**: this is a one-off optimization plan and is **not**
+> kept in sync with the codebase. Current state:
+> - **Done**: §1 streaming statistics (but see the file-name correction below), §2 input validation /
+>   SSRF protection, §4 service-layer unit tests (14 `@Test` methods — verified), and short-term item
+>   #1 (the memory leak is fixed, though by a **different class** than the one described here).
+> - **NOT done**: §3 database migration (**never implemented** — see that section), short-term item #3
+>   (Micrometer metrics), and the RBAC / rate-limiting suggestions under "Security Best Practices".
+> - ⚠️ The stress-test module was refactored in commit `ed93868` (which added
+>   `StressTestStatistics.java`). Several class names and code snippets below no longer match HEAD.
+>   `StressTestOptimizer.java` **does not exist**.
+
 ## Overview
 
 This document details the optimization plan for the gateway management platform's stress test module, addressing critical issues including memory leaks, security, performance, and test coverage.
@@ -8,24 +19,33 @@ This document details the optimization plan for the gateway management platform'
 
 ### 🔴 High Priority Issues
 
-1. **Memory Leak Risk** - Storing all test results in memory list
-2. **Missing Input Validation** - May lead to resource exhaustion or invalid configuration
-3. **SSRF Security Vulnerability** - Target URL not validated
-4. **Missing Database Migration** - Relies on JPA auto table creation
-5. **Poor Percentile Calculation Performance** - O(n log n) sorting operation
+1. **Memory Leak Risk** - Storing all test results in memory list — ✅ **resolved** (see §1 and short-term item #1)
+2. **Missing Input Validation** - May lead to resource exhaustion or invalid configuration — ✅ **resolved** (see §2)
+3. **SSRF Security Vulnerability** - Target URL not validated — ✅ **resolved** (see §2)
+4. **Missing Database Migration** - Relies on JPA auto table creation — ❌ **STILL OPEN.**
+   No migration file was ever added (see §3). Tables are still created by JPA/Hibernate; at runtime
+   `SPRING_JPA_HIBERNATE_DDL_AUTO=update` is set in the container env, which overrides
+   `application-prod.yml`'s `ddl-auto: validate` (OS env wins over in-jar profile yml).
+5. **Poor Percentile Calculation Performance** - O(n log n) sorting operation — ✅ **resolved** (bounded-array histogram)
 
 ### 🟡 Medium Priority Issues
 
-6. **Synchronized List Contention** - Performance bottleneck under high concurrency
+6. **Synchronized List Contention** - Performance bottleneck under high concurrency — ✅ **resolved** (no shared result list remains)
 7. **Insufficient Error Handling** - Generic exceptions lose context
 8. **Code Quality** - Large method complexity, magic numbers
-9. **Insufficient Test Coverage** - Missing service layer and concurrency tests
+9. **Insufficient Test Coverage** - Missing service layer and concurrency tests — ✅ partially addressed (see §4)
 
 ## Implemented Optimizations
 
 ### 1. ✅ Streaming Statistics Calculation (Solves Memory Leak)
 
-**File**: `StressTestOptimizer.java`
+**File**: `gateway-admin/src/main/java/com/leoli/gateway/admin/service/StreamingStatistics.java`
+
+> ⚠️ **Correction**: this section previously named the file `StressTestOptimizer.java`.
+> **No such class exists anywhere in the repository.** The streaming-statistics implementation is
+> `StreamingStatistics.java` (path above). Note that `StreamingStatistics` is used by
+> `StressTestServiceTest` and returns `model/StressTestMetrics`; the production hot path in
+> `StressTestService` actually uses the newer `StressTestStatistics` — see short-term item #1.
 
 **Before**:
 ```java
@@ -90,17 +110,34 @@ validateBody(body);        // Max 1MB
 - URL format regex validation
 - Optional: Force URL to match instance registration info
 
-### 3. ✅ Database Migration
+### 3. ❌ Database Migration — **NOT IMPLEMENTED**
 
-**File**: `V24__create_stress_test_table.sql`
+> **⚠️ This whole section is aspirational and was never built. Do not cite it as existing.**
+> Verified on 2026-10-28:
+> - **`V24__create_stress_test_table.sql` does not exist.** `git ls-files gateway-admin/src/main/resources/sql`
+>   returns 16 files (13 DDL/data + 3 under `seed/`), and **none** of them is a `stress_test` DDL nor
+>   follows the `V<n>__<name>.sql` naming convention.
+> - **There is no Flyway or Liquibase in this project.** `grep -i 'flyway\|liquibase' gateway-admin/pom.xml`
+>   returns **zero matches**; no `V*__*.sql` file exists anywhere in the repo.
+> - The `stress_test` table is created by **JPA/Hibernate** instead. At runtime the admin container sets
+>   `SPRING_JPA_HIBERNATE_DDL_AUTO=update`, which overrides `application-prod.yml`'s `ddl-auto: validate`
+>   (OS environment variables take precedence over the in-jar profile yml). Consequence: a missing DDL
+>   will **not** fail startup — Hibernate silently adds tables/columns, but it will **not** change an
+>   existing column's type and will **not** apply column defaults that the entity does not declare.
+> - The project's actual convention for schema changes is hand-written `alter-*.sql` scripts under
+>   `src/main/resources/sql/`, applied manually (see `docs/operations/` and the deployment runbook).
+>
+> **If you need a repeatable migration for the stress-test tables, it still has to be written.**
 
-**Features**:
-- ✅ Complete table structure definition
-- ✅ Index optimization (instance_id, status, created_at)
-- ✅ Field comments
-- ✅ Flyway/Liquibase version management support
+**Planned file** (never created): `V24__create_stress_test_table.sql`
 
-**Key Fields**:
+**Planned features**:
+- ❌ Complete table structure definition
+- ❌ Index optimization (instance_id, status, created_at)
+- ❌ Field comments
+- ❌ Flyway/Liquibase version management support (**neither tool is on the classpath**)
+
+**Key Fields** (these columns *do* exist, created by Hibernate from the JPA entity — not by a migration):
 ```sql
 -- Test configuration
 concurrent_users, total_requests, duration_seconds, ramp_up_seconds
@@ -120,7 +157,8 @@ response_time_distribution, error_distribution
 **File**: `StressTestServiceTest.java`
 
 **Test Coverage**:
-- ✅ 14 unit tests
+- ✅ 14 unit tests (verified: `test01_…` through `test14_…`; note that a plain `grep -c "@Test"` reports
+  15 because it also matches the class-level `@TestMethodOrder` annotation)
 - ✅ Streaming statistics correctness verification
 - ✅ Concurrency safety tests
 - ✅ Boundary condition tests
@@ -152,7 +190,32 @@ void test12_StreamingStatistics_ConcurrencySafety() {
 
 ### Short-term Optimization (1-2 weeks)
 
-#### 1. Integrate Optimization Components into StressTestService
+#### 1. ✅ DONE — Integrate Optimization Components into StressTestService
+
+> **This item is complete, but NOT with the class named below.** Verified on 2026-10-28:
+> `grep -n 'synchronizedList\|allResults\|StreamingStatistics' StressTestService.java` returns
+> **zero matches** — the unbounded result list is gone and `StreamingStatistics` is *not* what the
+> production path uses.
+>
+> What actually landed (commit `ed93868`) is
+> `gateway-admin/src/main/java/com/leoli/gateway/admin/service/StressTestStatistics.java`:
+> - package-private `final class StressTestStatistics` (:11), javadoc: *"Bounded, millisecond-resolution
+>   statistics for all completed attempts, including failures."*
+> - **fixed-size** accumulators instead of a growing list: `long[] latencies = new long[300_001]`
+>   (`MAX_LATENCY = 300_000`, :12/:16) and `long[] distribution = new long[10]` (:17), plus a
+>   `LinkedHashMap` for error types and a bounded timeline `ArrayDeque`.
+> - thread safety via `synchronized` methods (`record` :31, `getLiveRps` :50, `getSummary` :60,
+>   `getTimeline` :83, `applyTo` :99) — i.e. **not** the lock-free `LongAdder` design sketched below;
+>   `StreamingStatistics` (which *is* `LongAdder`-based) survives mainly as the class exercised by
+>   `StressTestServiceTest`.
+> - wiring: `StressTestService.java:1109` holds `volatile StressTestStatistics stats` inside
+>   `StressTestSession`, `:1112` resets it on `start()`, `recordResult(...)` calls `stats.record(...)`,
+>   and `:647` calls `session.stats.applyTo(test, objectMapper)`.
+> - `applyTo` (:99-113) is the real equivalent of the "After completion" block below: it sets
+>   actual/successful/failed requests, error rate, min/max/avg/p50/p90/p95/p99, requests-per-second,
+>   throughput, and serializes both `responseTimeDistribution` and `errorDistribution` to JSON.
+>
+> **The snippet below is kept only as the historical proposal — do not implement it again.**
 
 Modify `executeTest()` method to use streaming statistics:
 
@@ -192,7 +255,14 @@ private void executeTest(Long testId, Integer targetQps, int requestTimeoutSecon
 }
 ```
 
-#### 2. Add Validator Injection
+#### 2. Add Validator Injection (⚠️ partially done, not as sketched)
+
+> **Current state**: `StressTestValidator` is **not** constructor-injected into `StressTestService`.
+> The service instantiates it inline at a single call site —
+> `StressTestService.java:431`: `new StressTestValidator().validateHttpMethod(config.getMethod());`.
+> So only the HTTP-method whitelist is enforced on that path; the full `validateAll(...)` described
+> below is **not** wired in. The limits themselves are implemented and correct — see §2
+> (`StressTestValidator.java:27-41`).
 
 ```java
 @Service
@@ -216,11 +286,21 @@ public class StressTestService {
 }
 ```
 
-#### 3. Add Micrometer Monitoring Metrics
+#### 3. Add Micrometer Monitoring Metrics (❌ NOT implemented — read the naming warning first)
+
+> **Verified not done**: `StressTestService.java` contains **no** `MeterRegistry` reference and no
+> `stress.test.*` metric names.
+>
+> ⚠️ **Name collision**: `com.leoli.gateway.admin.model.StressTestMetrics` **already exists** — it is a
+> Lombok `@Data` **DTO** for time-series visualization (`testId`, `status`, `progress`,
+> `List<MetricDataPoint> timeline`, a nested `SummaryMetrics`, ...), and it is used by both
+> `StreamingStatistics` and `StressTestStatistics.applyTo`. Creating a `@Component` also named
+> `StressTestMetrics` will collide with it (same simple name in imports, and a confusing bean name).
+> **Pick a different name**, e.g. `StressTestMetricsRecorder` or `StressTestInstrumentation`.
 
 ```java
 @Component
-public class StressTestMetrics {
+public class StressTestMetricsRecorder {   // NOT "StressTestMetrics" - that name is taken by the DTO
     private final MeterRegistry meterRegistry;
 
     public void recordTestStart(String instanceId) {
@@ -323,11 +403,14 @@ Admin Node (Coordinator)
 
 ### Before vs After Comparison
 
+> ⚠️ The "Lock-free" row describes `StreamingStatistics` (which uses `LongAdder`). The class actually on
+> the production hot path, `StressTestStatistics`, is `synchronized` instead — see short-term item #1.
+
 | Metric | Before | After | Improvement |
 |--------|--------|-------|-------------|
 | Memory Usage (100K requests) | 10 MB | 1 KB | 99.99% ↓ |
 | Percentile Calculation Time | O(n log n) | O(1) | ~100x |
-| Concurrency Safety | Contended | Lock-free | Safer |
+| Concurrency Safety | Contended | Lock-free (`StreamingStatistics`) / `synchronized` (`StressTestStatistics`) | Safer |
 | Max Test Scale | Memory limited | Unlimited | ∞ |
 
 ### Recommended Configuration
@@ -342,6 +425,14 @@ Recommended test configurations for different scenarios:
 | Stability Test | 100 | 1000 | 1 hour | Long-running |
 
 ## Security Best Practices
+
+> **Status: items 1 and 2 below are NOT implemented — they remain suggestions.**
+> Verified on 2026-10-28: `grep -c 'PreAuthorize\|RateLimiter' StressTestController.java` returns **0**.
+> There is no `STRESS_TEST_ADMIN` role and no `@RateLimiter` on the stress-test endpoints.
+> What *does* apply today is the global rule in `SecurityConfig`: mutating `/api/**` calls require
+> `hasAuthority("ADMIN")`, and `GET /api/stress-test/share/**` is one of the few permit-all paths.
+> Also note that neither `@PreAuthorize` nor a `@RateLimiter` annotation of this shape exists in the
+> codebase as written — treat both snippets as illustrative pseudo-code.
 
 1. **RBAC Permission Control**
    ```java
@@ -372,12 +463,18 @@ Through this optimization, the stress test module has significantly improved in:
 
 ✅ **Memory Efficiency**: From O(n) to O(1), eliminating OOM risk
 ✅ **Security**: Comprehensive input validation and SSRF protection
-✅ **Reliability**: Database migration ensures schema consistency
-✅ **Maintainability**: Service layer tests cover critical logic
-✅ **Performance**: Streaming calculation greatly enhances large-scale testing capability
+❌ **Reliability**: ~~Database migration ensures schema consistency~~ — **not done.** No migration file
+   exists; the schema is still produced by JPA with runtime `ddl-auto=update` (see §3).
+✅ **Maintainability**: Service layer tests cover critical logic (14 tests in `StressTestServiceTest`)
+✅ **Performance**: Streaming/bounded-array calculation greatly enhances large-scale testing capability
 
 Next steps:
-1. Integrate optimization components into main service class
-2. Add monitoring metrics and alerts
-3. Extend integration test coverage
-4. Consider distributed load generation architecture
+1. ~~Integrate optimization components into main service class~~ — ✅ done (`StressTestStatistics`, wired at
+   `StressTestService.java:1109/:1112/:647`)
+2. Add monitoring metrics and alerts — ❌ still open; if implemented, do **not** name the component
+   `StressTestMetrics` (that simple name is taken by the existing `model/StressTestMetrics` DTO)
+3. Write a real database migration for the stress-test tables — ❌ still open (see §3); note there is no
+   Flyway/Liquibase in the project, so this means either adopting one or adding a hand-written
+   `src/main/resources/sql/*.sql` script consistent with the existing convention
+4. Extend integration test coverage
+5. Consider distributed load generation architecture

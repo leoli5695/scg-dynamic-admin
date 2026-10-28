@@ -33,20 +33,37 @@
 
 ### 2. 🎨 前端组件化重构
 
-#### RoutesPage拆分（2734行 → 模块化）
-创建了以下独立组件：
+#### RoutesPage拆分（约2700行 → 模块化）
+> **本节已于 2026-10-28 按当前代码校正。** 下表原先列的 `types.ts` / `RouteActionDropdown.tsx` /
+> `FilterItem.tsx` 确实存在过，但它们在 `gateway-ui/src/pages/RoutesPage/` 下，已被提交 `27c5096`
+> （strangler-pattern 重构，删除 legacy mega-pages）整体删除。路由页面现在位于
+> `gateway-ui/src/features/routes/`，行数为 `git show HEAD:<path> | wc -l` 实测：
 
 | 文件 | 行数 | 功能 |
 |------|------|------|
-| `types.ts` | 73 | TypeScript类型定义 |
-| `RouteActionDropdown.tsx` | 78 | 操作下拉菜单 |
-| `PredicateItem.tsx` | 110 | 断言表单项 |
-| `FilterItem.tsx` | 290 | 过滤器表单项 |
+| `index.tsx` | 316 | 路由页面主容器 |
+| `utils.ts` | 572 | 路由/断言/过滤器转换与校验工具 |
+| `components/RouteFormModal.tsx` | 369 | 创建/编辑路由弹窗 |
+| `components/RouteDetailDrawer.tsx` | 250 | 路由详情抽屉 |
+| `components/ServiceBindingForm.tsx` | 226 | 多服务绑定表单 |
+| `components/RouteCard.tsx` | 221 | 路由卡片 |
+| `components/AiUpstreamsForm.tsx` | 177 | AI 上游配置表单 |
+| `components/GrayRulesForm.tsx` | 150 | 灰度规则表单 |
+| `components/PredicateItem.tsx` | 104 | 断言表单项 |
+| `components/RouteSearchBar.tsx` | 69 | 搜索/筛选栏 |
+| `components/RouteActions.tsx` | 63 | 操作按钮（取代旧的 `RouteActionDropdown.tsx`） |
+| `components/RouteStatsBar.tsx` | 29 | 统计条 |
+| `routes-premium.css` | 686 | 页面样式 |
+
+即 12 个代码文件共 2546 行（平均约 212 行/文件，最大单文件 572 行），另有 686 行 CSS。类型定义
+不再放在 feature 目录里，已集中到 `gateway-ui/src/types/route.ts`（同目录还有 `service.ts`、
+`strategy.ts` 等）。
 
 **优化效果**:
-- 单文件复杂度降低 90%+
+- 单文件复杂度大幅下降（2714 行的 `RoutesPage.tsx` 峰值 → 最大 572 行）
 - 使用 React.memo 优化重渲染
-- 提升代码可维护性和可测试性
+- 提升代码可维护性和可测试性（`gateway-ui/tests/routeContract.test.mjs`、`routeRouting.test.mjs`
+  直接 import `utils.ts`）
 
 ---
 
@@ -63,12 +80,15 @@
 - 添加 npm script: `format`
 
 #### VSCode集成
-- `.vscode/settings.json`: 保存时自动格式化
-- `.vscode/extensions.json`: 推荐扩展列表
-  - ESLint
-  - Prettier
-  - React代码片段
-  - TypeScript增强
+> **未纳入版本控制**：仓库里**不存在** `.vscode/` 目录（`git ls-files | grep vscode` 零命中，
+> `gateway-ui/.vscode` 也不存在），而且根 `.gitignore` 里就写着 `.vscode/`。所以下面这两个文件
+> 只是当时本地工作区的配置，clone 仓库不会得到它们：
+>
+> - `.vscode/settings.json`: 保存时自动格式化
+> - `.vscode/extensions.json`: 推荐扩展列表（ESLint、Prettier、React 代码片段、TypeScript 增强）
+>
+> 团队共享的规范实际落在被跟踪的 `gateway-ui/eslint.config.js`、`.prettierrc.json` 和 npm scripts
+> （`lint` / `lint:fix` / `format`）上，这三者才是 CI 会执行的。
 
 ---
 
@@ -157,11 +177,12 @@ spring:
 
 | 指标 | 优化前 | 优化后 | 改善 |
 |------|--------|--------|------|
-| RoutesPage行数 | 2734 | ~150(平均) | ↓ 94% |
+| RoutesPage最大单文件行数 | 2714（`src/pages/RoutesPage.tsx` 峰值，实测） | 572（`src/features/routes/utils.ts`） | ↓ 79% |
+| RoutesPage拆分后总行数 | 2714（单文件） | 2546（12 个代码文件，平均 212 行） | 总行数不降，降的是单文件复杂度 |
 | 安全漏洞 | 3个高危 | 0个 | ✓ 100% |
 | 代码规范工具 | 无 | ESLint+Prettier | ✓ |
 | Docker支持 | 无 | 完整编排 | ✓ |
-| IDE配置 | 无 | VSCode全套 | ✓ |
+| IDE配置 | 无 | 未入库（`.vscode/` 被 `.gitignore` 忽略） | ✗ 仅本地有效 |
 | 部署文档 | 无 | 详细指南 | ✓ |
 
 ---
@@ -236,8 +257,17 @@ openssl rand -base64 64
 
 ## 🎯 后续改进建议
 
-1. **CI/CD流水线**: 添加GitHub Actions自动化测试和部署
-2. **监控告警**: 集成Prometheus + Grafana
+1. ~~**CI/CD流水线**: 添加GitHub Actions自动化测试和部署~~ **已完成**：`.github/workflows/ci.yml`
+   已存在并累计运行 42 次（2026-10-28 经 GitHub API 实测），三个 job（Backend / Frontend /
+   Images build）带真实 MySQL 8、Redis 7、Nacos v2.3.0 service container。注意当前 HEAD
+   （`5007d87`）那次 run 整体是 **failure**：Backend 失败于 `Build and test` 步骤，Frontend 与
+   Images build 为 success。**尚无部署（CD）阶段**，发布仍靠 `scripts/deploy-gateway.sh` 手工执行。
+2. ~~**监控告警**: 集成Prometheus + Grafana~~ **Prometheus 部分已完成**：`prometheus/prometheus.yml`
+   （含服务发现与告警规则挂载）、`k8s/prometheus.yaml`、以及 `docker-compose.yml:217` 的 opt-in
+   `prometheus` 服务（`profiles: ["monitoring"]`，`prom/prometheus:v2.53.0`，
+   `127.0.0.1:9091:9090`）都已就位，生产依赖机上也确实跑着 Prometheus。**Grafana 仍未集成**：
+   仓库里只有一个 `seckill-core-engine/src/main/resources/grafana/seckill-dashboard.json` 仪表盘
+   定义，没有 Grafana 服务、部署清单或数据源配置。
 3. **日志聚合**: ELK Stack或Loki
 4. **API文档**: 完善Swagger/OpenAPI文档
 5. **单元测试**: 提高测试覆盖率至80%+
@@ -260,4 +290,5 @@ openssl rand -base64 64
 
 ---
 
-*最后更新: 2026-06-02*
+*最后更新: 2026-10-28（事实校正：RoutesPage 拆分表按 `git show HEAD:` 实测重写、`.vscode/` 状态、
+CI 与 Prometheus 的完成情况、生产 CI 现状）*

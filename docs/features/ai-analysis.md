@@ -6,15 +6,18 @@
 
 ## Overview
 
-Gateway supports the following AI providers:
+Gateway supports the following AI providers (the four constants hard-coded in `AiAnalysisService`):
 
-| Provider | Models | Region |
-|----------|--------|--------|
-| **OpenAI** | GPT-4, GPT-3.5-turbo | Overseas |
-| **Anthropic** | Claude 3 | Overseas |
-| **Qwen** | qwen-plus, qwen-turbo | Domestic (China) |
-| **DeepSeek** | deepseek-chat | Domestic (China) |
-| **Ollama** | llama2, mistral | Local |
+| Provider | Models | Region | Default base URL |
+|----------|--------|--------|------------------|
+| **OPENAI** | gpt-4o, gpt-4-turbo, gpt-4 | Overseas | `https://api.openai.com/v1` |
+| **GEMINI** | gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash | Overseas | `https://generativelanguage.googleapis.com/v1beta` |
+| **CLAUDE** | claude-3.5-sonnet, claude-3-opus, claude-3-haiku | Overseas | `https://api.anthropic.com/v1` |
+| **BAILIAN** (Aliyun DashScope) | qwen3.8-max, qwen3.7-plus, qwen3.8-flash, qwen3-coder-next, deepseek-v4-pro, deepseek-v4.1-flash, kimi-k3, kimi-k2.7-code, glm-5.3, glm-5.2 | Domestic (China) | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+
+Domestic access is a single entry point (BAILIAN), which fronts the Qwen / DeepSeek / Kimi / GLM model families through the DashScope OpenAI-compatible API.
+
+> **Not supported:** Ollama (or any other self-hosted runtime). `AiAnalysisService.validateApiKey` only switches on `OPENAI`, `GEMINI`, `CLAUDE` and `BAILIAN` and returns `false` for anything else; there is no `OLLAMA` constant anywhere in the repository.
 
 ---
 
@@ -33,21 +36,27 @@ Gateway supports the following AI providers:
 
 ```json
 {
-  "provider": "qwen",
+  "provider": "BAILIAN",
+  "model": "qwen3.7-plus",
   "apiKey": "your-api-key",
-  "model": "qwen-plus",
-  "baseUrl": "https://api.qwen.ai",
-  "language": "zh"
+  "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1"
 }
 ```
 
+These are exactly the four fields accepted by `POST /api/copilot/config`.
+
 | Parameter | Description |
 |-----------|-------------|
-| `provider` | AI provider name |
-| `apiKey` | API key (encrypted storage) |
+| `provider` | Provider constant: `OPENAI`, `GEMINI`, `CLAUDE` or `BAILIAN` (uppercase) |
+| `providerName` | Display name, auto-filled per provider (e.g. `阿里云百炼` for `BAILIAN`) |
+| `region` | `DOMESTIC` or `OVERSEAS`, auto-derived from the provider |
+| `apiKey` | API key; accepted as `apiKey` on input, stored encrypted in the `api_key` column and never returned in JSON (`@JsonIgnore`) |
 | `model` | Model name |
-| `baseUrl` | Custom API endpoint (optional) |
-| `language` | Output language (zh/en) |
+| `baseUrl` | Custom API endpoint; omit to use the provider default above |
+
+Read-only fields maintained by the service: `isValid`, `lastValidatedAt`, `createdAt`, `updatedAt`.
+
+> `language` is **not** a field of `AiConfig`. It is a request parameter of `POST /api/ai/analyze/timerange`.
 
 ---
 
@@ -55,34 +64,56 @@ Gateway supports the following AI providers:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/ai/providers` | List available providers |
-| `GET` | `/api/ai/providers/{provider}/models` | Get available models |
-| `POST` | `/api/ai/validate` | Validate API key |
-| `POST` | `/api/ai/config` | Save AI configuration |
-| `POST` | `/api/ai/analyze` | Analyze metrics |
+| `POST` | `/api/ai/analyze/timerange` | Analyze metrics collected over a time range |
+
+`/api/ai/analyze/timerange` is the **only** mapping under `AiConfigController` (`@RequestMapping("/api/ai")`).
+Provider/model listing, key validation and configuration are **not** under `/api/ai` — they live under
+`/api/copilot` (see [AI Copilot Assistant](ai-copilot.md)):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/copilot/providers` | List available providers |
+| `GET` | `/api/copilot/providers/{provider}/models` | Get available models |
+| `POST` | `/api/copilot/validate` | Validate API key |
+| `POST` | `/api/copilot/config` | Save AI configuration |
+
+All `/api/**` requests require authentication; `POST` additionally requires the `ADMIN` authority
+(`SecurityConfig`).
 
 ### Analyze Metrics
 
 ```bash
-curl -X POST http://localhost:9090/api/ai/analyze \
+curl -X POST http://localhost:9090/api/ai/analyze/timerange \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{
-    "metrics": {...},
+    "provider": "BAILIAN",
+    "startTime": 1705309200,
+    "endTime": 1705312800,
     "language": "zh"
   }'
 ```
 
-Response:
+Request body fields (read in `AiConfigController.analyzeTimeRange`): `provider`, `startTime`,
+`endTime`, `language` (defaults to `zh`). `startTime`/`endTime` are epoch values; values greater than
+`10000000000` are treated as milliseconds and divided by 1000. When either is `0`/missing, the window
+defaults to the last 600 seconds.
+
+Response — the standard `ApiResponse` wrapper, with the analysis returned as a single plain-text
+string under `data.result`:
+
 ```json
 {
-  "analysis": "Current system status is overall healthy...",
-  "recommendations": [
-    "Recommend increasing Redis memory allocation",
-    "Consider enabling caching for high-frequency routes"
-  ],
-  "alerts": []
+  "code": 200,
+  "message": "时间段分析完成",
+  "data": {
+    "result": "Current system status is overall healthy..."
+  }
 }
 ```
+
+There is no structured `recommendations[]` / `alerts[]` payload; on failure the same wrapper is
+returned with an error `message` (`AI时间段分析失败: ...`).
 
 ---
 
@@ -129,8 +160,8 @@ Metrics Analysis Context:
 
 ## Best Practices
 
-1. **Choose Appropriate Provider**: Use Qwen/DeepSeek for China, OpenAI/Claude for overseas
-2. **Local Deployment**: Use Ollama local models for sensitive scenarios
+1. **Choose Appropriate Provider**: Use `BAILIAN` for China (it fronts the Qwen / DeepSeek / Kimi / GLM families through one DashScope endpoint), `OPENAI` / `CLAUDE` / `GEMINI` for overseas
+2. **Sensitive Data**: There is **no local/self-hosted runtime support** (no Ollama). Every configured provider is an external HTTPS endpoint, and `UrlSecurityValidator.validateExternalUrl` blocks user-supplied internal addresses (SSRF guard). For sensitive scenarios, restrict what is sent in the prompt rather than expecting an on-premises model.
 3. **API Key Security**: Rotate regularly, limit permissions
 4. **Regular Analysis**: Set up scheduled AI analysis tasks
 5. **Combine with Monitoring**: Use AI analysis as a complement to monitoring

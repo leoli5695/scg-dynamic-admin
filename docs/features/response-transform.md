@@ -17,70 +17,87 @@ Backend Response
 └─────────────────┘
        ↓
 ┌─────────────────┐
-│ Cache (50)      │ (Optional)
+│ Cache (-46)     │ (Optional)
 └─────────────────┘
        ↓
   Client Response
 ```
 
+Both orders are negative and below `NettyWriteResponseFilter` (-1), which is what makes a response
+decorator see the client-bound body at all. `CACHE` (-46) is installed *inside*
+`RESPONSE_TRANSFORM` (-45), so the cache stores the final post-transform body
+(`FilterOrderConstants.CACHE` / `.RESPONSE_TRANSFORM`).
+
 ---
 
 ## Supported Operations
 
-| Operation | Description |
-|-----------|-------------|
-| **Field Filtering** | Remove sensitive/internal fields |
-| **Field Mapping** | Rename/restructure fields |
-| **Format Conversion** | Format conversion (XML → JSON) |
-| **Response Wrapping** | Wrap into unified format |
+| Operation | Config key | Description |
+|-----------|-----------|-------------|
+| **Protocol Transform** | `protocolTransform` | Convert between JSON and XML (`sourceFormat`, `targetFormat`, `customContentType`) |
+| **Field Filtering** | `fieldMapping.removeFields` | Remove sensitive/internal fields |
+| **Field Mapping** | `fieldMapping.mappings` | Copy/rename fields (`transform: COPY\|RENAME`, `sourcePath`, `targetPath`, `defaultValue`) |
+| **Field Injection** | `fieldMapping.addFields` | Add constant fields |
+| **Response Wrapping** | `fieldMapping.wrapInEnvelope` / `unwrapFromEnvelope` | Wrap into / unwrap from a single-field envelope |
+| **Data Masking** | `dataMasking` | Mask string field values (`fieldPath`, `maskType`, `pattern`, `replacement`, `keepLength`, `keepPosition`) |
+
+Execution conditions: `transformOnStatusCodes`, `skipOnContentTypes`, `maxBodySize` (default 10 MB)
+and `errorHandling` (default `RETURN_ORIGINAL`) — see `ResponseTransformConfig`.
 
 ---
 
 ## Configuration
 
+The real config object is `ResponseTransformConfig` (`my-gateway/.../model/ResponseTransformConfig.java`),
+carried in the strategy's `config` field:
+
 ```json
 {
-  "routeId": "external-api",
   "enabled": true,
-  "transformRules": [
-    {
-      "type": "FIELD_REMOVE",
-      "path": "$.internal_id"
-    },
-    {
-      "type": "FIELD_REMOVE",
-      "path": "$.debug_info"
-    },
-    {
-      "type": "FIELD_MAP",
-      "sourcePath": "$.user_data",
-      "targetPath": "$.user"
-    },
-    {
-      "type": "JSON_TO_XML",
-      "rootElement": "response"
-    }
-  ],
-  "responseWrapper": {
+  "protocolTransform": {
+    "enabled": false,
+    "sourceFormat": "AUTO",
+    "targetFormat": "JSON",
+    "customContentType": null
+  },
+  "fieldMapping": {
     "enabled": true,
-    "wrapperField": "data",
-    "includeMetadata": true
-  }
+    "removeFields": ["$.internal_id", "$.debug_info"],
+    "mappings": [
+      {"sourcePath": "$.user_data", "targetPath": "$.user", "transform": "RENAME"}
+    ],
+    "addFields": {"$.gateway": "scg"},
+    "wrapInEnvelope": null,
+    "unwrapFromEnvelope": null
+  },
+  "dataMasking": {
+    "enabled": false,
+    "rules": [
+      {"fieldPath": "$.phone", "maskType": "PARTIAL", "keepLength": 4, "keepPosition": "END"}
+    ]
+  },
+  "transformOnStatusCodes": [200],
+  "skipOnContentTypes": ["image/*", "application/octet-stream"],
+  "maxBodySize": 10485760,
+  "errorHandling": "RETURN_ORIGINAL"
 }
 ```
 
+> The previously documented `transformRules[]` array with `type: FIELD_REMOVE | FIELD_MAP | JSON_TO_XML`
+> and the `responseWrapper{wrapperField, includeMetadata}` object are **not implemented** — no code
+> reads those keys. The equivalent capabilities are `fieldMapping.removeFields`,
+> `fieldMapping.mappings` and `protocolTransform` / `fieldMapping.wrapInEnvelope` respectively.
+> A rule-list engine and an envelope with a generated `metadata` block remain unimplemented design intent.
+
 ---
 
-## Transform Rules
+## Transform Operations
 
-### FIELD_REMOVE
-
-Remove fields:
+### Remove fields (`fieldMapping.removeFields`)
 
 ```json
 {
-  "type": "FIELD_REMOVE",
-  "path": "$.internal_id"
+  "fieldMapping": {"enabled": true, "removeFields": ["$.internal_id"]}
 }
 ```
 
@@ -101,15 +118,20 @@ After:
 }
 ```
 
-### FIELD_MAP
+### Map / rename fields (`fieldMapping.mappings`)
 
-Field mapping:
+`transform` is `COPY` (default, keeps the source) or `RENAME` (removes the source). Paths use
+dot notation with an optional `$.` prefix. `defaultValue` is applied as a text node when the source
+path is missing.
 
 ```json
 {
-  "type": "FIELD_MAP",
-  "sourcePath": "$.user_data",
-  "targetPath": "$.user"
+  "fieldMapping": {
+    "enabled": true,
+    "mappings": [
+      {"sourcePath": "$.user_data", "targetPath": "$.user", "transform": "RENAME"}
+    ]
+  }
 }
 ```
 
@@ -123,36 +145,29 @@ After:
 {"user": {"name": "John"}}
 ```
 
-### JSON_TO_XML
-
-Convert JSON to XML:
+### Protocol conversion (`protocolTransform`)
 
 ```json
 {
-  "type": "JSON_TO_XML",
-  "rootElement": "response"
+  "protocolTransform": {"enabled": true, "sourceFormat": "JSON", "targetFormat": "XML"}
 }
 ```
 
-### Response Wrapper
+`sourceFormat` accepts `AUTO` (sniffs `{`/`[` as JSON, `<` as XML), `JSON` or `XML`; `targetFormat`
+accepts `JSON` or `XML`. There is no per-rule `rootElement` option.
 
-Wrap response:
+### Envelope wrapping (`fieldMapping.wrapInEnvelope`)
 
 ```json
 {
-  "responseWrapper": {
-    "enabled": true,
-    "wrapperField": "data",
-    "includeMetadata": true
-  }
+  "fieldMapping": {"enabled": true, "wrapInEnvelope": "data"}
 }
 ```
 
 Before (Backend):
 ```json
 {
-  "internal_id": 12345,
-  "user_data": {"name": "John"}
+  "user": {"name": "John"}
 }
 ```
 
@@ -161,13 +176,30 @@ After (Client):
 {
   "data": {
     "user": {"name": "John"}
-  },
-  "metadata": {
-    "transformed": true,
-    "timestamp": "2024-01-15T10:30:00Z"
   }
 }
 ```
+
+`unwrapFromEnvelope` takes a dot path (e.g. `response.data`) and replaces the body with that node.
+Only one of wrap/unwrap applies per response (wrap is checked first). No `metadata` object
+(`transformed`, `timestamp`) is added — that part of the original design is **not implemented**.
+
+### Data masking (`dataMasking`)
+
+```json
+{
+  "dataMasking": {
+    "enabled": true,
+    "rules": [
+      {"fieldPath": "$.phone", "maskType": "PARTIAL", "replacement": "*", "keepLength": 4, "keepPosition": "END"}
+    ]
+  }
+}
+```
+
+Masking only applies to textual field values; non-text fields are left untouched. `maskType` is
+`FULL` (whole value → `replacement`), `PARTIAL` (keeps `keepLength` chars at `keepPosition`
+`START`/`END`) or `CUSTOM` (regex `pattern` replaced by `replacement`); unknown values behave as `FULL`.
 
 ---
 
@@ -179,10 +211,13 @@ Map legacy API field names:
 
 ```json
 {
-  "transformRules": [
-    {"type": "FIELD_MAP", "sourcePath": "$.userId", "targetPath": "$.id"},
-    {"type": "FIELD_MAP", "sourcePath": "$.created_at", "targetPath": "$.createTime"}
-  ]
+  "fieldMapping": {
+    "enabled": true,
+    "mappings": [
+      {"sourcePath": "$.userId", "targetPath": "$.id", "transform": "RENAME"},
+      {"sourcePath": "$.created_at", "targetPath": "$.createTime", "transform": "RENAME"}
+    ]
+  }
 }
 ```
 
@@ -192,11 +227,10 @@ Remove internal fields:
 
 ```json
 {
-  "transformRules": [
-    {"type": "FIELD_REMOVE", "path": "$.internal_id"},
-    {"type": "FIELD_REMOVE", "path": "$._metadata"},
-    {"type": "FIELD_REMOVE", "path": "$.debug_info"}
-  ]
+  "fieldMapping": {
+    "enabled": true,
+    "removeFields": ["$.internal_id", "$._metadata", "$.debug_info"]
+  }
 }
 ```
 
@@ -206,9 +240,7 @@ Modern JSON API to XML system:
 
 ```json
 {
-  "transformRules": [
-    {"type": "JSON_TO_XML", "rootElement": "response"}
-  ]
+  "protocolTransform": {"enabled": true, "sourceFormat": "JSON", "targetFormat": "XML"}
 }
 ```
 
@@ -216,17 +248,37 @@ Modern JSON API to XML system:
 
 ## API Endpoints
 
-Configure via Strategy API:
+Configure via the Strategy API. There is **no `/api/strategies/response-transform` path**:
+`StrategyController` is `@RequestMapping("/api/strategies")` and identifies a strategy by its
+`strategyId` (`PUT /{id}`, `GET /{id}`, `DELETE /{id}`), with `GET /type/{type}` for lookup by type.
+The type constant is `StrategyDefinition.TYPE_RESPONSE_TRANSFORM = "RESPONSE_TRANSFORM"`.
+`POST`/`PUT`/`DELETE` under `/api/**` require the `ADMIN` authority.
 
 ```bash
-curl -X PUT http://localhost:9090/api/strategies/response-transform \
+curl -X PUT http://localhost:9090/api/strategies/external-api-response-transform \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{
+    "strategyId": "external-api-response-transform",
+    "strategyName": "External API response transform",
+    "strategyType": "RESPONSE_TRANSFORM",
+    "scope": "ROUTE",
     "routeId": "external-api",
     "enabled": true,
-    "transformRules": [...]
+    "config": {
+      "enabled": true,
+      "fieldMapping": {
+        "enabled": true,
+        "removeFields": ["$.internal_id"]
+      }
+    }
   }'
 ```
+
+Other endpoints: `GET /api/strategies`, `GET /api/strategies/{id}`,
+`GET /api/strategies/type/RESPONSE_TRANSFORM`, `GET /api/strategies/global`,
+`GET /api/strategies/route/{routeId}`, `DELETE /api/strategies/{id}`,
+`POST /api/strategies/{id}/enable`, `POST /api/strategies/{id}/disable`.
 
 ---
 

@@ -67,15 +67,25 @@ plugin-example/
 }
 ```
 
-支持的字段类型：
+前端实际支持的字段类型（见 `gateway-ui/src/features/plugin-bindings/components/ConfigFieldInput.tsx` 的 `switch` 分支）：
 - `number` -> 数字输入框
-- `text` -> 文本输入框
+- `text` -> 文本输入框（未识别的 `type` 也会落到这一分支的默认文本框）
 - `select` -> 下拉选择
 - `switch` -> 开关
 - `textarea` -> 多行文本（JSON配置）
-- `array` -> 数组列表
+
+> **没有 `array` 类型**：写 `"type": "array"` 不会渲染成数组编辑器，只会退化为普通文本输入框。
+> 需要配置数组/对象等复杂结构时，请用 `textarea` 并在其中填写 JSON——`textarea` 会尝试
+> `JSON.parse` 输入内容，解析成功则按对象回传，解析失败则按原始字符串回传。
 
 ### 4. 编译打包
+
+> **本目录不在 Maven 反应堆内**：根 `pom.xml` 的 `<modules>` 只包含 `license-client`、
+> `gateway-trace-starter`、`license-server`、`gateway-moderation-spi`、`my-gateway`、
+> `gateway-admin`、`demo-service`、`seckill-core-engine`，**没有 `plugin-example`**；根 `pom.xml`
+> 的注释也写明 plugin-example 是独立的 `com.example` 模板、不继承父 pom。
+> 因此在仓库根执行 `mvn clean package` **不会**构建本示例，CI（`.github/workflows/ci.yml`）
+> 同样完全不涉及它。必须像下面这样进入本目录单独构建。
 
 ```bash
 cd plugin-example
@@ -104,8 +114,18 @@ mvn clean package
 ## 注意事项
 
 1. **依赖管理**
-   - Spring Cloud Gateway 依赖设置为 `provided`
+   - Spring Cloud Gateway 依赖设置为 `provided`（本示例 `pom.xml` 中 `spring-cloud-starter-gateway`
+     的 `<scope>` 确实是 `provided`），运行时由网关提供，插件 JAR 不打包 SCG 类
    - 避免引入与网关冲突的依赖版本
+   - ⚠️ **本示例目前并不满足上一条**：`plugin-example/pom.xml:17` 钉的是
+     `<spring-cloud-gateway.version>4.1.3</spring-cloud-gateway.version>`，而网关实际运行的是
+     Spring Cloud `2025.0.3`（`my-gateway/pom.xml:23`）对应的 Spring Cloud Gateway **4.3.5**，
+     两者相差 2 个 minor 版本。因为依赖是 `provided`，编译期用的是 4.1.3 的 API、运行期加载的却是
+     4.3.5 的类，一旦网关侧 API 有变更就会在插件加载/执行时抛 `NoSuchMethodError` /
+     `NoClassDefFoundError` 之类的错误。
+   - **建议**：编写自己的插件时，把 `spring-cloud-gateway.version` 对齐到目标网关实际使用的版本
+     （当前为 `4.3.5`，可从 `my-gateway` 的构建产物或 `mvn -pl my-gateway dependency:tree` 确认），
+     并保持 `provided` 作用域。
 
 2. **ClassLoader隔离**
    - 每个插件使用独立的ClassLoader

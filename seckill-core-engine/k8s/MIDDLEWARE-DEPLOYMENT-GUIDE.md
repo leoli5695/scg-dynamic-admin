@@ -2,6 +2,11 @@
 
 This document provides comprehensive deployment instructions for middleware services and their corresponding Prometheus exporters in a Kubernetes environment.
 
+> **Scope**: everything described here is deployed into the `test` namespace and serves
+> local development and testing only. `seckill-core-engine` is **not** running in production
+> (the production host runs only the `gateway-admin` and `my-gateway` containers), so these
+> NodePorts are not production endpoints.
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -72,11 +77,10 @@ Create a dedicated namespace for all deployments:
 kubectl create namespace test
 ```
 
-Or use the provided namespace.yaml:
-
-```bash
-kubectl apply -f namespace.yaml
-```
+There is no `namespace.yaml` manifest in this directory — the eight manifests shipped here are
+`elasticsearch.yaml`, `exporters.yaml`, `jaeger.yaml`, `nacos.yaml`, `prometheus.yaml`,
+`redis.yaml`, `rocketmq-exporter.yaml` and `rocketmq.yaml`, and all of them assume the `test`
+namespace already exists.
 
 ### Image Registry
 
@@ -230,9 +234,14 @@ RocketMQ is a distributed messaging queue for async order processing.
 
 #### Components
 
-RocketMQ consists of two components:
+RocketMQ consists of three components:
 1. **NameServer**: Lightweight service registry (similar to NameNode)
 2. **Broker**: Message storage and delivery service
+3. **Console**: `rocketmq-console-ng` web UI / HTTP API. The gateway-trace-starter RocketMQ
+   monitoring reads cluster status from this Console API (not from the exporter), configured via
+   `gateway.trace.middleware-exporters.rocketmq-console`
+   (`MiddlewareExportersConfig.java:73,129-134`; `application-dev.yml:72` uses
+   `localhost:30808`).
 
 #### NameServer Deployment
 
@@ -292,12 +301,60 @@ spec:
         - "mkdir -p /home/rocketmq/logs /home/rocketmq/store && ./mqbroker -n rocketmq-nameserver:9876"
 ```
 
+#### Console Deployment
+
+`rocketmq.yaml` also deploys the Console (lines 113-160):
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rocketmq-console
+  namespace: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rocketmq-console
+  template:
+    spec:
+      containers:
+      - name: console
+        image: <registry-prefix>/styletang/rocketmq-console-ng:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: JAVA_OPTS
+          value: "-Drocketmq.namesrv.addr=rocketmq-nameserver:9876 -Dcom.rocketmq.sendMessageWithTimeout=5000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rocketmq-console
+  namespace: test
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30808
+    name: http
+  selector:
+    app: rocketmq-console
+```
+
+Console UI from outside the cluster: `http://<node-ip>:30808`.
+Inside the cluster the trace starter reaches it at
+`rocketmq-console.test.svc.cluster.local:8080`.
+
 #### Service Endpoints
 
 | Component | Port | NodePort | Purpose |
 |-----------|------|----------|---------|
 | NameServer | 9876 | 30976 | Service discovery |
 | Broker | 10911 | - | Message delivery (ClusterIP) |
+| Console | 8080 | 30808 | Web UI + monitoring HTTP API |
 
 #### Deploy Command
 
@@ -820,12 +877,30 @@ kubectl wait --for=condition=ready pod -l app=jaeger -n test --timeout=60s
 
 ### Step 4: Deploy Exporters
 
-```bash
-# Redis and Elasticsearch exporters
-kubectl apply -f exporters.yaml
+⚠️ `exporters.yaml` is **not** limited to Redis + Elasticsearch: it also contains a
+`rocketmq-exporter` Deployment and Service (lines 110-159), configured through
+`NAMESRV_ADDR` / `--rocketmq.namesrv.addr` only. `rocketmq-exporter.yaml` defines a
+Deployment and Service with **the same names** (`rocketmq-exporter`, namespace `test`) plus the
+`rocketmq-exporter-config` ConfigMap, and starts the exporter with
+`--spring.config.location=/config/application.yml`.
 
-# RocketMQ exporter (with ConfigMap)
+Because both manifests own the same objects, applying them in the wrong order silently reverts
+the exporter to the env-var variant — which is exactly the failure described in
+[Issue 1: RocketMQ Exporter Fails to Start](#issue-1-rocketmq-exporter-fails-to-start).
+Use **one** of the two paths below and do not mix them:
+
+```bash
+# Path A (recommended): exporters.yaml first, then let rocketmq-exporter.yaml
+# override the rocketmq-exporter Deployment/Service with the ConfigMap-based variant.
+kubectl apply -f exporters.yaml
 kubectl apply -f rocketmq-exporter.yaml
+# Do NOT re-apply exporters.yaml afterwards, or the ConfigMap mount is lost.
+```
+
+```bash
+# Path B: keep the env-var-only rocketmq-exporter from exporters.yaml and skip
+# rocketmq-exporter.yaml entirely (accepting the Issue 1 startup failure risk).
+kubectl apply -f exporters.yaml
 ```
 
 ### Step 5: Deploy Prometheus
@@ -851,6 +926,7 @@ redis                       1/1     Running   5m
 elasticsearch               1/1     Running   5m
 rocketmq-nameserver         1/1     Running   5m
 rocketmq-broker             1/1     Running   5m
+rocketmq-console            1/1     Running   5m
 nacos                       1/1     Running   5m
 jaeger                      1/1     Running   5m
 redis-exporter              1/1     Running   2m
@@ -909,13 +985,30 @@ rocketmq_broker_total_messages
 
 ### Verify through Gateway Admin API
 
-```bash
-# Get middleware list
-curl http://gateway-admin:9090/api/service-middleware/list
+`ServiceMiddlewareViewController` is mapped at `/api/service-middleware`
+(`ServiceMiddlewareViewController.java:27`). There is **no** `/list` endpoint and **no** flat
+`/metrics?serviceName=...&middlewareType=...&exporterUrl=...` endpoint — service name, instance
+address and middleware type are **path** variables:
 
-# Get middleware metrics
-curl "http://gateway-admin:9090/api/service-middleware/metrics?serviceName=<service>&middlewareType=<type>&exporterUrl=<url>"
+```bash
+# All services and their middleware (replaces the non-existent /list)
+curl http://gateway-admin:9090/api/service-middleware/services
+
+# Instances reported for a service
+curl http://gateway-admin:9090/api/service-middleware/<serviceName>/instances
+
+# Middleware metrics of a service (latest reporting instance)
+curl http://gateway-admin:9090/api/service-middleware/<serviceName>/metrics
+
+# Middleware metrics of one specific instance
+curl http://gateway-admin:9090/api/service-middleware/<serviceName>/instances/<instanceAddress>/metrics
+
+# Per-middleware detail; exporterUrl/start/end are optional query params here
+curl "http://gateway-admin:9090/api/service-middleware/<serviceName>/middleware/<middlewareType>/detail?exporterUrl=<url>"
 ```
+
+All of these require an authenticated gateway-admin session (`SecurityConfig` protects
+`/api/**`), so add the login cookie or `Authorization` header when calling them with curl.
 
 ---
 
@@ -1107,6 +1200,7 @@ kubectl port-forward svc/<service> <local-port>:<service-port> -n test
 | ES Exporter | 9114 | - | Metrics |
 | RocketMQ NameServer | 9876 | 30976 | Service discovery |
 | RocketMQ Broker | 10911 | - | Messaging |
+| RocketMQ Console | 8080 | 30808 | Console UI + monitoring HTTP API |
 | RocketMQ Exporter | 5557 | - | Metrics |
 | Nacos | 8848 | 30848 | Config center |
 | Jaeger UI | 16686 | 30686 | Tracing UI |
@@ -1119,6 +1213,7 @@ kubectl port-forward svc/<service> <local-port>:<service-port> -n test
 | Redis | redis | latest |
 | Elasticsearch | elasticsearch | 8.12.0 |
 | RocketMQ | apache/rocketmq | 5.1.0 |
+| RocketMQ Console | styletang/rocketmq-console-ng | latest |
 | RocketMQ Exporter | apache/rocketmq-exporter | latest |
 | Nacos | nacos/nacos-server | v2.3.0 |
 | Jaeger | jaegertracing/all-in-one | latest |

@@ -10,8 +10,8 @@
 |------|---------|----------|
 | Java | 21+ | Yes |
 | Maven | 3.8+ | Yes |
-| Node.js | 18+ | Yes (for UI) |
-| MySQL | 8.0+ | **Yes** - gateway-admin has no H2 dependency, there is no embedded fallback |
+| Node.js | 22.18+ | Yes (for UI) - `npm run test:routes` imports `.ts` sources, which needs Node's built-in type stripping (default-on from 22.18) |
+| MySQL | 8.0+ | **Yes** - `gateway-admin/pom.xml` declares `com.h2database:h2` with `<scope>test</scope>` only, so it is not on the runtime classpath and there is no embedded fallback |
 | Nacos | 2.3.0+ | Yes |
 | Redis | 6.0+ | Optional (for distributed rate limiting) |
 
@@ -57,62 +57,36 @@ mysql.server start
 
 ---
 
-## Step 2: Initialize Nacos Configuration
+## Step 2: Nacos Configuration (nothing to create by hand)
 
-Open Nacos Console: http://localhost:8848/nacos (nacos/nacos)
+**Do not create `gateway-routes.json`, `gateway-services.json` or `gateway-strategies.json`.** No
+code in this repository reads or writes those data-ids. The only `*.json` data-id that appears
+anywhere in configuration is `gateway-plugins.json`
+(`gateway-admin/src/main/resources/application.yml:234`), and even that key is not bound by any
+`@ConfigurationProperties` or `@Value` in the code. Creating the three above changes nothing, and a
+gateway set up that way stays at `Loaded 0 route(s)`.
 
-### Create `gateway-routes.json`
+The real layout is **incremental, one data-id per object** (`GatewayConfigConstants`), all in group
+`DEFAULT_GROUP`:
 
-**Data ID:** `gateway-routes.json`  
-**Group:** `DEFAULT_GROUP`  
-**Format:** JSON
+| Object | Index data-id (JSON array of ids) | Per-object data-id |
+|--------|-----------------------------------|--------------------|
+| Routes | `config.gateway.metadata.routes-index` | `config.gateway.route-{routeId}` |
+| Services | `config.gateway.metadata.services-index` | `config.gateway.service-{serviceId}` |
+| Strategies | `config.gateway.metadata.strategies-index` | `config.gateway.strategy-{strategyId}` |
+| Auth policies | `config.gateway.metadata.auth-policies-index` | `config.gateway.auth-policy-{policyId}` (+ `config.gateway.auth-routes-{policyId}`) |
+| SSL certificates | `config.gateway.metadata.ssl-certificates-index` | `ssl-certificate-{domain}` |
 
-```json
-{
-  "version": "1.0",
-  "routes": [
-    {
-      "id": "demo-route",
-      "routeName": "Demo Service Route",
-      "uri": "lb://demo-service",
-      "order": 0,
-      "predicates": [
-        {"name": "Path", "args": {"pattern": "/api/**"}}
-      ],
-      "filters": [
-        {"name": "StripPrefix", "args": {"parts": "1"}}
-      ],
-      "enabled": true
-    }
-  ]
-}
-```
+gateway-admin writes all of these for you. Creating a route in the UI or via `POST /api/routes`
+stores it in the database and publishes `config.gateway.route-{routeId}` into that instance's Nacos
+namespace; `RouteReconcileTask` then rebuilds the index (enabled routes only) on the
+`gateway.config-sync.interval-ms` cycle (default 60000 ms). The namespace itself is created
+automatically too (`NacosConfigCenterService.createNamespace`, and
+`InstanceCreateRequest.createNamespace` defaults to `true`).
 
-### Create `gateway-services.json`
-
-**Data ID:** `gateway-services.json`  
-**Group:** `DEFAULT_GROUP`  
-**Format:** JSON
-
-```json
-{
-  "version": "1.0",
-  "services": []
-}
-```
-
-### Create `gateway-strategies.json`
-
-**Data ID:** `gateway-strategies.json`  
-**Group:** `DEFAULT_GROUP`  
-**Format:** JSON
-
-```json
-{
-  "version": "1.0",
-  "strategies": []
-}
-```
+So this step only requires that Nacos is reachable from gateway-admin and my-gateway. Open the
+console at http://localhost:8848/nacos (nacos/nacos) if you want to watch the data-ids appear as
+you create routes.
 
 ---
 
@@ -122,7 +96,8 @@ Open Nacos Console: http://localhost:8848/nacos (nacos/nacos)
 
 The committed file already reads MySQL settings from the environment; you normally only need to
 export the variables rather than edit it. There is **no** H2 profile - an earlier revision of this
-document described one, but `gateway-admin/pom.xml` has never declared an H2 dependency, so
+document described one. `gateway-admin/pom.xml` does declare `com.h2database:h2`, but with
+`<scope>test</scope>`, so it is absent from the runtime classpath and
 `driver-class-name: org.h2.Driver` fails at startup with "Cannot load driver class".
 
 ```yaml
@@ -152,27 +127,54 @@ export MYSQL_PASSWORD=your_password
 > The database name is hardcoded as `gateway_admin` in the JDBC URL - there is no `DB_NAME`
 > variable. Create it first: `CREATE DATABASE gateway_admin CHARACTER SET utf8mb4;`
 
-nacos:
-  server-addr: 127.0.0.1:8848
-```
-
-### my-gateway/src/main/resources/application.yml
+gateway-admin reads the Nacos address from **two different keys**, and they are not
+interchangeable. Both are in the committed `application.yml` and both default to
+`${NACOS_SERVER_ADDR:localhost:30848}`:
 
 ```yaml
-server:
-  port: 80
-
+# 1. spring.cloud.nacos.discovery.* - bound by NacosConfigCenterService
+#    (@ConfigurationProperties(prefix = "spring.cloud.nacos.discovery")). This is the address the
+#    config center actually publishes routes / services / strategies to.
 spring:
   cloud:
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848
-      config:
-        server-addr: 127.0.0.1:8848
+        server-addr: ${NACOS_SERVER_ADDR:localhost:30848}
+        namespace: ${NACOS_NAMESPACE:public}
+        group: DEFAULT_GROUP
+
+# 2. Top-level nacos.server-addr - injected with @Value("${nacos.server-addr:localhost:8848}") in
+#    GatewayInstanceService, GatewayInstanceController and InstanceConfigCleanupHelper.
+nacos:
+  server-addr: ${NACOS_SERVER_ADDR:localhost:30848}
+```
+
+> The committed file also carries a `gateway.nacos:` block. Only `gateway.nacos.orphan-cleanup.*`
+> under it is actually read (via `@Value` in `NamespaceReconcileTask`); `gateway.nacos.server-addr`
+> and `gateway.nacos.data-ids` are bound by nothing.
+
+### my-gateway/src/main/resources/application.yml
+
+`NacosCenterAutoConfiguration` is annotated
+`@ConfigurationProperties(prefix = "spring.cloud.nacos")` and binds only two fields, `serverAddr`
+and `namespace` - so the config-center address must sit **directly** under `spring.cloud.nacos`.
+The `spring.cloud.nacos.config.server-addr` / `spring.cloud.nacos.discovery.server-addr` keys this
+document used to show are not read by that class (the committed `application.yml` even carries the
+comment "must be at this level, not under discovery").
+
+```yaml
+server:
+  port: ${SERVER_PORT:80}
+
+spring:
+  cloud:
+    nacos:
+      serverAddr: ${NACOS_SERVER_ADDR:localhost:30848}   # bound by NacosCenterAutoConfiguration
+      namespace: ${NACOS_NAMESPACE:}                     # empty = public namespace
 
 gateway:
   center:
-    type: nacos
+    type: ${GATEWAY_CENTER_TYPE:nacos}
 ```
 
 ---
@@ -186,7 +188,10 @@ cd gateway-admin
 mvn spring-boot:run
 ```
 
-Verify: http://localhost:9090/api/routes
+Verify: http://localhost:9090/actuator/health - that is one of the few endpoints in
+`InternalApiEndpoints.PERMIT_ALL_NO_TOKEN`. `http://localhost:9090/api/routes` needs a JWT
+(`SecurityConfig` puts every `/api/**` request behind `anyRequest().authenticated()`), so opening it
+in a browser without a token returns 401/403 rather than the route list.
 
 ### Start Gateway
 
@@ -204,7 +209,8 @@ cd demo-service
 mvn spring-boot:run
 ```
 
-Verify: http://localhost:9002/hello
+Verify: http://localhost:9001/hello (demo-service listens on 9001 - see
+`demo-service/src/main/resources/application.yml`)
 
 ---
 
@@ -243,9 +249,22 @@ them and restart (or insert the user directly, with a BCrypt hash).
 
 ### Via API
 
+Every `/api/**` call needs a JWT first: `POST /api/auth/login` is the only public entry point, and
+under `SecurityConfig` a `POST /api/**` additionally requires the `ADMIN` authority carried in the
+token's `roles` claim. The body is a `RouteDefinition`, and `instanceId` is an optional query
+parameter used for per-instance config isolation.
+
 ```bash
-curl -X POST http://localhost:9090/api/routes \
+# 1. Log in and keep the token (response is wrapped in ApiResponse: {code,message,data})
+TOKEN=$(curl -s -X POST http://localhost:9090/api/auth/login \
   -H "Content-Type: application/json" \
+  -d "{\"username\": \"$ADMIN_USERNAME\", \"password\": \"$ADMIN_PASSWORD\"}" \
+  | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+
+# 2. Create the route with the token
+curl -X POST "http://localhost:9090/api/routes?instanceId=$INSTANCE_ID" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "routeName": "My First Route",
     "uri": "lb://my-service",
@@ -264,8 +283,8 @@ curl -X POST http://localhost:9090/api/routes \
 # Test the route
 curl http://localhost:80/api/my-service/hello
 
-# Check route list
-curl http://localhost:9090/api/routes
+# Check route list (needs the JWT from Step 6)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/api/routes
 
 # Check gateway health
 curl http://localhost:80/actuator/health
@@ -290,7 +309,8 @@ curl http://localhost:80/actuator/health
 
 **Solution:**
 1. For `lb://` - Ensure service is registered in Nacos
-2. For `static://` - Configure instances in `gateway-services.json`
+2. For `static://` - Create the service and its nodes in the UI (or `POST /api/services`); admin
+   publishes them as `config.gateway.service-{serviceId}`, not as a `gateway-services.json` file
 3. Check instance health status in UI
 
 ### Configuration not syncing
@@ -339,7 +359,7 @@ curl http://localhost:80/actuator/health
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   demo-service (:9002)                       │
+│                   demo-service (:9001)                       │
 │                                                              │
 │   /hello, /headers, /params, /delay                          │
 └─────────────────────────────────────────────────────────────┘
@@ -387,8 +407,9 @@ Two ways this bites in a real deployment:
   "add a nullable column" still has to be run by hand.
 
 > An earlier revision of this document described an H2 console at
-> `http://localhost:9090/h2-console`. That never worked: gateway-admin has no H2 dependency and
-> does not enable an H2 console.
+> `http://localhost:9090/h2-console`. That never worked: gateway-admin's H2 dependency is
+> `<scope>test</scope>` only, so no H2 driver is on the runtime classpath, and no H2 console is
+> enabled.
 
 ---
 
@@ -444,7 +465,9 @@ kubectl apply -f k8s/redis.yaml
    - Instance Name: `Production Gateway`
    - Cluster: Select your cluster
    - Namespace: `gateway-prod`
-   - Spec Type: `large` (2 cores, 2GB, 3 replicas)
+   - Spec Type: `large` (2 cores, 2GB - `InstanceSpec` defines CPU and memory only)
+   - Replicas: set separately, it is not part of the spec (`InstanceCreateRequest.replicas`,
+     default `1`)
 4. Click **Create**
 
 The gateway will be deployed automatically and start sending heartbeats.

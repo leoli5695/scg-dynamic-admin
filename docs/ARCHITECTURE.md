@@ -58,6 +58,14 @@ The system follows a modern **Control Plane / Data Plane** architecture pattern:
 - Independent scaling of control and data planes
 - Zero-downtime configuration updates
 
+> **About the `my-gateway (:80)` labels in the diagrams of this document:** `:80` is only the
+> *packaging default* — `my-gateway/src/main/resources/application.yml:2` reads
+> `port: ${SERVER_PORT:80}`. It is **not** the production topology: the deployed gateway container
+> runs with `SERVER_PORT=8080` and publishes `*:8080`, while `*:80` on the host is held by nginx
+> (which serves the console UI and reverse-proxies to the gateway). `k8s/my-gateway.yaml` likewise
+> declares `containerPort: 8080`. Read every `(:80)` in the diagrams below as
+> "the gateway's HTTP listener (default 80, 8080 in production)".
+
 ---
 
 ## 2. Core Design Patterns
@@ -103,8 +111,9 @@ The gateway uses SPI pattern for extensibility:
 +------------------------------------------------------------------+
 |                     AuthProcessor (Interface)                    |
 |   +---------------------------------------------------------+   |
-|   |  + validate(exchange, config): Mono<Boolean>             |   |
-|   |  + getType(): AuthType                                    |   |
+|   |  + process(exchange, config): Mono<Void>                |   |
+|   |  + getAuthType(): AuthType                              |   |
+|   |  + default getAuthTypeCode(): String                    |   |
 |   +---------------------------------------------------------+   |
 |                              |                                   |
 |        +----------+----------+----------+----------+           |
@@ -118,11 +127,13 @@ The gateway uses SPI pattern for extensibility:
 
                          AuthProcessManager
    +-------------------------------------------------------------+
-   |  private Map<AuthType, AuthProcessor> processors;           |
-   |                                                              |
-   |  public Mono<Boolean> authenticate(exchange, config) {      |
-   |      AuthProcessor processor = processors.get(config.type); |
-   |      return processor.validate(exchange, config);           |
+   |  private Map<String, AuthProcessor> processorMap;           |
+   |  // key = processor.getAuthType().getCode()                 |
+   |                                                             |
+   |  public Mono<Void> authenticate(exchange, config) {         |
+   |      AuthProcessor p = processorMap.get(                    |
+   |              config.getAuthTypeEnum().getCode());           |
+   |      return p.process(exchange, config);                    |
    |  }                                                          |
    +-------------------------------------------------------------+
 ```
@@ -232,30 +243,42 @@ Ensures data consistency between database and config center:
    |   +-------------------------------------------------------------------+  |
    |   |                      Global Filter Chain                           |  |
    |   |                                                                    |  |
-   |   |  Order    Filter                    Function                      |  |
-   |   |  -----    ---------------------     -------------------------    |  |
-   |   |  -500     SecurityGlobalFilter      Security hardening            |  |
-   |   |  -490     IPFilterGlobalFilter      IP Blacklist/Whitelist        |  |
-   |   |  -400     AccessLogGlobalFilter     Access logging                |  |
-   |   |  -300     CorsGlobalFilter          CORS handling                 |  |
-   |   |  -300     TraceIdGlobalFilter       Generate Trace ID + MDC       |  |
-   |   |  -255     RequestTransformFilter    Request body transformation   |  |
-   |   |  -254     RequestValidationFilter   Request schema validation     |  |
-   |   |  -250     AuthenticationGlobalFilter JWT/API Key/OAuth2 Auth      |  |
-   |   |  -249     MockResponseFilter        Mock response for testing     |  |
-   |   |  -200     TimeoutGlobalFilter       Connection/Response Timeout   |  |
-   |   |  -150     ApiVersionGlobalFilter    API version routing           |  |
-   |   |  -100     CircuitBreakerGlobalFilter Resilience4j Circuit Breaker |  |
-   |   |   -50     HeaderOpGlobalFilter      Header manipulation           |  |
-   |   |   -45     ResponseTransformFilter   Response body transformation  |  |
-   |   |    50     CacheGlobalFilter         Response caching              |  |
-   |   |   100     TraceCaptureGlobalFilter  Trace capture for debugging   |  |
-   |   |   N/A     FilterChainTrackingGlobalFilter Performance monitoring   |  |
-   |   |  9999     RetryGlobalFilter         Retry on failure              |  |
-   |   | 10001     MultiServiceLoadBalancerFilter Multi-service routing     |  |
-   |   | 10100     NacosDiscoveryLoadBalancerFilter Namespace/group override |  |
-   |   | 10150     DiscoveryLoadBalancerFilter Service Discovery + LB       |  |
-   |   |   N/A     ActuatorEndpointFilter    Actuator endpoint protection  |  |
+   |   | Order        Filter                           Function            |  |
+   |   | -----------  -------------------------------- ------------------- |  |
+   |   |    MIN_VALUE TraceIdGlobalFilter              Trace ID + MDC      |  |
+   |   |  MIN_VALUE+2 FilterChainTrackingGlobalFilter  Per-filter timing   |  |
+   |   |         -490 IPFilterGlobalFilter             IP allow/deny list  |  |
+   |   |         -480 SecurityGlobalFilter             XSS/SQLi protection |  |
+   |   |         -400 AccessLogGlobalFilter            Access logging      |  |
+   |   |         -301 CorsGlobalFilter                 CORS handling       |  |
+   |   |         -256 AuthenticationGlobalFilter       Auth (5 auth types) |  |
+   |   |         -255 RequestTransformFilter           Body transformation |  |
+   |   |         -254 RequestValidationFilter          Schema validation   |  |
+   |   |         -249 MockResponseFilter               Mock response       |  |
+   |   |         -246 AiSecurityGuardFilter            AI moderation       |  |
+   |   |         -245 HybridRateLimiterFilter          Hybrid rate limit   |  |
+   |   |         -244 MultiDimRateLimiterFilter        Multi-dim limiting  |  |
+   |   |         -243 AiContextLimitFilter             AI context limit    |  |
+   |   |         -242 AiSemanticCacheFilter            AI semantic cache   |  |
+   |   |         -241 TokenQuotaPreCheckFilter         Token quota check   |  |
+   |   |         -200 TimeoutGlobalFilter              Timeout handling    |  |
+   |   |         -150 ApiVersionGlobalFilter           API version routing |  |
+   |   |          -50 HeaderOpGlobalFilter             Header manipulation |  |
+   |   |          -47 TraceCaptureGlobalFilter         Trace capture       |  |
+   |   |          -46 CacheGlobalFilter                Response caching    |  |
+   |   |          -45 ResponseTransformFilter          Response transform  |  |
+   |   |          -44 TokenUsageCollectorFilter        LLM token usage     |  |
+   |   |          -43 AiStatisticsFilter               AI TTFT/usage stats |  |
+   |   |           -3 CircuitBreakerGlobalFilter       Circuit breaker     |  |
+   |   |           -2 RetryGlobalFilter                Retry on failure    |  |
+   |   |           -1 NettyWriteResponseFilter         SCG built-in write  |  |
+   |   |        10001 MultiServiceLoadBalancerFilter   Multi-service route |  |
+   |   |        10002 ApiVersionRoutingFilter          Version targeting   |  |
+   |   |        10004 AiPromptTemplateFilter           AI prompt template  |  |
+   |   |        10005 AiProviderRoutingFilter          AI provider routing |  |
+   |   |        10100 NacosDiscoveryLoadBalancerFilter Nacos ns/group LB   |  |
+   |   |        10140 DiscoveryLoadBalancerFilter      Discovery + LB      |  |
+   |   |        10150 ReactiveLoadBalancerClientFilter SCG built-in lb://  |  |
    |   |                                                                    |  |
    |   +-------------------------------------------------------------------+  |
    |                                   |                                      |
@@ -273,41 +296,96 @@ Ensures data consistency between database and config center:
    +-------------------------------------------------------------------------+
 ```
 
+**Not in the table above (they are `WebFilter`s, not `GlobalFilter`s, so they take no part in the
+`GlobalFilter` ordering):** `InternalApiAuthWebFilter` and `ActuatorEndpointFilter`, both at
+`Ordered.HIGHEST_PRECEDENCE + 10`. `ActuatorEndpointFilter` is additionally gated by
+`@ConditionalOnProperty(name = "management.server.port")`, so it is only registered when a separate
+management port is configured. `TraceIdGlobalFilter` *is* a `GlobalFilter`, but its `getOrder()`
+returns `Ordered.HIGHEST_PRECEDENCE` — the `FilterOrderConstants.TRACE_ID` constant (-300) is kept
+only as a historical reference and its own javadoc warns against inferring the runtime order from it.
+`FilterChainTrackingGlobalFilter.getOrder()` returns `Integer.MIN_VALUE + 2`.
+
+Authoritative source for every value above:
+`my-gateway/src/main/java/com/leoli/gateway/constants/FilterOrderConstants.java` (an `interface`, so
+the constants carry no explicit `public static final`).
+
 ### 3.2 Filter Execution Order (Why This Order?)
 
 ```
 Request enters gateway
+
+  (Two WebFilters sit OUTSIDE the GlobalFilter ordering below and therefore run first:
+   InternalApiAuthWebFilter @ Ordered.HIGHEST_PRECEDENCE + 10 --> guards /internal/**
+   ActuatorEndpointFilter   @ Ordered.HIGHEST_PRECEDENCE + 10 --> active only when
+                                                                 management.server.port is set)
   |
-  +-- order -500  Security        --> Security hardening first
+  +-- order MIN_VALUE   TraceId   --> Generate/propagate X-Trace-Id, MDC logging
+  |                                WHY FIRST? --> TraceIdGlobalFilter.getOrder() returns
+  |                                Ordered.HIGHEST_PRECEDENCE, so traceId is visible to every later
+  |                                filter. FilterOrderConstants.TRACE_ID (-300) is documented as a
+  |                                historical reference only -- do NOT infer the runtime order from it.
+  +-- order MIN_VALUE+2 Filter Chain Tracking --> Per-filter timing / performance monitoring
   +-- order -490  IP Filter       --> IP whitelist/blacklist check -> 403 if blocked
+  |                                WHY BEFORE THE WAF? --> A blacklisted address must not make the
+  |                                gateway buffer and regex-scan a full request body (see the FIX
+  |                                note on FilterOrderConstants.SECURITY_GLOBAL, which was -500)
   |                                WHY BEFORE ACCESS LOG? --> Fast rejection saves logging overhead
   |                                WHY BEFORE AUTH? --> Fast rejection saves CPU
+  +-- order -480  Security        --> XSS/SQL injection hardening (WAF); still ahead of auth so
+  |                                unauthenticated traffic is scanned too
   +-- order -400  Access Log      --> Log all requests for audit
-  +-- order -300  CORS            --> Handle preflight requests
-  +-- order -300  TraceId         --> Generate/propagate X-Trace-Id, MDC logging
-  |                                WHY EARLY? --> See everything for debugging
+  +-- order -301  CORS            --> Handle preflight requests
+  +-- order -256  Authentication  --> JWT/API Key/Basic/HMAC/OAuth2 validation -> 401 if failed
   +-- order -255  Request Transform --> Modify request body (JSON↔XML, field mapping)
   +-- order -254  Request Validation --> Validate request schema/fields
-  +-- order -250  Authentication  --> JWT/API Key/OAuth2 validation -> 401 if failed
   +-- order -249  Mock Response   --> Return mock data if configured (testing/development)
+  +-- order -246  AI Security Guard --> AI content moderation (inbound pre-phase + outbound decorator)
+  +-- order -245  Hybrid Rate Limiter --> Redis + local hybrid rate limiting
+  |                                WHY AFTER AUTH? --> The identity key types (jwt_claims,
+  |                                jwt_subject, api_key_metadata) are only populated by the auth
+  |                                filters; running first collapsed tenant/user quotas to IP-only
+  +-- order -244  Multi-Dim Rate Limiter --> Multi-dimensional rate limiting
+  +-- order -243  AI Context Limit --> Reject oversized AI inputs before any quota is spent
+  +-- order -242  AI Semantic Cache --> On a HIT, short-circuit: no LLM tokens and no quota spent
+  +-- order -241  Token Quota Pre-Check --> Pre-deduct AI token quota before proxying to the LLM
   +-- order -200  Timeout         --> Inject timeout params into route metadata
   +-- order -150  API Version     --> Version-based routing
-  +-- order -100  Circuit Breaker --> Check circuit status -> 503 if open
   +-- order  -50  Header Op       --> Add/modify/remove headers
+  +-- order  -47  Trace Capture   --> Capture error/slow requests for debugging
+  +-- order  -46  Cache           --> Response caching
   +-- order  -45  Response Transform --> Modify response body before returning
-  +-- order   50  Cache           --> Response caching
-  +-- order  100  Trace Capture   --> Capture error/slow requests for debugging
-  +-- order   N/A  Filter Chain Tracking --> Performance monitoring
-  +-- order 9999  Retry           --> Retry on failure (before routing)
-  +-- order 10001 Multi-Service  --> Multi-service routing + gray release
+  +-- order  -44  Token Usage Collector --> Parse and settle LLM token usage
+  +-- order  -43  AI Statistics   --> AI TTFT / usage statistics
+  |                                WHY ARE -47..-43 ALL < -1? --> SCG only routes the client-bound
+  |                                response body through ServerHttpResponseDecorators installed
+  |                                BEFORE NettyWriteResponseFilter (-1). Cache at +50 and Trace
+  |                                Capture at +100 were two fixed P0 bugs: the cache was never
+  |                                populated and every captured trace had responseBody == null.
+  +-- order   -3  Circuit Breaker --> Check circuit status -> 503 if open; its post-phase runs
+  |                                AFTER Retry (-2) so it records the final post-retry status
+  +-- order   -2  Retry           --> Retry on failure
+  +-- order   -1  NettyWriteResponse --> SCG built-in: writes the response to the client
+  +-- order 10001 Multi-Service   --> Multi-service routing + gray release
+  +-- order 10002 API Version Routing --> Apply version-specific service targets
+  +-- order 10004 AI Prompt Template --> System-prompt injection / {{var}} substitution
+  +-- order 10005 AI Provider Routing --> Rewrite the target URL to the resolved LLM provider
   +-- order 10100 Nacos Discovery --> Namespace/group override for cross-namespace routing
-  +-- order 10150 Load Balancer  --> Service discovery + load balancing
+  +-- order 10140 Load Balancer   --> Service discovery + load balancing
+  |                                WHY 10140 AND NOT 10150? --> 10150 is exactly SCG's own
+  |                                ReactiveLoadBalancerClientFilter order; two GlobalFilters at the
+  |                                same order have no defined relative sequence (fixed collision bug)
   |                                WHY LAST? --> Final routing decision
-  +-- order 10150+ Routing        --> Forward to backend
-  +-- order   N/A  Actuator Endpoint --> Protect actuator endpoints
+  +-- order 10150 Routing         --> SCG ReactiveLoadBalancerClientFilter forwards lb:// to backend
 ```
 
-**Performance Impact:** IP Filter (-490) before Access Log (-400) and Authentication (-250) provides **+37% TPS improvement**
+**Performance Impact:** IP Filter (-490) before Access Log (-400) and Authentication (-256) provides **+37% TPS improvement**.
+
+> **Note on that measurement:** the +37% figure was recorded when `SecurityGlobalFilter` was still at
+> -500, i.e. *before* IP Filter. Security has since moved to -480 so that a blacklisted address is
+> rejected before the WAF buffers and regex-scans a request body (see the FIX note on
+> `FilterOrderConstants.SECURITY_GLOBAL`). IP Filter is still ahead of Access Log and Authentication,
+> so the claim being measured still holds, but treat the number itself as a historical measurement
+> rather than a current benchmark.
 
 ---
 
@@ -339,8 +417,8 @@ Request enters gateway
             |                               |
             v                               v
    +-----------------+             +-----------------+
-   | Service Registry|             | gateway-services|
-   |  (Dynamic)      |             |     .json       |
+   | Service Registry|             | services-index  |
+   |  (Dynamic)      |             | + service-{id}  |
    +-----------------+             +-----------------+
 
             |                               |
@@ -357,6 +435,14 @@ Request enters gateway
                   | ServiceInstance |
                   +-----------------+
 ```
+
+> **On the `static://` side there is no `gateway-services.json` dataId** (nor a `gateway-routes.json`
+> or `gateway-strategies.json`). Configuration is published incrementally, one entry per entity —
+> see `my-gateway/src/main/java/com/leoli/gateway/constants/GatewayConfigConstants.java`:
+> `config.gateway.metadata.services-index` holds the service-ID list and each definition lives at
+> `config.gateway.service-{serviceId}` (the same index + per-entity pattern is used for routes,
+> strategies, auth policies and SSL certificates). The only single-document dataId that really
+> exists is `gateway-plugins.json`.
 
 ### 4.2 Load Balancing
 
@@ -381,6 +467,24 @@ Implementation:
 |  }                                                           |
 +--------------------------------------------------------------+
 ```
+
+> **Correction — the pseudo-code above is not what the gateway runs.** Weighted selection is
+> implemented by `my-gateway/src/main/java/com/leoli/gateway/filter/loadbalancer/SmoothWeightedRoundRobin.java`,
+> an nginx-style *smooth* WRR, used by both `InstanceSelector` (one selector per service) and
+> `MultiServiceLoadBalancerFilter` (one selector per route):
+>
+> - weights are `double`, so fractional weights are not truncated; negative weights clamp to 0;
+> - each round adds the static weight to a per-key accumulator, picks the **largest** accumulator,
+>   then subtracts the total weight from the winner — there is no shared `counter % totalWeight`
+>   modulo index and no cumulative-weight scan;
+> - state is per balancing group and `select` synchronizes on the selector instance, so groups never
+>   contend on one lock;
+> - if the total weight is `<= 0` it degrades to an overflow-safe round-robin using
+>   `Math.floorMod(counter++, size)`.
+>
+> For `A(weight=1), B(weight=2), C(weight=1)` the real sequence is therefore
+> `B -> A -> C -> B -> A -> C -> ...` (evenly spread), not `A -> B -> B -> C` (which would clump the
+> two B picks together — exactly what "smooth" WRR exists to avoid).
 
 ---
 
@@ -477,6 +581,20 @@ A multi-level cache with fallback would be **over-engineering** for this use cas
 
 ## 6. Module Details
 
+> **Scope of this section:** it only details the two modules that actually run in production —
+> `my-gateway` (data plane) and `gateway-admin` (control plane). The root `pom.xml` declares
+> **8** Maven modules in total: `license-client`, `gateway-trace-starter`, `license-server`,
+> `gateway-moderation-spi`, `my-gateway`, `gateway-admin`, `demo-service` and `seckill-core-engine`
+> (re-measure with `sed -n '/<modules>/,/<\/modules>/p' pom.xml | grep -c '<module>'` — this list
+> has grown more than once in a single day).
+> `gateway-moderation-spi` is a dependency-free contract module holding one interface
+> (`com.leoli.gateway.ai.security.ModerationAdapter`); see `docs/features/ai-content-security.md`.
+> Note that `gateway-trace-starter` is depended on **only** by `seckill-core-engine` — neither
+> `my-gateway` nor `gateway-admin` pulls it in — and `seckill-core-engine` is **not deployed to
+> production** (the production host runs exactly two containers: `gateway-admin` and `my-gateway`).
+> `demo-service` (port 9001) and `license-server` are development/support artifacts, and
+> `gateway-ui-2/` is a frozen second front-end that is neither built nor deployed.
+
 ### 6.1 my-gateway (Core Runtime)
 
 ```
@@ -488,14 +606,17 @@ my-gateway/
 |   |   |   |-- SecurityGlobalFilter.java      # XSS/SQL injection protection
 |   |   |   |-- IPFilterGlobalFilter.java      # IP whitelist/blacklist
 |   |   |   |-- AuthenticationGlobalFilter.java # JWT/API Key/OAuth2 auth
-|   |   |   +-- CorsGlobalFilter.java          # CORS handling
+|   |   |   |-- CorsGlobalFilter.java          # CORS handling
+|   |   |   +-- InternalApiAuthWebFilter.java  # WebFilter guarding /internal/** (X-Internal-Token)
 |   |   |
 |   |   |-- loadbalancer/          # Load balancing filters
 |   |   |   |-- DiscoveryLoadBalancerFilter.java    # Service discovery LB (lb://)
 |   |   |   |-- MultiServiceLoadBalancerFilter.java # Multi-service routing
+|   |   |   |-- NacosDiscoveryLoadBalancerFilter.java # Namespace/group aware lb:// resolution
 |   |   |   |-- InstanceFilter.java                # Instance filtering
 |   |   |   |-- InstanceSelector.java              # Instance selection
-|   |   |   +-- InstanceRetryExecutor.java         # Retry execution
+|   |   |   |-- InstanceRetryExecutor.java         # Retry execution
+|   |   |   +-- SmoothWeightedRoundRobin.java      # Smooth weighted round-robin
 |   |   |
 |   |   |-- ratelimit/             # Rate limiting filters
 |   |   |   |-- HybridRateLimiterFilter.java      # Redis + local hybrid
@@ -510,16 +631,39 @@ my-gateway/
 |   |   |   |-- RequestTransformFilter.java       # Request body transformation
 |   |   |   |-- RequestValidationFilter.java      # Request schema validation
 |   |   |   |-- ResponseTransformFilter.java      # Response body transformation
-|   |   |   +-- MockResponseFilter.java           # Mock response for testing
+|   |   |   |-- MockResponseFilter.java           # Mock response for testing
+|   |   |   +-- TransformBodyWork.java            # Shared body-transform work item
+|   |   |
+|   |   |-- accesslog/             # Access logging (NOT at filter/ root)
+|   |   |   |-- AccessLogGlobalFilter.java        # Access logging
+|   |   |   |-- config/AccessLogConfig.java       # Access log configuration
+|   |   |   |-- constants/AccessLogConstants.java # Access log constants
+|   |   |   |-- detector/BinaryContentDetector.java # Binary body detection
+|   |   |   +-- sanitizer/SensitiveDataSanitizer.java # Sensitive data masking
+|   |   |
+|   |   |-- ai/                    # AI gateway filters
+|   |   |   |-- AiSecurityGuardFilter.java        # Content moderation (in + outbound)
+|   |   |   |-- AiContextLimitFilter.java         # Context-window limit
+|   |   |   |-- AiSemanticCacheFilter.java        # Semantic cache
+|   |   |   |-- AiStatisticsFilter.java           # TTFT / usage statistics
+|   |   |   |-- AiPromptTemplateFilter.java       # Prompt decoration
+|   |   |   +-- AiProviderRoutingFilter.java      # Multi-provider LLM routing
+|   |   |
+|   |   |-- token/                 # AI token accounting filters
+|   |   |   |-- TokenQuotaPreCheckFilter.java     # Quota pre-deduction
+|   |   |   |-- TokenUsageCollectorFilter.java    # Usage parsing/settlement
+|   |   |   |-- TokenUsageOutbox.java             # Durable local outbox
+|   |   |   +-- TokenUsageReporter.java           # Reliable delivery to admin
 |   |   |
 |   |   +-- (root level)           # Other filters
-|   |       |-- AccessLogGlobalFilter.java       # Access logging
 |   |       |-- CacheGlobalFilter.java           # Response caching
 |   |       |-- TraceIdGlobalFilter.java         # Trace ID generation
 |   |       |-- TraceCaptureGlobalFilter.java    # Trace capture for debugging
 |   |       |-- HeaderOpGlobalFilter.java        # Header operations
 |   |       |-- ApiVersionGlobalFilter.java      # API version routing
-|   |       +-- ActuatorEndpointFilter.java      # Actuator endpoint protection
+|   |       |-- ApiVersionRoutingFilter.java     # Apply version-specific targets
+|   |       |-- FilterChainTrackingGlobalFilter.java # Per-filter timing
+|   |       +-- ActuatorEndpointFilter.java      # Actuator endpoint protection (WebFilter)
 |   |
 |   |-- auth/                      # Auth Processors (Strategy Pattern)
 |   |   |-- AuthProcessor.java              # Interface
@@ -530,7 +674,10 @@ my-gateway/
 |   |   |-- ApiKeyAuthProcessor.java        # API Key validation
 |   |   |-- BasicAuthProcessor.java         # Basic auth
 |   |   |-- HmacSignatureAuthProcessor.java # HMAC signature
-|   |   +-- OAuth2AuthProcessor.java        # OAuth2 integration
+|   |   |-- OAuth2AuthProcessor.java        # OAuth2 integration
+|   |   |-- BasicPasswordVerifier.java      # Constant-time password comparison
+|   |   |-- TokenRevocationChecker.java     # Revocation lookup
+|   |   +-- RevocationUnavailableException.java # Thrown when revocation state is unknown
 |   |
 |   |-- center/                    # Config Center SPI
 |   |   |-- spi/ConfigCenterService.java    # Interface
@@ -542,19 +689,24 @@ my-gateway/
 |   |   |-- spi/DiscoveryService.java       # Interface
 |   |   |-- spi/AbstractDiscoveryService.java # Base implementation
 |   |   |-- nacos/NacosDiscoveryService.java  # Nacos discovery
+|   |   |-- nacos/NacosNamingServiceFactory.java # NamingService factory
 |   |   |-- consul/ConsulDiscoveryService.java # Consul discovery
 |   |   +-- staticdiscovery/StaticDiscoveryService.java # Static instances
 |   |
 |   |-- manager/                   # Configuration Managers
 |   |   |-- RouteManager.java              # Route configuration
 |   |   |-- ServiceManager.java            # Service configuration
-|   |   +-- StrategyManager.java           # Strategy configuration
+|   |   |-- StrategyManager.java           # Strategy configuration
+|   |   +-- AuthBindingManager.java        # Route <-> auth policy bindings
 |   |
 |   |-- refresher/                 # Config Refreshers (Nacos listeners)
 |   |   |-- RouteRefresher.java            # Route config refresh
 |   |   |-- ServiceRefresher.java          # Service config refresh
 |   |   |-- StrategyRefresher.java         # Strategy config refresh
-|   |   +-- AuthPolicyRefresher.java       # Auth policy refresh
+|   |   |-- AuthPolicyRefresher.java       # Auth policy refresh
+|   |   |-- RateLimitResetRefresher.java   # Rate limit counter reset
+|   |   +-- SslCertificateRefresher.java   # SSL certificate refresh
+|   |   # NOTE: PluginRefresher.java is NOT here - it lives in the plugin/ package.
 |   |
 |   |-- route/                     # Route Locator
 |   |   +-- DynamicRouteDefinitionLocator.java # Dynamic route resolution
@@ -563,12 +715,15 @@ my-gateway/
 |   |   |-- DistributedRateLimiter.java    # Redis distributed limiter
 |   |   |-- RedisHealthChecker.java        # Redis health monitoring
 |   |   |-- ShadowQuotaManager.java        # Shadow quota for failover
-|   |   +-- RateLimitResult.java           # Rate limit result model
+|   |   |-- RateLimitResult.java           # Rate limit result model
+|   |   |-- TokenQuotaManager.java         # AI token quota manager
+|   |   |-- TokenQuotaLedger.java          # Per-request quota ledger
+|   |   +-- TokenQuotaLedgerStore.java     # Ledger persistence
 |   |
 |   |-- ssl/                       # SSL Certificate Management
-|   |   |-- SslCertificateLoader.java      # Certificate loading
 |   |   |-- SslServerConfig.java           # SSL server configuration
-|   |   +-- DynamicSslContextManager.java  # Dynamic SSL context
+|   |   +-- DynamicSslContextManager.java  # Dynamic SSL context (loads certs itself;
+|   |                                      # there is no SslCertificateLoader class)
 |   |
 |   |-- exception/                 # Custom Exceptions
 |   |   |-- GatewayException.java          # Base exception
@@ -579,38 +734,120 @@ my-gateway/
 |   |   |-- UpstreamException.java         # Upstream service errors
 |   |   |-- RouteException.java            # Route errors
 |   |   |-- ErrorCode.java                 # Error code definitions
+|   |   |-- GatewayErrorMessages.java      # User-facing message templates
 |   |   +-- ScgGlobalExceptionHandler.java # Global exception handler
 |   |
-|   |-- constants/                 # Constants
-|   |   |-- FilterOrderConstants.java      # Filter execution order
-|   |   +-- GatewayConfigConstants.java    # Config constants
+|   |-- constants/                 # Constants (all `interface`s - fields are implicitly
+|   |   |                          #  public static final, so `grep "static final int"` misses them)
+|   |   |-- FilterOrderConstants.java      # Filter execution order (authoritative)
+|   |   |-- GatewayConfigConstants.java    # Config center dataId constants
+|   |   +-- AuthConstants / BinaryContentConstants / CacheConstants /
+|   |       InternalApiConstants / RateLimitConstants / RedisConstants / ScheduleConstants
 |   |
 |   |-- model/                     # Configuration Models
 |   |   |-- AuthConfig.java                # Auth configuration
 |   |   |-- CircuitBreakerConfig.java      # Circuit breaker config
 |   |   |-- IPFilterConfig.java            # IP filter config
 |   |   |-- RateLimiterConfig.java         # Rate limiter config
+|   |   |-- MultiDimRateLimiterConfig.java # Multi-dimensional rate limiter config
 |   |   |-- TimeoutConfig.java             # Timeout config
 |   |   |-- MultiServiceConfig.java        # Multi-service routing config
+|   |   |-- ServiceBindingType.java        # STATIC / DISCOVERY binding
 |   |   |-- RequestTransformConfig.java    # Request transform config
 |   |   |-- RequestValidationConfig.java   # Request validation config
 |   |   |-- ResponseTransformConfig.java   # Response transform config
 |   |   |-- MockResponseConfig.java        # Mock response config
-|   |   +-- StrategyDefinition.java        # Strategy definition
+|   |   |-- PluginConfig.java              # Plugin config
+|   |   |-- TokenQuotaConfig.java          # AI token quota config
+|   |   |-- AiProxyConfig / AiPromptTemplateConfig / AiSecurityConfig /
+|   |   |   AiSemanticCacheConfig / AiContextLimitConfig / AiStatisticsConfig
+|   |   +-- StrategyDefinition.java        # Strategy definition + the 22 TYPE_* String constants
 |   |
 |   |-- health/                    # Health Check & Heartbeat
 |   |   |-- HeartbeatReporter.java         # Heartbeat to admin
 |   |   |-- ActiveHealthChecker.java       # Active health check
 |   |   |-- HybridHealthChecker.java       # Hybrid health monitoring
+|   |   |-- HealthCheckScheduler.java      # Health check scheduling
 |   |   |-- InstanceDiscoveryService.java  # Instance discovery
+|   |   |-- AdminServiceDiscovery.java     # Admin endpoint discovery
+|   |   |-- InstanceHealth.java            # Health model
 |   |   +-- HealthStatusSyncTask.java      # Health status sync
+|   |
+|   |-- ai/                        # AI gateway support
+|   |   |-- LlmProvider.java               # Provider descriptor
+|   |   |-- ProviderRegistry.java          # Registered providers
+|   |   |-- ProviderKeyResolver.java       # Upstream key resolution SPI
+|   |   |-- AdminProviderKeyResolver.java  # Resolves keys from the admin
+|   |   |-- ProviderKeyPoolSelector.java   # Key pool selection
+|   |   |-- AiUsageResult.java             # Parsed usage result
+|   |   |-- cache/SemanticCacheStore.java  # Semantic cache storage
+|   |   |-- cache/GatewayEmbeddingClient.java # Embedding client
+|   |   |-- security/ContentModerator.java # Moderation SPI
+|   |   +-- security/RuleBasedModerator.java # Rule-based implementation
+|   |
+|   |-- plugin/                    # Plugin subsystem
+|   |   |-- PluginLoaderService.java       # Loads plugin jars
+|   |   |-- PluginRegistryService.java     # Runtime plugin registry
+|   |   |-- PluginRefresher.java           # Plugin config listener (lives here, not in refresher/)
+|   |   |-- PluginSchemaGenerator.java     # Config schema generation
+|   |   |-- PluginDiscoveryResult.java     # Discovery result model
+|   |   |-- PluginLoadException.java       # Load failure
+|   |   +-- PluginRegistrationException.java # Registration failure
+|   |
+|   |-- monitor/                   # Filter-chain monitoring & AI observability
+|   |   |-- FilterChainTracker.java        # Per-filter timing collector
+|   |   |-- TrackedGlobalFilter.java       # Decorator applied to every GlobalFilter
+|   |   |-- GlobalFilterTrackingPostProcessor.java # BeanPostProcessor installing the decorator
+|   |   |-- FilterHealthMonitor.java       # Filter health
+|   |   |-- FilterCircuitBreakerManager.java # Per-filter circuit breaking
+|   |   |-- FilterConfigOptimizer.java     # Order/config optimization suggestions
+|   |   |-- HistoricalDataTracker.java     # Historical metric retention
+|   |   |-- PeriodComparisonAnalyzer.java  # Period-over-period comparison
+|   |   |-- PerformancePredictor.java      # Linear-regression trend projection
+|   |   |-- AIAnomalyDetector.java         # Anomaly detection
+|   |   |-- AlertService.java              # Gateway-side alerting
+|   |   +-- TraceReportDispatcher.java     # Trace report dispatch
+|   |
+|   |-- autoconfig/                # Conditional auto-configuration
+|   |   |-- NacosCenterAutoConfiguration.java   # Activates the Nacos center
+|   |   |-- ConsulCenterAutoConfiguration.java  # Activates the Consul center
+|   |   +-- HttpHandlerBindingAutoConfiguration.java # Management-port HTTP binding
+|   |
+|   |-- cache/CompiledRouteCache.java      # Compiled route cache
+|   |
+|   |-- controller/                # Gateway-side endpoints
+|   |   |-- AiModelsEndpoint.java          # /v1/models style AI model list
+|   |   |-- InternalFilterChainController.java       # Internal filter-chain API
+|   |   +-- InternalFilterCircuitBreakerController.java # Internal filter CB API
+|   |
+|   |-- endpoint/                  # Actuator endpoints
+|   |   |-- GatewayRouteEndpoint.java      # Route actuator endpoint
+|   |   |-- GatewayServiceEndpoint.java    # Service actuator endpoint
+|   |   +-- GatewayStrategyEndpoint.java   # Strategy actuator endpoint
+|   |
+|   |-- enums/                     # AuthType, CenterType
+|   |-- license/LicenseFeatureHelper.java  # Edition/quota gate (unconditional @Component)
+|   |-- parser/TokenUsageParser.java       # LLM usage parsing
+|   |-- util/                      # GatewayResponseHelper, ClientIpResolver, IpAddressUtils,
+|   |                              # RequestBodyCache, BoundedBodyCapture, BodyWorkPool,
+|   |                              # ByteBudget, PatternCache, RateLimiterWindow, RouteUtils,
+|   |                              # AiTokenEstimator, ConfigContentTracker, ConfigValueExtractor,
+|   |                              # SimpleResponse
 |   |
 |   +-- config/                    # Spring Configuration
 |       |-- GatewayConfig.java             # Gateway config
 |       |-- CorsConfig.java                # CORS config
 |       |-- RedisConfig.java               # Redis config
+|       |-- RedisEnabledCondition.java     # Redis enable condition
 |       |-- WebClientConfig.java           # WebClient config
-|       +-- HeartbeatProperties.java       # Heartbeat properties
+|       |-- RestTemplateConfig.java        # RestTemplate config
+|       |-- ObjectMapperConfig.java        # Jackson config
+|       |-- HandlebarsConfig.java          # Template engine config
+|       |-- HeartbeatProperties.java       # Heartbeat properties
+|       |-- HealthCheckProperties.java     # Health check properties
+|       |-- RetryProperties.java           # Retry properties
+|       |-- TimeoutProperties.java         # Timeout properties
+|       +-- TrustedProxyProperties.java    # `gateway.trusted-proxy` (singular)
 ```
 
 ### 6.2 gateway-admin (Management Console)
@@ -639,7 +876,34 @@ gateway-admin/
 |   |   |-- AiConfigController.java         # AI analysis config API
 |   |   |-- HealthSyncController.java       # Health sync API
 |   |   |-- InstanceHealthController.java   # Instance health API
-|   |   +-- HealthCheckController.java      # Health check API
+|   |   |-- HealthCheckController.java      # Health check API
+|   |   # ---- the 24 controllers below were missing from earlier revisions of this tree;
+|   |   #      the package held 46 *Controller.java files at commit b45d40a - re-count with
+|   |   #      `ls gateway-admin/src/main/java/com/leoli/gateway/admin/controller/*.java | wc -l`
+|   |   |-- AiCopilotController.java        # /api/copilot - AI copilot assistant
+|   |   |-- DiagnosticController.java       # /api/diagnostic - system diagnostics
+|   |   |-- FilterChainController.java      # /api/filter-chain - filter chain analysis
+|   |   |-- FilterChainExecutionController.java # /api/filter-executions - per-filter stats
+|   |   |-- FullChainTraceController.java   # /api/traces/full-chain - distributed trace query
+|   |   |-- GatewayTokenRevocationController.java # /api/gateway/jwt-revocations
+|   |   |-- JaegerController.java           # /api/tracing - Jaeger proxy
+|   |   |-- LicenseController.java          # /api/license - license/edition info
+|   |   |-- MultiInstanceComparisonController.java # /api/multi-instance - instance comparison
+|   |   |-- PluginController.java           # /api/plugins - plugin management
+|   |   |-- PrometheusServiceDiscoveryController.java # /api/prometheus/sd
+|   |   |-- ProviderCredentialController.java # /api/provider-credentials - LLM upstream keys
+|   |   |-- RequestReplayController.java    # /api/replay - request replay debugger
+|   |   |-- RoutePluginBindingController.java # Route <-> plugin bindings
+|   |   |-- ServiceMiddlewareController.java # /api/services - per-service middleware config
+|   |   |-- ServiceMiddlewareViewController.java # /api/service-middleware - middleware views
+|   |   |-- SmartAlertController.java       # /api/smart-alerts - AI-assisted alerting
+|   |   |-- StrategyTypeController.java     # /api/strategy-types - strategy type metadata
+|   |   |-- StressTestController.java       # /api/stress-test - load testing (Markdown export only)
+|   |   |-- TokenQuotaController.java       # /api/token-quota - AI token quota
+|   |   |-- TokenUsageController.java       # /api/token-usage - AI token usage
+|   |   |-- TokenUsageReconciliationController.java # .../events/{usageId}/reconciliation
+|   |   |-- TraceTopologyController.java    # /api/topology/trace - trace topology
+|   |   +-- TrafficTopologyController.java  # /api/topology - traffic topology
 |   |
 |   |-- service/                   # Business Logic
 |   |   |-- RouteService.java               # Route CRUD + dual-write
@@ -714,11 +978,16 @@ gateway-admin/
 |   |   |-- InstanceStatus.java             # Instance status enum
 |   |   +-- User.java                       # User entity
 |   |
-|   |-- reconcile/                 # Config Reconciliation Tasks
-|   |   |-- ReconcileTask.java              # Base reconcile task
+|   |-- reconcile/                 # Config Reconciliation Tasks (10 files: 7 concrete tasks)
+|   |   |-- ReconcileTask.java              # Base reconcile task interface
+|   |   |-- NamespacedReconcile.java        # Namespace-scoped reconcile contract
 |   |   |-- RouteReconcileTask.java         # Route reconcile
 |   |   |-- ServiceReconcileTask.java       # Service reconcile
+|   |   |-- StrategyReconcileTask.java      # Strategy reconcile
 |   |   |-- AuthPolicyReconcileTask.java    # Auth policy reconcile
+|   |   |-- AccessLogConfigReconcileTask.java # Access log config reconcile
+|   |   |-- CertificateReconcileTask.java   # SSL certificate reconcile
+|   |   |-- NamespaceReconcileTask.java     # Instance namespace reconcile
 |   |   +-- ReconcileResult.java            # Reconcile result
 |   |
 |   |-- cache/                     # Runtime Caches
@@ -776,6 +1045,14 @@ gateway-admin/
 |       +-- ServiceIdExtractor.java         # Service ID extractor
 ```
 
+> **Packages not drawn above** (they exist under `com.leoli.gateway.admin`): `center/`
+> (`ConfigCenterService` + Nacos/Consul implementations — the admin-side twin of the gateway SPI),
+> `client/` (`PrometheusClient`, `RocketMQConsoleClient`), `entity/` (8 JPA entities),
+> `event/` (`GlobalBindingChangedEvent`), `exception/` (`GlobalExceptionHandler`),
+> `license/` (`LicenseFeatureHelper`), `metrics/` (`BusinessMetrics`, `MetricsScheduler`,
+> `TracingHelper`), `prompt/` (`PromptProvider` + database-backed implementation, used by the AI
+> copilot) and `tool/` (copilot tool registries and definitions).
+
 ---
 
 ## 7. Design Principles
@@ -783,7 +1060,7 @@ gateway-admin/
 | Principle | Application |
 |-----------|-------------|
 | **SOLID** | Single responsibility per filter, Open for extension (SPI), Dependency inversion |
-| **DRY** | Shared ConfigCenterService, GenericCacheManager reusable |
+| **DRY** | Shared `ConfigCenterService` SPI (`AbstractConfigService` base), `AbstractAuthProcessor` / `AbstractDiscoveryService` base classes, one `FilterOrderConstants` source of truth. (There is no `GenericCacheManager` class — the managers each hold a plain `ConcurrentHashMap` cache.) |
 | **KISS** | Simple filter chain, clear separation of concerns |
 | **Defense in Depth** | IP filter -> Auth -> Rate limit -> Circuit breaker |
 | **Graceful Degradation** | Local rate limiter fallback, cache fallback when Nacos down |
@@ -795,24 +1072,42 @@ gateway-admin/
 ### 8.1 Adding a New Authentication Type
 
 ```java
-// 1. Implement AuthProcessor
+// 1. Implement AuthProcessor.
+//    Real contract (my-gateway/src/main/java/com/leoli/gateway/auth/AuthProcessor.java):
+//      Mono<Void> process(ServerWebExchange exchange, AuthConfig config);
+//      AuthType   getAuthType();
+//    There is NO validate(...) returning Mono<Boolean> -- a processor signals success by
+//    completing empty and signals failure by writing the response itself and NOT calling the chain.
+//    Extend AbstractAuthProcessor to reuse writeUnauthorizedResponse / writeForbiddenResponse /
+//    extractBearerToken / isValidConfig / logSuccess / logFailure.
 @Component
 public class CustomAuthProcessor extends AbstractAuthProcessor {
 
     @Override
-    public AuthType getType() {
-        return AuthType.CUSTOM;  // Add to enum
+    public AuthType getAuthType() {
+        return AuthType.CUSTOM;  // add the constant to com.leoli.gateway.enums.AuthType
     }
 
     @Override
-    public Mono<Boolean> validate(ServerWebExchange exchange, AuthConfig config) {
-        // Custom validation logic
-        return Mono.just(true);
+    public Mono<Void> process(ServerWebExchange exchange, AuthConfig config) {
+        if (!isValidConfig(config)) {
+            return Mono.empty();
+        }
+        String token = extractBearerToken(exchange);
+        if (!verify(token, config)) {
+            logFailure(config.getRouteId(), "invalid custom credential");
+            // Write the 401 and stop here - do not continue the chain.
+            return writeUnauthorizedResponse(exchange, "Invalid custom credential");
+        }
+        logSuccess(config.getRouteId());
+        return Mono.empty();  // success = empty completion
     }
 }
 
 // 2. Register automatically via Spring @Component
-// No other changes needed - AuthProcessManager auto-discovers all processors
+// No other changes needed - AuthProcessManager's constructor injects List<AuthProcessor> and
+// indexes it into a Map<String, AuthProcessor> keyed by getAuthType().getCode(). Its
+// authenticate(exchange, config) also returns Mono<Void>, not Mono<Boolean>.
 ```
 
 ### 8.2 Adding a New Global Filter
@@ -826,10 +1121,22 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String routeId = exchange.getAttribute(GATEWAY_ROUTE_ATTR);
+        // GATEWAY_ROUTE_ATTR holds a Route object, not a String routeId
+        Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
+        String routeId = (route != null) ? route.getId() : null;
 
-        // Get config from StrategyManager
-        CustomConfig config = strategyManager.getConfig(StrategyType.CUSTOM, routeId);
+        // Strategy types are plain String constants declared on StrategyDefinition
+        // (e.g. TYPE_CIRCUIT_BREAKER = "CIRCUIT_BREAKER"). There is NO StrategyType enum,
+        // so `StrategyType.CUSTOM` will not compile - add a TYPE_CUSTOM constant instead.
+        //
+        // Real StrategyManager API (my-gateway/.../manager/StrategyManager.java):
+        //   StrategyDefinition   getStrategy(String strategyId)                        // :202
+        //   StrategyDefinition   getStrategyForRoute(String routeId, String type)      // :252
+        //   Map<String,Object>   getConfig(String routeId, String type)                // :365
+        //   <T> T                getConfig(String routeId, String type, Class<T> cls)  // :398
+        // Note the argument order is (routeId, strategyType) - routeId first.
+        CustomConfig config = strategyManager.getConfig(
+                routeId, StrategyDefinition.TYPE_CUSTOM, CustomConfig.class);
 
         if (config != null && config.isEnabled()) {
             // Apply filter logic
@@ -840,6 +1147,8 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
+        // Declare the value as a new constant in FilterOrderConstants rather than
+        // hardcoding a magic number here - see section 3 for why the ranges matter.
         return -50;  // Define execution order
     }
 }
@@ -851,7 +1160,7 @@ public class CustomGlobalFilter implements GlobalFilter, Ordered {
 
 | Optimization | Technique |
 |--------------|-----------|
-| **Cache TTL** | 5-minute TTL for route/service config, refresh on change |
+| **Config Cache** | No TTL on route/service/strategy config caches — they are `ConcurrentHashMap`s updated by config-center listeners (`ServiceManager`'s javadoc: "Listener-driven updates - no TTL needed"), backed by a 60-second reconciliation sweep. TTLs live elsewhere: the *response* cache is Caffeine with `expireAfterWrite` (`CacheGlobalFilter`), and `JwtValidationCache` is a `ConcurrentHashMap` of exp-based entries with scheduled cleanup. |
 | **Async Publish** | Config publish to Nacos is async, doesn't block API response |
 | **Connection Pool** | Netty connection pool with elastic sizing |
 | **Reactive** | Non-blocking I/O throughout the filter chain |
@@ -1299,8 +1608,17 @@ Unified configuration management for all gateway strategies:
   +-------------------------------------------------------------+
   |                    Strategy Types                            |
   |                                                              |
-  |  AUTH | IP_FILTER | RATE_LIMITER | CIRCUIT_BREAKER | TIMEOUT|
-  |  RETRY | CORS | CACHE | ACCESS_LOG | HEADER_OP | API_VERSION|
+  |  Traffic & resilience (11):                                 |
+  |    RATE_LIMITER  IP_FILTER  TIMEOUT  CIRCUIT_BREAKER  AUTH  |
+  |    RETRY  CORS  HEADER_OP  CACHE  SECURITY  API_VERSION     |
+  |                                                             |
+  |  Request/response processing (5):                           |
+  |    MULTI_DIM_RATE_LIMITER  REQUEST_TRANSFORM                |
+  |    RESPONSE_TRANSFORM  REQUEST_VALIDATION  MOCK_RESPONSE    |
+  |                                                             |
+  |  AI gateway (6):                                            |
+  |    AI_PROXY  AI_PROMPT_TEMPLATE  AI_SECURITY                |
+  |    AI_SEMANTIC_CACHE  AI_CONTEXT_LIMIT  AI_STATISTICS       |
   +-------------------------------------------------------------+
                               |
                               v
@@ -1313,6 +1631,13 @@ Unified configuration management for all gateway strategies:
 
   Priority: ROUTE_BOUND > GLOBAL
 ```
+
+> **Source of truth for the type list:** the 22 `TYPE_*` `String` constants declared in
+> `my-gateway/src/main/java/com/leoli/gateway/model/StrategyDefinition.java:28-63`. There is **no
+> `StrategyType` enum** — a strategy type is just a String. Two further names appear only in the
+> admin seed data (`gateway-admin/src/main/resources/sql/seed/strategy_types.sql`): `ACCESS_LOG`
+> and `TOKEN_RATE_LIMITER`. They have no `StrategyDefinition` constant and no gateway filter reads
+> them, so do not treat them as usable strategy types.
 
 ### 10.3 Retry Mechanism
 
@@ -1562,12 +1887,25 @@ This API Gateway architecture demonstrates:
 
    AiAnalysisService
          |
-         +-- OpenAI (GPT-4, GPT-3.5)
-         +-- Anthropic (Claude 3)
-         +-- Qwen (qwen-plus, qwen-turbo)
-         +-- DeepSeek (deepseek-chat)
-         +-- Ollama (local models)
+         +-- OPENAI  (api.openai.com/v1)
+         |     models: gpt-4o, gpt-4-turbo, gpt-4
+         +-- GEMINI  (generativelanguage.googleapis.com/v1beta)
+         |     models: gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
+         +-- CLAUDE  (api.anthropic.com/v1)
+         |     models: claude-3.5-sonnet, claude-3-opus, claude-3-haiku
+         +-- BAILIAN (dashscope.aliyuncs.com/compatible-mode/v1)
+               models: qwen3.8-max, qwen3.7-plus, qwen3.8-flash, qwen3-coder-next,
+                       deepseek-v4-pro, deepseek-v4.1-flash, kimi-k3, kimi-k2.7-code,
+                       glm-5.3, glm-5.2
 ```
+
+> Exactly **four** providers are built in — `OPENAI`, `GEMINI`, `CLAUDE` and `BAILIAN` — declared in
+> `DEFAULT_BASE_URLS` / `PROVIDER_MODELS` at
+> `gateway-admin/src/main/java/com/leoli/gateway/admin/service/AiAnalysisService.java:107-131`.
+> There is **no DeepSeek provider and no Ollama / local-model provider**: DeepSeek, Kimi and GLM are
+> reached *through* Alibaba's BAILIAN (DashScope OpenAI-compatible) endpoint, and `ollama` does not
+> appear anywhere in the repository. Earlier revisions of this diagram listed GPT-3.5, Claude 3,
+> qwen-plus/qwen-turbo, deepseek-chat and Ollama; that provider/model set no longer matches the code.
 
 ---
 
@@ -1649,7 +1987,7 @@ This API Gateway architecture demonstrates:
             v
    +-------------------+
    | Apply to K8s      |
-   | via Fabric8 SDK   |
+   | via K8s Java SDK  |
    +--------+----------+
             |
             v
@@ -1673,7 +2011,9 @@ The reconcile task ensures consistency between database and Nacos configuration.
 |                    RECONCILIATION TASK                            |
 +------------------------------------------------------------------+
 
-   Scheduled (Every 5 minutes)
+   Scheduled (every 60 seconds by default, via gateway.admin.reconcile.interval-ms --
+   see ReconcileScheduler.java:38 @Scheduled(fixedDelayString = "${...:60000}").
+   ShedLock's lockAtMostFor is 5 minutes, which is NOT the run interval.)
           |
           v
    +-------------------+
@@ -1696,6 +2036,12 @@ The reconcile task ensures consistency between database and Nacos configuration.
              (Repair)
 ```
 
+> The diagram above shows one task; `ReconcileScheduler.reconcileAll()` actually iterates over **all
+> 7** registered `ReconcileTask` beans — Route, Service, Strategy, AuthPolicy, AccessLogConfig,
+> Certificate and Namespace. The 5-minute figure that used to appear here is ShedLock's
+> `lockAtMostFor` (zombie-lock timeout), not the schedule interval, and this document already states
+> 60 seconds in sections 5.2, 11, 22 and 23.3.
+
 ---
 
 ## 19. Testing Architecture
@@ -1704,8 +2050,21 @@ The reconcile task ensures consistency between database and Nacos configuration.
 
 | Module | Tests | Coverage Areas |
 |--------|-------|----------------|
-| **my-gateway** | 332 | Filters, Auth, Rate Limiting, Strategies |
-| **gateway-admin** | 229 | API, Services, Repository, Integration |
+| **my-gateway** | 1018 (2 skipped) | Filters, Auth, Rate Limiting, Strategies |
+| **gateway-admin** | 564 (80 errors) | API, Services, Repository, Integration |
+| **license-client** | 83 | Offline RSA license verification |
+| **gateway-trace-starter** | 160 | Trace context propagation / async reporting |
+| **license-server** | 40 | License issuing API |
+| **gateway-moderation-spi** | 0 | Contract-only module (one SPI interface), no tests yet |
+| **seckill-core-engine** | 217 (4 errors, 4 skipped) | Seckill flow, Redis Lua rate limiting |
+| **Total** | **2082** (0 failures, 84 errors, 6 skipped) | — |
+
+> Counts are the Surefire **aggregate** lines from `mvn -o -B -ntp -fae test` (do not sum the
+> per-class `*.txt` files — `@Nested` classes make that total come out low). The 84 errors are all
+> missing local infrastructure, not code defects: 80 in `gateway-admin` are the `entityManagerFactory`
+> cascade from having no MySQL on `localhost:3306`, and the 4 in `seckill-core-engine` need Redis
+> (`:30379`) and Docker. Earlier revisions of this table said 332 / 229 (561 total); that is several
+> generations out of date.
 
 ### 19.2 Test Structure
 
@@ -1755,7 +2114,8 @@ The gateway implements several performance optimizations:
 
 ## 21. Feature Documentation Index
 
-All feature documentation is organized by category:
+All feature documentation is organized by category (36 documents under `docs/features/` at commit
+`b45d40a`; re-count with `ls docs/features/*.md | wc -l`):
 
 ### Core Gateway Features
 
@@ -1807,6 +2167,9 @@ All feature documentation is organized by category:
 | **Monitoring Alerts** | Prometheus metrics and alerts | [monitoring-alerts.md](features/monitoring-alerts.md) |
 | **Filter Chain Analysis** | Filter execution statistics | [filter-chain-analysis.md](features/filter-chain-analysis.md) |
 | **Traffic Topology** | Real-time traffic visualization | [traffic-topology.md](features/traffic-topology.md) |
+| **Access Log** | Access log configuration, collection and query | [access-log.md](features/access-log.md) |
+| **Historical Comparison** | Period-over-period metric/filter/config comparison | [historical-comparison.md](features/historical-comparison.md) |
+| **Performance Optimization** | JWT cache, shadow quota, non-blocking locks, log rotation | [performance-optimization.md](features/performance-optimization.md) |
 
 ### Debugging & Analysis
 
@@ -1814,6 +2177,7 @@ All feature documentation is organized by category:
 |---------|-------------|---------------|
 | **Request Replay** | Replay captured requests for debugging | [request-replay.md](features/request-replay.md) |
 | **System Diagnostic** | Comprehensive health checks | [system-diagnostic.md](features/system-diagnostic.md) |
+| **Route Debug** | Per-route debug page that pre-fills a request from the route's Path/Method/Host/Header predicates and streams the response | [route-debug.md](features/route-debug.md) |
 | **Stress Test** | Load testing tool | [stress-test.md](features/stress-test.md) |
 
 ### AI Integration
@@ -1822,6 +2186,10 @@ All feature documentation is organized by category:
 |---------|-------------|---------------|
 | **AI Copilot** | Intelligent gateway assistance | [ai-copilot.md](features/ai-copilot.md) |
 | **AI Analysis** | AI-powered metrics analysis | [ai-analysis.md](features/ai-analysis.md) |
+| **AI Token Quota Ledger** | Per-request UUID ledger for pre-deduction, settlement, refund and local degradation | [ai-quota-ledger.md](features/ai-quota-ledger.md) |
+| **AI Usage Delivery** | Durable local outbox with `eventId` for reliable usage reporting to the admin | [ai-usage-delivery.md](features/ai-usage-delivery.md) |
+| **AI Usage Reconciliation** | Reconcile/compensate `UNKNOWN`/`ESTIMATED` usage and `PENDING`/`FAILED` settlements | [ai-usage-reconciliation.md](features/ai-usage-reconciliation.md) |
+| **AI Content Security** | `AI_SECURITY` in-flight text moderation (word lists, regex, PII handling, optional external moderators via the `gateway-moderation-spi` contract) | [ai-content-security.md](features/ai-content-security.md) |
 
 ### Administration
 
@@ -1847,8 +2215,8 @@ This API Gateway architecture demonstrates:
 - **Namespace isolation** for multi-tenancy support
 - **Heartbeat monitoring** for real-time instance health tracking
 - **Performance optimizations** including JWT cache, shadow quota, non-blocking locks
-- **Comprehensive testing** with 561 tests ensuring reliability
-- **28 feature modules** documented in dedicated feature documentation
+- **Comprehensive testing** with 2082 tests across the six test-bearing Maven modules (see section 19.1) ensuring reliability
+- **36 feature documents** under `docs/features/`, indexed in section 21
 
 ---
 
