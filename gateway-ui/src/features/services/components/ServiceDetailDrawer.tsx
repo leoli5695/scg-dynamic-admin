@@ -7,11 +7,12 @@ import {
 import { message, modal } from '../../../utils/antdStatic';
 import {
   ApiOutlined, CloseOutlined, CloudServerOutlined, CopyOutlined,
-  DeleteOutlined, EditOutlined,
+  DeleteOutlined, EditOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { ServiceDefinition } from '../../../types/service';
 import { getLoadBalancerLabelKey, getServiceStatus } from '../utils';
+import AiServiceConnection from './AiServiceConnection';
 
 const { Text, Title } = Typography;
 
@@ -26,6 +27,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
   service, onClose, onEdit, onDelete,
 }) => {
   const { t } = useTranslation();
+  const isAi = service.category === 'AI';
   const status = getServiceStatus(service);
 
   const handleCopy = () => {
@@ -61,7 +63,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
         {/* Header */}
         <div className="drawer-header">
           <div className="drawer-header-left">
-            <div className="drawer-icon"><CloudServerOutlined /></div>
+            <div className="drawer-icon">{isAi ? <RobotOutlined /> : <CloudServerOutlined />}</div>
             <div className="drawer-title-wrapper">
               <Title level={4} className="drawer-title">{service.name}</Title>
               <div className="drawer-id-row">
@@ -89,7 +91,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
         {/* Status bar */}
         <div className="drawer-status-bar">
           <Badge status={status.color} text={t(status.textKey, status.params)} />
-          <Tag color="blue">{t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted'))}</Tag>
+          {!isAi && <Tag color="blue">{t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted'))}</Tag>}
         </div>
 
         {/* Description */}
@@ -100,6 +102,12 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
         )}
 
         {/* Instances */}
+        {isAi ? (
+          <div className="drawer-section">
+            <div className="section-title"><RobotOutlined /> {t('services.ai_config')}</div>
+            <AiServiceConnection service={service} />
+          </div>
+        ) : (
         <div className="drawer-section">
           <div className="section-title">
             <ApiOutlined />
@@ -144,6 +152,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
             <Empty description={t('services.no_instances_configured')} />
           )}
         </div>
+        )}
 
         {/* Actions */}
         <div className="drawer-actions">

@@ -90,6 +90,7 @@
   "services.api_key_placeholder": "上游大模型 API Key（AES-GCM 加密存储，不回显）",
   "services.api_key_rotate_placeholder": "留空表示不修改",
   "services.base_url": "Base URL 覆盖",
+  "services.ai_default_endpoint": "使用供应商默认地址",
   "services.base_url_placeholder": "可选：中转 / 自托管 OpenAI 兼容地址",
   "services.base_url_helper": "留空则使用 Provider 内置官方地址",
   "services.credential_configured": "已配置密钥",

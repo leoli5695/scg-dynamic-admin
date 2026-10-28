@@ -164,6 +164,51 @@ class TokenUsageCollectorFilterSseTest {
     }
 
     @Test
+    void finalUsageSurvivesFullBufferWithIncrementalTrackingDisabled() throws Exception {
+        TokenQuotaConfig config = new TokenQuotaConfig();
+        config.setEnabled(true);
+        config.setSseMaxChunks(1);
+        config.setSseMaxBufferSize(128);
+        config.setSseIncrementalTracking(false);
+        when(strategyManager.convertStrategyConfig(anyString(), eq("TOKEN_RATE_LIMITER"), any(),
+                eq(TokenQuotaConfig.class))).thenReturn(config);
+        var exchange = runStream(List.of(
+                "data: {\"usage\":{\"prompt_tokens\":24,\"completion_tokens\":1,\"total_tokens\":25}}\n\n",
+                USAGE_CHUNK, DONE_CHUNK));
+        var result = com.leoli.gateway.ai.AiUsageResult.completion(exchange).get(5, java.util.concurrent.TimeUnit.SECONDS);
+        org.junit.jupiter.api.Assertions.assertEquals(74L, result.totalTokens());
+        org.junit.jupiter.api.Assertions.assertEquals(24L, result.inputTokens());
+        org.junit.jupiter.api.Assertions.assertEquals(50L, result.outputTokens());
+        org.junit.jupiter.api.Assertions.assertFalse(result.interrupted());
+        assertCharged(74L);
+    }
+
+    @Test
+    void nativeAnthropicTerminalEventDoesNotTriggerInterruptionRefund() throws Exception {
+        TokenQuotaConfig config = new TokenQuotaConfig();
+        config.setEnabled(true);
+        config.setSsePartialBillingOnInterrupt(false);
+        when(strategyManager.convertStrategyConfig(anyString(), eq("TOKEN_RATE_LIMITER"), any(),
+                eq(TokenQuotaConfig.class))).thenReturn(config);
+        var exchange = runStream(List.of(
+                "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":24,\"output_tokens\":1}}}\n\n",
+                "event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":50}}\n\n",
+                "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"));
+        var result = com.leoli.gateway.ai.AiUsageResult.completion(exchange).get(5, java.util.concurrent.TimeUnit.SECONDS);
+        org.junit.jupiter.api.Assertions.assertEquals(74L, result.totalTokens());
+        org.junit.jupiter.api.Assertions.assertFalse(result.interrupted());
+        assertCharged(74L);
+    }
+
+    @Test
+    void doneMarkerInsideContentDoesNotHideInterruptedStream() throws Exception {
+        var exchange = runStream(List.of(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"[DONE]\"}}]}\n\n", USAGE_CHUNK));
+        var result = com.leoli.gateway.ai.AiUsageResult.completion(exchange).get(5, java.util.concurrent.TimeUnit.SECONDS);
+        org.junit.jupiter.api.Assertions.assertTrue(result.interrupted());
+    }
+
+    @Test
     @DisplayName("[DONE] split across two DataBuffers still settles the real usage")
     void settlesRealUsageWhenDoneMarkerIsSplit() {
         runStream(List.of(CONTENT_CHUNK, FINISH_CHUNK, USAGE_CHUNK, "data: [DO", "NE]\n\n"));

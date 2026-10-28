@@ -90,6 +90,7 @@
   "services.api_key_placeholder": "Upstream LLM API key (AES-GCM encrypted, never echoed)",
   "services.api_key_rotate_placeholder": "Leave blank to keep unchanged",
   "services.base_url": "Base URL Override",
+  "services.ai_default_endpoint": "Provider default endpoint",
   "services.base_url_placeholder": "Optional: relay / self-hosted OpenAI-compatible URL",
   "services.base_url_helper": "Leave blank to use the provider's built-in official URL",
   "services.credential_configured": "Key configured",

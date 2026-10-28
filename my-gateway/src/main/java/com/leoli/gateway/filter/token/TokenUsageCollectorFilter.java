@@ -310,6 +310,13 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
     private void handleSseChunk(String chunk, MemoryAwareBuffer buffer,
                                  AtomicInteger totalTokens, AtomicInteger bufferedChars,
                                  TokenQuotaConfig config) {
+        if (buffer.getSseUsage() == null) {
+            buffer.setSseUsage(tokenUsageParser.new SseUsageAccumulator());
+        }
+        // Always retain the complete usage snapshot, even when diagnostic buffering
+        // is full or incremental tracking is disabled.
+        buffer.getSseUsage().accept(chunk);
+        totalTokens.set(buffer.getSseUsage().usage().getTotalTokens());
         // Check memory limit
         int currentSize = bufferedChars.get();
         int maxSize = config.getSseMaxBufferSize();
@@ -317,7 +324,6 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         if (currentSize >= maxSize) {
             // Buffer full, only parse for usage (don't store)
             log.debug("SSE buffer full ({} bytes), parsing without storing", currentSize);
-            parseIncrementalUsage(chunk, totalTokens, config);
             return;
         }
 
@@ -327,14 +333,8 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             if (buffer.getSseChunks().size() < config.getSseMaxChunks()) {
                 buffer.addSseChunk(chunk);
                 bufferedChars.addAndGet(chunk.length());
-            } else {
-                // Chunk limit reached, only parse
-                parseIncrementalUsage(chunk, totalTokens, config);
             }
         }
-
-        // Always try to parse incremental usage
-        parseIncrementalUsage(chunk, totalTokens, config);
     }
 
     /**
@@ -397,23 +397,6 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Parse incremental usage from SSE chunk.
-     */
-    private void parseIncrementalUsage(String chunk, AtomicInteger totalTokens, TokenQuotaConfig config) {
-        if (!config.isSseIncrementalTracking()) {
-            return;
-        }
-
-        TokenUsage chunkUsage = tokenUsageParser.parseSseChunk(chunk);
-        if (chunkUsage.hasUsage()) {
-            // Track maximum (handles both cumulative and incremental)
-            if (chunkUsage.getTotalTokens() > totalTokens.get()) {
-                totalTokens.set(chunkUsage.getTotalTokens());
-            }
-        }
-    }
-
-    /**
      * Handle JSON chunk with size limit.
      */
     private void handleJsonChunk(String chunk, MemoryAwareBuffer buffer, AtomicInteger bufferedChars) {
@@ -439,7 +422,8 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         // as a CANCEL signal - that is a clean finish, NOT an interruption, and must
         // not trigger the min-charge fallback (doing so overbilled every small stream:
         // a 22-token completion was charged the 100-token floor).
-        if (isSse && tokenUsageParser.isSseStreamComplete(buffer.getSseChunks())) {
+        if (isSse && (buffer.getSseUsage() != null ? buffer.getSseUsage().isComplete()
+                : tokenUsageParser.isSseStreamComplete(buffer.getSseChunks()))) {
             return false;
         }
 
@@ -735,6 +719,9 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
      */
     private TokenUsage processSseUsage(TokenQuotaConfig config, MemoryAwareBuffer buffer,
                                         int incrementalTokens, boolean interrupted) {
+        if (buffer.getSseUsage() != null && buffer.getSseUsage().usage().hasUsage()) {
+            return buffer.getSseUsage().usage();
+        }
         List<String> sseChunks = buffer.getSseChunks();
 
         if (sseChunks.isEmpty()) {
@@ -991,6 +978,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
 
         private StringBuilder jsonBody = new StringBuilder();
         private List<String> sseChunks = new ArrayList<>();
+        private TokenUsageParser.SseUsageAccumulator sseUsage;
         private int totalBufferedBytes = 0;
 
         public MemoryAwareBuffer(int maxBufferSize, int maxChunks, int maxJsonSize) {

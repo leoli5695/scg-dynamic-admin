@@ -21,6 +21,67 @@ import static org.junit.jupiter.api.Assertions.*;
  * @author leoli
  */
 class TokenUsageParserTest {
+    @Test
+    void customZeroIsReportedAndInvalidNumbersAreUnknown() {
+        var parser = new TokenUsageParser();
+        var mapping = Map.of("promptTokens", "in", "completionTokens", "out");
+        assertTrue(parser.parseJsonResponse("{\"usage\":{\"in\":0,\"out\":0}}", "CUSTOM", mapping).hasUsage());
+        assertTrue(parser.parseJsonResponse("{\"in\":0,\"out\":0}", "CUSTOM", mapping).hasUsage());
+        for (String count : List.of("-1", "4294967297", "0.5", "\"12\"")) {
+            assertFalse(parser.parseJsonResponse("{\"usage\":{\"in\":" + count + ",\"out\":1}}", "CUSTOM", mapping).hasUsage());
+            assertFalse(parser.parseJsonResponse("{\"usage\":{\"prompt_tokens\":" + count + ",\"completion_tokens\":1}}", "OPENAI", null).hasUsage());
+        }
+        assertFalse(parser.parseJsonResponse("{\"usage\":{\"prompt_tokens\":2147483647,\"completion_tokens\":1}}", "OPENAI", null).hasUsage());
+    }
+
+    @Test
+    void autoDetectionRetainsAnthropicCacheUsage() {
+        var usage = new TokenUsageParser().parseJsonResponse("""
+                {"usage":{"input_tokens":10,"output_tokens":20,"cache_read_input_tokens":100}}
+                """, "AUTO", null);
+        assertEquals(130, usage.getTotalTokens());
+    }
+    @Test
+    void responsesUsageIncludesInputOutputWithoutDoubleCountingDetails() {
+        TokenUsage usage = new TokenUsageParser().parseJsonResponse("""
+                {"usage":{"input_tokens":100,"output_tokens":50,"total_tokens":150,
+                "input_tokens_details":{"cached_tokens":60},"output_tokens_details":{"reasoning_tokens":30}}}
+                """, "OPENAI", null);
+        assertEquals(100, usage.getPromptTokens());
+        assertEquals(50, usage.getCompletionTokens());
+        assertEquals(150, usage.getTotalTokens());
+    }
+
+    @Test
+    void anthropicIncludesCacheReadAndCreationInput() {
+        TokenUsage usage = new TokenUsageParser().parseJsonResponse("""
+                {"usage":{"input_tokens":10,"output_tokens":20,
+                "cache_read_input_tokens":100,"cache_creation_input_tokens":30}}
+                """, "ANTHROPIC", null);
+        assertEquals(140, usage.getPromptTokens());
+        assertEquals(160, usage.getTotalTokens());
+    }
+
+    @Test
+    void nativeAnthropicStreamMergesStartAndCumulativeDeltas() {
+        var usage = new TokenUsageParser().aggregateSseUsage(List.of(
+                "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":10,\"output_tokens\":1,\"cache_read_input_tokens\":100}}}",
+                "event: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":20}}",
+                "data:{\"type\":\"message_delta\",\"usage\":{\"output_tokens\":50}}",
+                "event: message_stop\ndata: {\"type\":\"message_stop\"}"));
+        assertEquals(110, usage.getPromptTokens());
+        assertEquals(50, usage.getCompletionTokens());
+        assertEquals(160, usage.getTotalTokens());
+    }
+
+    @Test
+    void responsesStreamParsesNestedResponseUsageAndTerminalEvent() {
+        var accumulator = new TokenUsageParser().new SseUsageAccumulator();
+        accumulator.accept("event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":10,\"output_tokens\":20,\"total_tokens\":30}}}");
+        assertTrue(accumulator.isComplete());
+        assertEquals(30, accumulator.usage().getTotalTokens());
+        assertEquals(10, accumulator.usage().getPromptTokens());
+    }
 
     private TokenUsageParser parser;
 

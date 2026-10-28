@@ -23,6 +23,10 @@ export interface ServiceStatus {
 
 /** Derive the aggregate status of a service from its instances. */
 export const getServiceStatus = (service: ServiceDefinition): ServiceStatus => {
+  // AI upstreams are configured by provider and credentials, not instance health.
+  if (service.category === 'AI') {
+    return { color: 'default', textKey: 'services.category_ai' };
+  }
   const instances = service.instances || [];
   if (instances.length === 0) {
     return { color: 'default', textKey: 'services.status_no_instances' };

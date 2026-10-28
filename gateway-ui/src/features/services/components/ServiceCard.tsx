@@ -7,11 +7,12 @@ import {
 import { message } from '../../../utils/antdStatic';
 import {
   ApiOutlined, CloudServerOutlined, CopyOutlined, DeleteOutlined,
-  EditOutlined, ExclamationCircleOutlined, EyeOutlined,
+  EditOutlined, ExclamationCircleOutlined, EyeOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { ServiceDefinition } from '../../../types/service';
 import { getLoadBalancerLabelKey, getServiceStatus } from '../utils';
+import AiServiceConnection from './AiServiceConnection';
 
 const { Text } = Typography;
 
@@ -26,6 +27,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
   service, onDetail, onEdit, onDelete,
 }) => {
   const { t } = useTranslation();
+  const isAi = service.category === 'AI';
   const status = useMemo(() => getServiceStatus(service), [service]);
   const instances = useMemo(() => service.instances || [], [service.instances]);
   const instanceCount = instances.length;
@@ -39,11 +41,12 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
   );
 
   const warningMessage = useMemo(() => {
+    if (isAi) return null;
     if (instanceCount === 0) return t('services.no_instances_warning');
     if (enabledInstances.length === 0) return t('services.all_instances_disabled_warning');
     if (healthyEnabled === 0) return t('services.all_instances_down_warning');
     return null;
-  }, [t, instanceCount, enabledInstances.length, healthyEnabled]);
+  }, [t, isAi, instanceCount, enabledInstances.length, healthyEnabled]);
 
   const handleCopyId = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -69,7 +72,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
       )}
       <div className="service-card-header">
         <div className="service-info">
-          <div className="service-icon"><CloudServerOutlined /></div>
+          <div className="service-icon">{isAi ? <RobotOutlined /> : <CloudServerOutlined />}</div>
           <div className="service-details">
             <Text strong className="service-name">{service.name}</Text>
             <div className="service-id-row">
@@ -119,8 +122,13 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
       </div>
       <div className="service-meta">
         <Badge status={status.color} text={t(status.textKey, status.params)} />
-        <Tag className="lb-tag">{t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted'))}</Tag>
+        {!isAi && <Tag className="lb-tag">{t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted'))}</Tag>}
       </div>
+      {isAi ? (
+        <div className="instances-section" style={{ flex: 1 }}>
+          <AiServiceConnection service={service} />
+        </div>
+      ) : (
       <div className="instances-section" style={{ flex: 1 }}>
         <div className="instances-header">
           <Text type="secondary" className="instances-title">
@@ -171,6 +179,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
           </Text>
         )}
       </div>
+      )}
     </Card>
   );
 });
