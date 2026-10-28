@@ -26,6 +26,21 @@ health_url() {
   esac
 }
 
+# Module aliases are short; the on-disk dirs and container names are not.
+dir_for() {
+  case $1 in
+    admin)   echo /opt/gateway-admin ;;
+    gateway) echo /opt/my-gateway ;;
+  esac
+}
+
+container_for() {
+  case $1 in
+    admin)   echo gateway-admin ;;
+    gateway) echo my-gateway ;;
+  esac
+}
+
 log() { echo "$(date '+%F %T') $*"; }
 die() { log "ABORT: $*" >&2; exit 1; }
 
@@ -36,11 +51,13 @@ kind=${1:-}; shift || true
 
 deploy_jar() {
   local mod=$1 src=$2
-  local dir=/opt/$mod
+  local dir; dir=$(dir_for "$mod")
   local jar=$dir/app.jar
+  local ctr; ctr=$(container_for "$mod")
   local bak
   [ -f "$src" ] || die "source jar not found: $src"
   [ "$(head -c2 "$src")" = "PK" ] || die "$src is not a zip/jar"
+  [ -f "$jar" ] || die "no deployed jar at $jar - wrong module name?"
   bak=$jar.bak-$(date +%Y%m%d-%H%M%S)
 
   log "[$mod] backup $jar -> $bak"
@@ -49,8 +66,8 @@ deploy_jar() {
   log "[$mod] install $(basename "$src") ($(stat -c %s "$src") bytes)"
   install -o www -g www -m 644 "$src" "$jar"
 
-  log "[$mod] restart container"
-  docker restart "$mod" >/dev/null
+  log "[$mod] restart container $ctr"
+  docker restart "$ctr" >/dev/null
 
   local jar_epoch started_epoch status i code
   jar_epoch=$(stat -c %Y "$jar")
@@ -63,8 +80,8 @@ deploy_jar() {
   done
   [ "$code" = "200" ] || { rollback_jar "$mod" "$bak"; die "[$mod] health never returned 200"; }
 
-  status=$(docker inspect -f '{{.State.Status}}' "$mod")
-  started_epoch=$(date -d "$(docker inspect -f '{{.State.StartedAt}}' "$mod")" +%s)
+  status=$(docker inspect -f '{{.State.Status}}' "$ctr")
+  started_epoch=$(date -d "$(docker inspect -f '{{.State.StartedAt}}' "$ctr")" +%s)
   [ "$status" = running ] || { rollback_jar "$mod" "$bak"; die "[$mod] container is $status"; }
 
   # The assertion that was missing from every previous deploy.
@@ -79,8 +96,8 @@ deploy_jar() {
 rollback_jar() {
   local mod=$1 bak=$2
   log "[$mod] ROLLBACK to $bak"
-  install -o www -g www -m 644 "$bak" "/opt/$mod/app.jar"
-  docker restart "$mod" >/dev/null || true
+  install -o www -g www -m 644 "$bak" "$(dir_for "$mod")/app.jar"
+  docker restart "$(container_for "$mod")" >/dev/null || true
   sleep 10
   log "[$mod] rolled back, health=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "$(health_url "$mod")" || true)"
 }
