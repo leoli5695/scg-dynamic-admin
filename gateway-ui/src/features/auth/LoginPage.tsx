@@ -109,9 +109,9 @@ const LoginPage: React.FC = () => {
                 <span>GATEWAY</span>
               </div>
               <div className="topology-services">
-                <span>Service A</span>
-                <span>Service B</span>
-                <span>Service C</span>
+                <span>{t('login.topology.microservices')}</span>
+                <span>{t('login.topology.models')}</span>
+                <span>{t('login.topology.apis')}</span>
               </div>
             </div>
             <div className="topology-legend">
@@ -121,16 +121,16 @@ const LoginPage: React.FC = () => {
           </div>
           <div className="login-capabilities">
             <span>
+              <ApiOutlined />
+              {t('login.chip.microservices')}
+            </span>
+            <span>
               <ThunderboltOutlined />
-              {t('login.chip.ha')}
+              {t('login.chip.ai')}
             </span>
             <span>
               <EyeOutlined />
               {t('login.chip.observability')}
-            </span>
-            <span>
-              <SafetyCertificateOutlined />
-              {t('login.chip.security')}
             </span>
           </div>
         </section>
