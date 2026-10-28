@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -192,10 +194,6 @@ public class ServiceService {
     entity.setInstanceId(instanceId);
     entity = serviceRepository.save(entity);
 
-    // 2. Update memory cache
-    serviceCache.put(serviceName, service);
-    log.info("Service cached in memory: {}", serviceName);
-
     // 3. Push to Nacos (per-service format using service_id UUID)
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
 
@@ -206,11 +204,25 @@ public class ServiceService {
     nacosConfig.setLoadBalancer(service.getLoadBalancer());
     nacosConfig.setInstances(service.getInstances());
 
-    configCenterService.publishConfig(serviceDataId, nacosNamespace, nacosConfig);
+    publishServiceOrThrow(serviceDataId, nacosNamespace, nacosConfig);
     log.info("Service pushed to Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
 
     // 4. Rebuild services index for this namespace (not public)
-    rebuildServicesIndex(nacosNamespace);
+    try {
+      rebuildServicesIndex(nacosNamespace);
+    } catch (RuntimeException failure) {
+      // The transaction will roll back the new row; do not leave an unindexed config behind.
+      try {
+        if (!configCenterService.removeConfig(serviceDataId, nacosNamespace)) {
+          log.error("Failed to clean up service config after create failed: {} in {}", serviceDataId, nacosNamespace);
+        }
+      } catch (Exception cleanupFailure) {
+        failure.addSuppressed(cleanupFailure);
+        log.error("Failed to clean up service config after create failed: {}", serviceDataId, cleanupFailure);
+      }
+      throw failure;
+    }
+    cacheAfterCommit(serviceName, service);
 
     log.info("Service created successfully: {} (Database + Cache + Nacos)", serviceName);
     return entity;
@@ -266,10 +278,6 @@ public class ServiceService {
     }
     entity = serviceRepository.save(entity);
 
-    // 2. Update memory cache
-    serviceCache.put(serviceName, service);
-    log.info("Service updated in cache: {}", serviceName);
-
     // 3. Push to Nacos (direct overwrite, no need to remove first)
     // FIX: Don't remove before publish - this can cause data loss if publish fails
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
@@ -284,8 +292,9 @@ public class ServiceService {
     nacosConfig.setLoadBalancer(service.getLoadBalancer());
     nacosConfig.setInstances(service.getInstances());
     
-    configCenterService.publishConfig(serviceDataId, nacosNamespace, nacosConfig);
+    publishServiceOrThrow(serviceDataId, nacosNamespace, nacosConfig);
     log.info("Service updated in Nacos: {} (namespace: {})", serviceDataId, nacosNamespace);
+    cacheAfterCommit(serviceName, service);
 
     log.info("Service updated successfully: {} (Database + Cache + Nacos)", serviceName);
     return entity;
@@ -540,12 +549,34 @@ public class ServiceService {
       // Perform rebuild if needed
       if (needsRebuild) {
         log.info("Rebuilding services index for namespace {} (reason: {})...", nacosNamespace, reason);
-        configCenterService.publishConfig(SERVICES_INDEX, nacosNamespace, serviceIds);
+        if (!configCenterService.publishConfig(SERVICES_INDEX, nacosNamespace, serviceIds)) {
+          throw new IllegalStateException("Failed to publish services index to namespace: " + nacosNamespace);
+        }
         log.info("Services index rebuilt with {} services for namespace {}", serviceIds.size(), nacosNamespace);
       }
       
     } catch (Exception e) {
       log.error("Failed to rebuild services index", e);
+      throw new IllegalStateException("Failed to rebuild services index for namespace: " + nacosNamespace, e);
+    }
+  }
+
+  private void publishServiceOrThrow(String dataId, String namespace, ServiceDefinition service) {
+    if (!configCenterService.publishConfig(dataId, namespace, service)) {
+      throw new IllegalStateException("Failed to publish service config: " + dataId + " (namespace: " + namespace + ")");
+    }
+  }
+
+  private void cacheAfterCommit(String serviceName, ServiceDefinition service) {
+    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+      TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+        @Override
+        public void afterCommit() {
+          serviceCache.put(serviceName, service);
+        }
+      });
+    } else {
+      serviceCache.put(serviceName, service);
     }
   }
 

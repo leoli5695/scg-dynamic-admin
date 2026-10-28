@@ -285,6 +285,8 @@ public class RouteService {
     @Transactional(rollbackFor = Exception.class)
     public RouteEntity createRoute(RouteDefinition route, String instanceId) {
         Span span = tracingHelper.startRouteSpan("create", route.getId());
+        String publishedDataId = null;
+        String publishedNamespace = null;
         try {
             // Generate UUID if not provided
             if (route.getId() == null || route.getId().isEmpty()) {
@@ -319,6 +321,10 @@ public class RouteService {
             // Get Nacos namespace from instance
             String nacosNamespace = getNacosNamespace(instanceId);
 
+            if (nacosNamespace == null || nacosNamespace.isBlank()) {
+                throw new IllegalArgumentException("Route must be associated with a valid gateway instance with a namespace: " + instanceId);
+            }
+
             // Save to database
             // Same rule as updateRouteByRouteId: never persist synthesized plugin filters, so a
             // route duplicated from a GET payload does not start life with them baked in.
@@ -336,6 +342,8 @@ public class RouteService {
                 // Merge plugin bindings before publishing
                 RouteDefinition mergedRoute = mergePluginBindingsToRoute(route, entity.getRouteId());
                 publishRouteOrThrow(routeDataId, nacosNamespace, mergedRoute);
+                publishedDataId = routeDataId;
+                publishedNamespace = nacosNamespace;
                 businessMetrics.recordConfigPublish();
                 businessMetrics.recordConfigPublishDuration(System.currentTimeMillis() - startTime);
                 log.info("Route pushed to Nacos: {} (namespace: {}, filters={})", routeDataId, nacosNamespace,
@@ -358,6 +366,18 @@ public class RouteService {
             log.info("Route created successfully: {}", entity.getRouteId());
             return entity;
         } catch (Exception e) {
+            // A DB rollback cannot undo a config-center write. Clean up the newly-created
+            // config if a later step (index publish / AI projection) failed.
+            if (publishedDataId != null) {
+                try {
+                    if (!configCenterService.removeConfig(publishedDataId, publishedNamespace)) {
+                        log.error("Failed to clean up route config after create failed: {} in {}", publishedDataId, publishedNamespace);
+                    }
+                } catch (Exception cleanupFailure) {
+                    e.addSuppressed(cleanupFailure);
+                    log.error("Failed to clean up route config after create failed: {}", publishedDataId, cleanupFailure);
+                }
+            }
             tracingHelper.error(e);
             throw e;
         } finally {
@@ -707,7 +727,7 @@ public class RouteService {
      * @param routeId the route ID
      * @return route definition with merged plugin filters
      */
-    private RouteDefinition mergePluginBindingsToRoute(RouteDefinition route, String routeId) {
+    public RouteDefinition mergePluginBindingsToRoute(RouteDefinition route, String routeId) {
         return mergePluginBindingsToRoute(route, routeId, routePluginBindingService.getEnabledGlobalBindings());
     }
 
@@ -790,12 +810,15 @@ public class RouteService {
             if (needsRebuild) {
                 log.info("Rebuilding routes index for namespace {} with {} routes",
                     nacosNamespace == null || nacosNamespace.isEmpty() ? "public" : nacosNamespace, routeIds.size());
-                configCenterService.publishConfig(ROUTES_INDEX, nacosNamespace, routeIds);
+                if (!configCenterService.publishConfig(ROUTES_INDEX, nacosNamespace, routeIds)) {
+                    throw new IllegalStateException("Failed to publish routes index to namespace: " + nacosNamespace);
+                }
                 log.info("Routes index rebuilt for namespace {}", 
                     nacosNamespace == null || nacosNamespace.isEmpty() ? "public" : nacosNamespace);
             }
         } catch (Exception e) {
             log.error("Failed to rebuild routes index", e);
+            throw new IllegalStateException("Failed to rebuild routes index for namespace: " + nacosNamespace, e);
         }
     }
 

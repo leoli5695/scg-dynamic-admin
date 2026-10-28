@@ -7,6 +7,7 @@ import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.service.AlertService;
+import com.leoli.gateway.admin.service.RouteService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,7 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
     private final ConfigCenterService configCenterService;
     private final ObjectMapper objectMapper;
     private final AlertService alertService;
+    private final RouteService routeService;
 
     @Override
     public String getType() {
@@ -165,17 +167,20 @@ public class RouteReconcileTask implements ReconcileTask<RouteEntity> {
      * definition that at least carries the id and name.
      */
     private RouteDefinition toDefinition(RouteEntity entity) {
+        RouteDefinition route = null;
         if (entity.getMetadata() != null && !entity.getMetadata().isEmpty()) {
             try {
-                return objectMapper.readValue(entity.getMetadata(), RouteDefinition.class);
+                route = objectMapper.readValue(entity.getMetadata(), RouteDefinition.class);
             } catch (Exception e) {
                 log.warn("Failed to deserialize route config for {}, using fallback", entity.getRouteId(), e);
             }
         }
-        RouteDefinition route = new RouteDefinition();
-        route.setId(entity.getRouteId());
-        route.setRouteName(entity.getRouteName());
-        return route;
+        if (route == null) {
+            route = new RouteDefinition();
+            route.setId(entity.getRouteId());
+            route.setRouteName(entity.getRouteName());
+        }
+        return routeService.mergePluginBindingsToRoute(route, entity.getRouteId());
     }
 
     /**

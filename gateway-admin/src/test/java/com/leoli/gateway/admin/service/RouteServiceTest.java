@@ -219,13 +219,15 @@ class RouteServiceTest {
             RouteEntity entity = createRouteEntity(ROUTE_ID, ROUTE_NAME);
             
             when(routeRepository.existsById(anyString())).thenReturn(false);
-            when(routeRepository.existsByRouteName(ROUTE_NAME)).thenReturn(false);
+            when(routeRepository.existsByRouteNameAndInstanceId(ROUTE_NAME, INSTANCE_ID)).thenReturn(false);
+            when(gatewayInstanceRepository.findByInstanceId(INSTANCE_ID))
+                    .thenReturn(Optional.of(createGatewayInstance(INSTANCE_ID, NACOS_NAMESPACE)));
             when(routeConverter.toEntity(any())).thenReturn(entity);
             when(routeRepository.save(any())).thenReturn(entity);
             when(configCenterService.publishConfig(anyString(), any(), any())).thenReturn(true);
 
             // When
-            RouteEntity result = routeService.createRoute(definition);
+            RouteEntity result = routeService.createRoute(definition, INSTANCE_ID);
 
             // Then
             assertNotNull(result);
@@ -290,7 +292,9 @@ class RouteServiceTest {
             RouteEntity entity = createRouteEntity(ROUTE_ID, ROUTE_NAME);
 
             when(routeRepository.existsById(anyString())).thenReturn(false);
-            when(routeRepository.existsByRouteName(ROUTE_NAME)).thenReturn(false);
+            when(routeRepository.existsByRouteNameAndInstanceId(ROUTE_NAME, INSTANCE_ID)).thenReturn(false);
+            when(gatewayInstanceRepository.findByInstanceId(INSTANCE_ID))
+                    .thenReturn(Optional.of(createGatewayInstance(INSTANCE_ID, NACOS_NAMESPACE)));
             when(routeConverter.toEntity(any())).thenReturn(entity);
             when(routeRepository.save(any())).thenReturn(entity);
             // publishConfig swallows Nacos errors and returns false instead of throwing.
@@ -300,8 +304,40 @@ class RouteServiceTest {
             when(configCenterService.publishConfig(anyString(), any(), any())).thenReturn(false);
 
             // When & Then
-            assertThrows(IllegalStateException.class, () -> routeService.createRoute(definition));
+            assertThrows(IllegalStateException.class, () -> routeService.createRoute(definition, INSTANCE_ID));
             verify(businessMetrics).recordConfigPublishError();
+        }
+
+        @Test
+        void shouldRejectMissingUnknownOrBlankNamespaceBeforeSaving() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> routeService.createRoute(createRouteDefinition(ROUTE_ID)));
+            assertThrows(IllegalArgumentException.class,
+                    () -> routeService.createRoute(createRouteDefinition(ROUTE_ID), "unknown"));
+            when(gatewayInstanceRepository.findByInstanceId(INSTANCE_ID))
+                    .thenReturn(Optional.of(createGatewayInstance(INSTANCE_ID, "  ")));
+            assertThrows(IllegalArgumentException.class,
+                    () -> routeService.createRoute(createRouteDefinition(ROUTE_ID), INSTANCE_ID));
+            verify(routeRepository, never()).save(any());
+            verifyNoInteractions(configCenterService);
+        }
+
+        @Test
+        void shouldReportIndexPublishFailure() {
+            RouteDefinition definition = createRouteDefinition(ROUTE_ID);
+            RouteEntity entity = createRouteEntity(ROUTE_ID, ROUTE_NAME);
+            GatewayInstanceEntity instance = createGatewayInstance(INSTANCE_ID, NACOS_NAMESPACE);
+            when(gatewayInstanceRepository.findByInstanceId(INSTANCE_ID)).thenReturn(Optional.of(instance));
+            when(routeConverter.toEntity(any())).thenReturn(entity);
+            when(routeRepository.save(any())).thenReturn(entity);
+            when(routeRepository.findByEnabledTrue()).thenReturn(List.of(entity));
+            when(gatewayInstanceRepository.findByInstanceIdIn(any())).thenReturn(List.of(instance));
+            when(configCenterService.publishConfig(eq("config.gateway.route-" + ROUTE_ID), eq(NACOS_NAMESPACE), any()))
+                    .thenReturn(true);
+            assertThrows(IllegalStateException.class, () -> routeService.createRoute(definition, INSTANCE_ID));
+            verify(configCenterService).publishConfig("config.gateway.metadata.routes-index", NACOS_NAMESPACE, List.of(ROUTE_ID));
+            verify(configCenterService).removeConfig("config.gateway.route-" + ROUTE_ID, NACOS_NAMESPACE);
+            verify(aiRouteProjector, never()).syncProxyStrategy(any(), anyString(), any());
         }
     }
 
@@ -405,6 +441,7 @@ class RouteServiceTest {
             RouteEntity entity = createRouteEntity(ROUTE_ID, ROUTE_NAME);
             when(routeRepository.findById(ROUTE_ID)).thenReturn(Optional.of(entity));
             when(configCenterService.removeConfig(anyString(), any())).thenReturn(true);
+            when(configCenterService.publishConfig(eq("config.gateway.metadata.routes-index"), any(), any())).thenReturn(true);
 
             // When
             routeService.deleteRouteByRouteId(ROUTE_ID);
@@ -509,6 +546,7 @@ class RouteServiceTest {
             when(routeRepository.findById(ROUTE_ID)).thenReturn(Optional.of(entity));
             when(routeRepository.save(any())).thenReturn(entity);
             when(configCenterService.removeConfig(anyString(), any())).thenReturn(true);
+            when(configCenterService.publishConfig(eq("config.gateway.metadata.routes-index"), any(), any())).thenReturn(true);
 
             // When
             routeService.disableRouteByRouteId(ROUTE_ID);

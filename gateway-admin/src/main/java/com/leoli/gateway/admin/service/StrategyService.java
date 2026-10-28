@@ -254,9 +254,8 @@ public class StrategyService {
      * Update strategies index for all gateway namespaces.
      */
     private void updateAllStrategiesIndexes(List<String> namespaces) {
-        List<String> allEnabledStrategyIds = getAllStrategyIds();
         for (String namespace : namespaces) {
-            updateStrategiesIndex(namespace, allEnabledStrategyIds);
+            updateStrategiesIndex(namespace, getEnabledStrategyIdsForNamespace(namespace));
         }
     }
 
@@ -888,7 +887,8 @@ public class StrategyService {
             log.info("Deleted strategy {} for route {}", entity.getStrategyName(), routeId);
         }
         if (!entities.isEmpty()) {
-            updateStrategiesIndex(getAllStrategyIds());
+            strategyRepository.flush();
+            updateAllStrategiesIndexes(getAllGatewayNamespaces());
         }
     }
 
@@ -906,14 +906,15 @@ public class StrategyService {
      * Get enabled strategy IDs for a specific instance.
      */
     private List<String> getEnabledStrategyIds(String instanceId) {
-        List<StrategyEntity> entities;
-        if (instanceId == null || instanceId.isEmpty()) {
-            entities = strategyRepository.findByEnabledTrue();
-        } else {
-            entities = strategyRepository.findByInstanceIdAndEnabledTrue(instanceId);
-        }
-        return entities.stream()
+        return getEnabledStrategyIdsForNamespace(getNacosNamespace(instanceId));
+    }
+
+    private List<String> getEnabledStrategyIdsForNamespace(String namespace) {
+        return strategyRepository.findByEnabledTrue().stream()
+                .filter(entity -> isGlobalStrategyEntity(entity)
+                        || (namespace != null && namespace.equals(getNacosNamespace(entity.getInstanceId()))))
                 .map(StrategyEntity::getStrategyId)
+                .distinct()
                 .collect(Collectors.toList());
     }
 
