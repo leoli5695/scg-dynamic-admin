@@ -1,5 +1,6 @@
 {
   "topology.title": "流量拓扑",
+  "topology.canvas_hint": "节点较多时可在图内滚动查看；点击节点聚焦关联链路。",
   "topology.select_instance": "请选择一个实例",
   "topology.last_15m": "最近15分钟",
   "topology.last_30m": "最近30分钟",

@@ -3,7 +3,7 @@
  * flow (clients → gateway → routes → services) with focus mode, search,
  * right-click navigation and 30s auto refresh.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert, Button, Card, Col, Empty, Input, Row, Select, Space, Spin,
   Statistic, Switch, Tooltip, Typography
@@ -18,7 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { getTopology } from '../../api/topology';
 import type { TopologyGraph, TopologyNode } from '../../types/topology';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
-import { buildChartOption } from './chartOption';
+import { buildChartOption, filterTopology, getTopologyChartHeight } from './chartOption';
 import './topology.css';
 
 const { Title, Text } = Typography;
@@ -71,7 +71,13 @@ const TrafficTopologyPage: React.FC = () => {
 
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
-  const resizeHandler = useRef<(() => void) | null>(null);
+  const chartViewportRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(1100);
+  const filters = useMemo(() => ({
+    showDisabledRoutes, showOnlyActiveRoutes, searchKeyword, selectedNodeId,
+  }), [showDisabledRoutes, showOnlyActiveRoutes, searchKeyword, selectedNodeId]);
+  const chartHeight = useMemo(() => topology
+    ? getTopologyChartHeight(filterTopology(topology, filters)) : 500, [topology, filters]);
 
   const loadTopology = useCallback(async () => {
     setLoading(true);
@@ -107,8 +113,11 @@ const TrafficTopologyPage: React.FC = () => {
 
     chartInstance.current = echarts.init(chartRef.current);
 
-    resizeHandler.current = () => chartInstance.current?.resize();
-    window.addEventListener('resize', resizeHandler.current);
+    const observer = new ResizeObserver(() => {
+      setChartWidth(Math.max(1000, chartViewportRef.current?.clientWidth || 1000));
+      chartInstance.current?.resize();
+    });
+    if (chartViewportRef.current) observer.observe(chartViewportRef.current);
 
     // Node click toggles focus mode; any click closes the context menu
     chartInstance.current.on('click', (params) => {
@@ -152,9 +161,7 @@ const TrafficTopologyPage: React.FC = () => {
     });
 
     return () => {
-      if (resizeHandler.current) {
-        window.removeEventListener('resize', resizeHandler.current);
-      }
+      observer.disconnect();
       if (chartInstance.current) {
         chartInstance.current.dispose();
         chartInstance.current = null;
@@ -164,17 +171,15 @@ const TrafficTopologyPage: React.FC = () => {
 
   // Re-render the chart when data or any filter changes
   useEffect(() => {
-    if (!chartInstance.current || !topology || (topology.nodes?.length || 0) === 0) return;
-    const option = buildChartOption(topology, {
-      showDisabledRoutes,
-      showOnlyActiveRoutes,
-      searchKeyword,
-      selectedNodeId,
-    });
+    if (!chartInstance.current || !topology) return;
+    chartInstance.current.resize();
+    const option = buildChartOption(topology, filters, chartWidth);
     if (option) {
       chartInstance.current.setOption(option, { notMerge: true });
+    } else {
+      chartInstance.current.clear();
     }
-  }, [topology, showDisabledRoutes, showOnlyActiveRoutes, searchKeyword, selectedNodeId]);
+  }, [topology, filters, chartWidth, chartHeight]);
 
   const navigateToRouteDetail = (routeId: string) => {
     setContextMenuNode(null);
@@ -437,6 +442,9 @@ const TrafficTopologyPage: React.FC = () => {
         style={{ background: 'rgba(0,0,0,0.2)', minHeight: 500, position: 'relative' }}
         styles={{ body: { padding: 0, position: 'relative' } }}
       >
+        <div className="topology-chart-hint">
+          <Text type="secondary">{t('topology.canvas_hint')}</Text>
+        </div>
         {loading && (
           <div style={{
             position: 'absolute',
@@ -458,14 +466,16 @@ const TrafficTopologyPage: React.FC = () => {
             </div>
           </div>
         )}
-        <div
-          ref={chartRef}
-          style={{ width: '100%', height: 500, position: 'relative' }}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        />
+        <div ref={chartViewportRef} className="topology-chart-viewport">
+          <div
+            ref={chartRef}
+            style={{ width: chartWidth, height: chartHeight, position: 'relative' }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          />
+        </div>
         {/* Context menu rendered at the mouse position */}
         {contextMenuNode && (
           <div

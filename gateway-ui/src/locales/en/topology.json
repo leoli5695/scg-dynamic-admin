@@ -1,5 +1,6 @@
 {
   "topology.title": "Traffic Topology",
+  "topology.canvas_hint": "Scroll within the chart to see more nodes; click a node to focus its connections.",
   "topology.select_instance": "Please select an instance",
   "topology.last_15m": "Last 15m",
   "topology.last_30m": "Last 30m",

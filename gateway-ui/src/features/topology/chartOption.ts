@@ -357,12 +357,10 @@ function formatEdgeTooltip(edge: TopologyEdge): string {
 
 /* ------------------------------ Option builder ------------------------------ */
 
-export function buildChartOption(
+export function filterTopology(
   data: TopologyGraph,
   filters: ChartFilterOptions,
-): echarts.EChartsOption | null {
-  if (!data || (data.nodes?.length || 0) === 0) return null;
-
+): TopologyGraph {
   const { showDisabledRoutes, showOnlyActiveRoutes, searchKeyword, selectedNodeId } = filters;
   const gatewayNode = data.nodes.find((n) => n.type === 'gateway');
   const gatewayId = gatewayNode?.id;
@@ -401,68 +399,65 @@ export function buildChartOption(
   if (searchKeyword.trim()) {
     const keyword = searchKeyword.trim().toLowerCase();
     filteredNodes = filteredNodes.filter((n) => n.name.toLowerCase().includes(keyword));
-    filteredEdges = filteredEdges.filter((e) => filteredNodes.some((n) => n.id === e.source)
-      && filteredNodes.some((n) => n.id === e.target));
   }
 
   // Focus filter: only related nodes (gateway always kept)
   if (selectedNodeId) {
     const relatedNodeIds = getRelatedNodes(selectedNodeId);
     filteredNodes = filteredNodes.filter((n) => relatedNodeIds.has(n.id));
-    filteredEdges = filteredEdges.filter((e) => (relatedNodeIds.has(e.source) && relatedNodeIds.has(e.target))
-      // Keep gateway → route edges when the route is on the focus path
-      || (e.source === gatewayId && relatedNodeIds.has(e.target) && e.type === 'gateway-route'));
   }
 
-  // Group by type; disabled/inactive routes respect the filter toggles
+  filteredNodes = filteredNodes.filter((n) => n.type !== 'route'
+    || ((showDisabledRoutes || n.enabled !== false)
+      && (!showOnlyActiveRoutes || (n.metrics?.requestCount || 0) > 0)));
+  const visibleIds = new Set(filteredNodes.map((n) => n.id));
+  filteredEdges = filteredEdges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
+  return { ...data, nodes: filteredNodes, edges: filteredEdges };
+}
+
+export function getTopologyChartHeight(data: TopologyGraph): number {
+  const counts = new Map<string, number>();
+  data.nodes.forEach((node) => counts.set(node.type, (counts.get(node.type) || 0) + 1));
+  return Math.max(500, (Math.max(1, ...counts.values()) - 1) * 112 + 150);
+}
+
+export function buildChartOption(
+  data: TopologyGraph,
+  filters: ChartFilterOptions,
+  viewportWidth = 1100,
+): echarts.EChartsOption | null {
+  if (!data || (data.nodes?.length || 0) === 0) return null;
+  const { selectedNodeId } = filters;
+  const visible = filterTopology(data, filters);
+  const filteredNodes = visible.nodes;
+  const filteredEdges = visible.edges;
+  const gatewayId = data.nodes.find((n) => n.type === 'gateway')?.id;
+
+  // Use pixel-sized columns and rows, with a scrollable canvas for dense graphs.
+  // Matching the view dimensions to the coordinate bounds avoids ECharts
+  // squeezing all four columns into a narrow strip as the client count grows.
   const gatewayNodes = filteredNodes.filter((n) => n.type === 'gateway');
-  const routeNodes = filteredNodes.filter((n) => n.type === 'route'
-    && (showDisabledRoutes || n.enabled !== false)
-    && (!showOnlyActiveRoutes || ((n.metrics?.requestCount || 0) > 0)));
+  const routeNodes = filteredNodes.filter((n) => n.type === 'route');
   const serviceNodes = filteredNodes.filter((n) => n.type === 'service');
   const clientNodes = filteredNodes.filter((n) => n.type === 'client');
 
-  // Fixed layout: focus mode is compact (gateway on the left), normal mode
-  // is client → gateway → route → service columns.
+  const graphWidth = Math.max(1000, viewportWidth) - 240;
+  const graphHeight = getTopologyChartHeight(visible) - 150;
   const positions: Record<string, { x: number; y: number }> = {};
-
-  if (selectedNodeId) {
-    gatewayNodes.forEach((n) => {
-      positions[n.id] = { x: -80, y: 0 };
+  const columns = [clientNodes, gatewayNodes, routeNodes, serviceNodes]
+    .filter((column) => column.length > 0);
+  columns.forEach((column, columnIndex) => {
+    // Stable ordering prevents nodes jumping around when metrics refresh.
+    const sorted = [...column].sort((a, b) => a.id.localeCompare(b.id));
+    // Keep every layer visible on entry, even if the client column is very tall.
+    const startY = sorted.length === 1 ? Math.min(graphHeight / 2, 224) : 0;
+    sorted.forEach((node, row) => {
+      positions[node.id] = {
+        x: columns.length === 1 ? graphWidth / 2 : columnIndex * graphWidth / (columns.length - 1),
+        y: startY + row * 112,
+      };
     });
-    const routeSpacing = routeNodes.length > 3 ? 50 : 70;
-    const routeStartY = -((routeNodes.length - 1) * routeSpacing) / 2;
-    routeNodes.forEach((n, i) => {
-      positions[n.id] = { x: 0, y: routeStartY + i * routeSpacing };
-    });
-    const serviceSpacing = serviceNodes.length > 3 ? 50 : 70;
-    const serviceStartY = -((serviceNodes.length - 1) * serviceSpacing) / 2;
-    serviceNodes.forEach((n, i) => {
-      positions[n.id] = { x: 80, y: serviceStartY + i * serviceSpacing };
-    });
-    clientNodes.forEach((n, i) => {
-      positions[n.id] = { x: -150, y: i * 50 };
-    });
-  } else {
-    gatewayNodes.forEach((n) => {
-      positions[n.id] = { x: 0, y: 0 };
-    });
-    const routeSpacing = routeNodes.length > 5 ? 60 : 80;
-    const routeStartY = -((routeNodes.length - 1) * routeSpacing) / 2;
-    routeNodes.forEach((n, i) => {
-      positions[n.id] = { x: 100, y: routeStartY + i * routeSpacing };
-    });
-    const serviceSpacing = serviceNodes.length > 5 ? 70 : 90;
-    const serviceStartY = -((serviceNodes.length - 1) * serviceSpacing) / 2;
-    serviceNodes.forEach((n, i) => {
-      positions[n.id] = { x: 200, y: serviceStartY + i * serviceSpacing };
-    });
-    const clientSpacing = clientNodes.length > 5 ? 60 : 70;
-    const clientStartY = -((clientNodes.length - 1) * clientSpacing) / 2;
-    clientNodes.forEach((n, i) => {
-      positions[n.id] = { x: -100, y: clientStartY + i * clientSpacing };
-    });
-  }
+  });
 
   const nodes = filteredNodes.map((node) => {
     const symbolSize = getNodeSize(node);
@@ -484,8 +479,9 @@ export function buildChartOption(
     };
   });
 
+  const nodeById = new Map(filteredNodes.map((node) => [node.id, node]));
   const links = filteredEdges.map((edge) => {
-    const sourceNode = filteredNodes.find((n) => n.id === edge.source);
+    const sourceNode = nodeById.get(edge.source);
 
     const isFocusedPath = selectedNodeId
       && (edge.source === selectedNodeId || edge.target === selectedNodeId
@@ -493,7 +489,7 @@ export function buildChartOption(
 
     let lineWidth = 2;
     if (isFocusedPath) lineWidth = 5;
-    else if (edge.type === 'client-gateway') lineWidth = 5;
+    else if (edge.type === 'client-gateway') lineWidth = 2;
     else if (edge.type === 'gateway-route') lineWidth = 3;
     else if (edge.type === 'route-service') lineWidth = 2;
 
@@ -512,8 +508,8 @@ export function buildChartOption(
       lineStyle: {
         width: lineWidth,
         color: isDisabledRoute ? '#6A6A6A' : lineColor,
-        curveness: 0.2,
-        opacity: isDisabledRoute ? 0.5 : (isFocusedPath ? 1 : 0.85),
+        curveness: 0.08,
+        opacity: isDisabledRoute ? 0.5 : (isFocusedPath ? 1 : 0.5),
         type: (isDisabledRoute ? 'dashed' : 'solid') as 'dashed' | 'solid',
       },
       symbol: isDisabledRoute ? ['none', 'none'] : undefined,
@@ -559,10 +555,11 @@ export function buildChartOption(
       borderRadius: 8,
       padding: [12, 16],
       textStyle: { color: '#fff', fontSize: 13 },
+      confine: true,
       extraCssText: 'box-shadow: 0 4px 12px rgba(0,0,0,0.3);',
     },
     legend: {
-      show: true,
+      show: false,
       bottom: 5,
       left: 'center',
       textStyle: { color: '#fff', fontSize: 10 },
@@ -570,7 +567,7 @@ export function buildChartOption(
       itemWidth: 12,
       itemHeight: 8,
     },
-    animationDuration: 600,
+    animation: false,
     animationEasingUpdate: 'cubicOut',
     series: [{
       type: 'graph',
@@ -581,8 +578,11 @@ export function buildChartOption(
       roam: 'move',
       draggable: true,
       zoom: 1,
-      left: 'center',
-      top: 'center',
+      left: 120,
+      top: 60,
+      width: graphWidth,
+      height: graphHeight,
+      labelLayout: { hideOverlap: true },
       edgeSymbol: ['none', 'arrow'],
       edgeSymbolSize: [0, 8],
       emphasis: {
@@ -597,7 +597,7 @@ export function buildChartOption(
         },
         label: { fontSize: 14, fontWeight: 'bold' },
       },
-      lineStyle: { curveness: 0.2 },
+      lineStyle: { curveness: 0.08 },
     }],
   };
 }
