@@ -9,6 +9,7 @@ import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import i18n from '../i18n';
 import logger from '../utils/logger';
 import { message } from '../utils/antdStatic';
+import { unwrapApiResponse } from './responseEnvelope';
 
 /** Standard backend response envelope (dto/ApiResponse.java). */
 export interface ApiResponseEnvelope<T> {
@@ -100,8 +101,8 @@ http.interceptors.response.use(
 /**
  * Detect whether a response body is an ApiResponse envelope.
  * Some legacy endpoints return the raw payload directly.
- * Error envelopes may omit `data` (backend @JsonInclude(NON_NULL)),
- * so a numeric non-200 `code` also identifies an envelope.
+ * Both errors and successful null results may omit `data` under NON_NULL.
+ * Standard message/timestamp metadata identifies those empty success envelopes.
  */
 const isEnvelope = (body: unknown): body is ApiResponseEnvelope<unknown> =>
   typeof body === 'object'
@@ -109,20 +110,18 @@ const isEnvelope = (body: unknown): body is ApiResponseEnvelope<unknown> =>
   && !Array.isArray(body)
   && typeof (body as ApiResponseEnvelope<unknown>).code === 'number'
   && ('data' in (body as Record<string, unknown>)
-    || (body as ApiResponseEnvelope<unknown>).code !== 200);
+    || (body as ApiResponseEnvelope<unknown>).code !== 200
+    || (typeof (body as ApiResponseEnvelope<unknown>).message === 'string'
+      && typeof (body as ApiResponseEnvelope<unknown>).timestamp === 'number'));
 
 /**
  * Extract the business payload from a response body.
  * Throws ApiError when the envelope reports a non-200 business code.
  */
 function unwrap<T>(body: unknown, fallbackStatus: number): T {
-  if (isEnvelope(body)) {
-    if (body.code !== 200) {
-      throw new ApiError(body.message || `Business error ${body.code}`, fallbackStatus, body.code, body);
-    }
-    return body.data as T;
-  }
-  return body as T;
+  return unwrapApiResponse<T>(body, (message, code, payload) => {
+    throw new ApiError(message, fallbackStatus, code, payload);
+  });
 }
 
 /**

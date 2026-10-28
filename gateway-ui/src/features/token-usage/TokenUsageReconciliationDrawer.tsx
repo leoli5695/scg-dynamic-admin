@@ -25,6 +25,13 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
   const hasPeriod = !!event.quotaMonth && !!event.quotaDay;
   const monthly = hasPeriod && ['MONTHLY', 'BOTH'].includes((event.quotaPeriod ?? '').toUpperCase());
   const daily = hasPeriod && ['DAILY', 'BOTH'].includes((event.quotaPeriod ?? '').toUpperCase());
+  const meteringOnly = event.settlementStatus === 'NOT_REQUIRED';
+  const display = (value: unknown) => value === null || value === undefined || value === '' ? '—' : String(value);
+  const originalSnapshot = (() => {
+    if (!command?.original_usage?.trim()) return null;
+    try { return JSON.stringify(JSON.parse(command.original_usage), null, 2); }
+    catch { return command.original_usage; }
+  })();
   const submit = async () => {
     let values: TokenUsageCorrection;
     try {
@@ -58,8 +65,12 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
   return (
     <Drawer open width={620} title={t('tokenUsage.reconcile.title')} onClose={onClose}>
       <Descriptions column={1} size="small" items={[
-        { key: 'tenant', label: t('tokenUsage.table.tenant'), children: event.tenantId },
+        { key: 'tenant', label: t('tokenUsage.table.tenant'), children: event.tenantId === '__unassigned__' ? t('tokenUsage.unassignedTenant') : event.tenantId },
         { key: 'trace', label: t('tokenUsage.table.trace'), children: event.traceId ?? '-' },
+        { key: 'model', label: t('tokenUsage.table.model'), children: display(event.model) },
+        { key: 'usage', label: t('tokenUsage.table.usageStatus'), children: t(`tokenUsage.status.${event.usageStatus ?? 'LEGACY'}`) },
+        { key: 'settlement', label: t('tokenUsage.table.settlementStatus'), children: t(`tokenUsage.status.${event.settlementStatus ?? 'LEGACY'}`) },
+        { key: 'tokens', label: t('tokenUsage.reconcile.measuredUsage'), children: `${display(event.promptTokens)} + ${display(event.completionTokens)} = ${display(event.totalTokens)}` },
         { key: 'period', label: t('tokenUsage.reconcile.period'), children: `${event.quotaMonth ?? '-'} / ${event.quotaDay ?? '-'}` },
       ]} />
       {error && <Alert type="error" showIcon message={error} style={{ marginTop: 16 }} />}
@@ -73,13 +84,15 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
             { key: 'id', label: t('tokenUsage.reconcile.reference'), children: command.id },
             { key: 'operator', label: t('tokenUsage.reconcile.operator'), children: command.operator },
             { key: 'reason', label: t('tokenUsage.reconcile.reason'), children: command.reason },
-            { key: 'tokens', label: t('tokenUsage.reconcile.verifiedUsage'), children: `${command.prompt_tokens} + ${command.completion_tokens} = ${command.total_tokens}` },
+            { key: 'tokens', label: t('tokenUsage.reconcile.verifiedUsage'), children: `${display(command.prompt_tokens)} + ${display(command.completion_tokens)} = ${display(command.total_tokens)}` },
             { key: 'charged', label: t('tokenUsage.reconcile.charged'), children: command.charged_tokens },
             { key: 'monthly', label: t('tokenUsage.reconcile.monthlyDelta'), children: command.monthly_delta },
             { key: 'daily', label: t('tokenUsage.reconcile.dailyDelta'), children: command.daily_delta },
           ]} />
           {canWrite && command.status !== 'APPLIED' && <Button loading={saving} onClick={retry}>{t('tokenUsage.reconcile.retry')}</Button>}
-          <details><summary>{t('tokenUsage.reconcile.original')}</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{command.original_usage}</pre></details>
+          {originalSnapshot ? (
+            <details><summary>{t('tokenUsage.reconcile.original')}</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{originalSnapshot}</pre></details>
+          ) : <Alert type="info" message={t('tokenUsage.reconcile.noSnapshot')} />}
         </Space>
       ) : ledgerPending ? <Alert type="info" message={t('tokenUsage.reconcile.ledgerPending')} style={{ marginTop: 16 }} /> : unresolved && canWrite ? (
         <Form form={form} layout="vertical" style={{ marginTop: 16 }} initialValues={{
@@ -110,7 +123,11 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
           </Form.Item>
           <Button type="primary" loading={saving} onClick={submit}>{t('tokenUsage.reconcile.submit')}</Button>
         </Form>
-      ) : <Alert type="info" message={t('tokenUsage.reconcile.unavailable')} style={{ marginTop: 16 }} />}
+      ) : <Alert type="info" message={t(meteringOnly && !unresolved ? 'tokenUsage.reconcile.meteringOnly' : 'tokenUsage.reconcile.unavailable')} style={{ marginTop: 16 }} />}
+      <details style={{ marginTop: 20 }}>
+        <summary>{t('tokenUsage.reconcile.currentData')}</summary>
+        <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(event, null, 2)}</pre>
+      </details>
     </Drawer>
   );
 };
