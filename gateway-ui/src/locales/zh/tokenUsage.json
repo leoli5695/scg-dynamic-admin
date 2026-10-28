@@ -1,4 +1,5 @@
 {
+  "tokenUsage.status.NOT_REQUIRED": "仅计量",
   "tokenUsage.reconcile.ledgerPending": "请求账本仍在恢复结算。请待自动结算完成或停止后刷新明细，再进行人工核对，避免重复调整额度。",
   "tokenUsage.reconcile.unresolvedOnly": "仅显示待核对明细",
   "tokenUsage.status.RECONCILED": "已核对",
@@ -32,7 +33,7 @@
   "tokenUsage.reconcile.REVIEW_REQUIRED": "额度桶缺失、已过期或余额不足，请先复核；系统不会自动重试",
   "tokenUsage.table.reserved": "预扣 Token",
   "tokenUsage.table.charged": "拟结算 Token",
-  "tokenUsage.pendingWarning": "当前范围有 {{unknown}} 条用量未知、{{failed}} 条结算失败记录。总 Token 不包含未知用量，不能直接作为完整账单。",
+  "tokenUsage.pendingWarning": "当前范围有 {{unknown}} 条用量未知或估算、{{failed}} 条结算失败记录。总 Token 不包含待核实用量，不能直接作为完整账单。",
   "tokenUsage.table.usageStatus": "用量状态",
   "tokenUsage.table.settlementStatus": "结算状态",
   "tokenUsage.table.service": "上游服务",
@@ -45,7 +46,7 @@
   "tokenUsage.status.FAILED": "结算失败",
   "tokenUsage.status.APPLIED": "已结算",
   "tokenUsage.title": "Token 计量",
-  "tokenUsage.subtitle": "AI 请求用量可观测：按租户 / 路由 / 模型 / 实例 / 时间维度统计",
+  "tokenUsage.subtitle": "经过网关的 AI 请求用量，按租户 / 路由 / 模型 / 实例 / 时间统计；不包含管理端智能助手直连模型的调用",
   "tokenUsage.filter.range": "时间范围",
   "tokenUsage.filter.granularity": "粒度",
   "tokenUsage.filter.granularity.hour": "小时",

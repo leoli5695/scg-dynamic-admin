@@ -35,6 +35,72 @@ class AiUsageLifecycleTest {
     private final TokenUsageCollectorFilter collector = new TokenUsageCollectorFilter();
     private AiStatisticsFilter statistics;
 
+    private MockServerWebExchange runWithoutQuota(String body, boolean streaming, Map<String, Object> identity) {
+        when(strategies.getStrategyForRoute(anyString(), eq("TOKEN_RATE_LIMITER"))).thenReturn(null);
+        var proxy = new AiProxyConfig();
+        proxy.setEnabled(true);
+        when(strategies.getConfig(anyString(), eq("AI_PROXY"), eq(AiProxyConfig.class))).thenReturn(proxy);
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/v1/chat/completions")
+                .header("X-Tenant-Id", "spoofed-tenant"));
+        exchange.getAttributes().putAll(identity);
+        collector.filter(exchange, terminal -> {
+            terminal.getAttributes().put("ai.model", "gpt-test");
+            terminal.getAttributes().put("ai.provider", "openai");
+            terminal.getResponse().getHeaders().setContentType(streaming ? MediaType.TEXT_EVENT_STREAM : MediaType.APPLICATION_JSON);
+            var bytes = Mono.just(new DefaultDataBufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8)));
+            return streaming ? terminal.getResponse().writeAndFlushWith(Mono.just(bytes)) : terminal.getResponse().writeWith(bytes);
+        }).block();
+        verify(reporter, timeout(3000)).report(anyMap());
+        return exchange;
+    }
+
+    @Test void aiUsageIsCollectedWithoutQuotaOrTenantAndWithoutChargingRedis() {
+        runWithoutQuota("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"total_tokens\":30}}", false, Map.of());
+        verify(reporter).report(argThat(row -> Long.valueOf(30).equals(row.get("totalTokens"))
+                && TokenUsageCollectorFilter.UNASSIGNED_TENANT.equals(row.get("tenantId"))
+                && "NOT_REQUIRED".equals(row.get("settlementStatus")) && Long.valueOf(0).equals(row.get("chargedTokens"))));
+        verifyNoInteractions(quota);
+    }
+
+    @Test void aiMeteringWorksWithoutQuotaManagerAndUsesVerifiedTenant() {
+        ReflectionTestUtils.setField(collector, "tokenQuotaManager", null);
+        runWithoutQuota("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20}}", false,
+                Map.of("api_key_metadata", Map.of("tenantId", "verified-tenant")));
+        verify(reporter).report(argThat(row -> "verified-tenant".equals(row.get("tenantId"))
+                && Long.valueOf(30).equals(row.get("totalTokens"))));
+        verifyNoInteractions(quota);
+    }
+
+    @Test void streamingAiUsageIsCollectedWithoutQuota() {
+        runWithoutQuota("data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20}}\n\ndata: [DONE]\n\n", true, Map.of());
+        verify(reporter).report(argThat(row -> Long.valueOf(30).equals(row.get("totalTokens"))
+                && "CONFIRMED".equals(row.get("usageStatus"))));
+        verifyNoInteractions(quota);
+    }
+
+    @Test void missingUsageIsVisibleEvenWithoutQuota() {
+        runWithoutQuota("{\"choices\":[]}", false, Map.of());
+        verify(reporter).report(argThat(row -> "UNKNOWN".equals(row.get("usageStatus"))
+                && row.get("totalTokens") == null));
+    }
+
+    @Test void oversizedAiResponsePassesThroughInsteadOfFailingMetering() {
+        String body = "{\"content\":\"" + "x".repeat(70000) + "\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20}}";
+        var exchange = runWithoutQuota(body, false, Map.of());
+        assertEquals(body, exchange.getResponse().getBodyAsString().block());
+        verify(reporter).report(argThat(row -> "UNKNOWN".equals(row.get("usageStatus"))));
+    }
+
+    @Test void enabledQuotaWithoutTenantStillCollectsAiUsage() {
+        var proxy = new AiProxyConfig(); proxy.setEnabled(true);
+        when(strategies.getConfig(anyString(), eq("AI_PROXY"), eq(AiProxyConfig.class))).thenReturn(proxy);
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/v1/chat/completions"));
+        collector.filter(exchange, terminal -> terminal.getResponse().writeWith(Mono.just(new DefaultDataBufferFactory()
+                .wrap("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20}}".getBytes(StandardCharsets.UTF_8))))).block();
+        verify(reporter, timeout(3000)).report(argThat(row -> Long.valueOf(30).equals(row.get("totalTokens"))));
+        verifyNoInteractions(quota);
+    }
+
     @BeforeEach void setup() {
         config.setEnabled(true);
         StrategyDefinition strategy = new StrategyDefinition();

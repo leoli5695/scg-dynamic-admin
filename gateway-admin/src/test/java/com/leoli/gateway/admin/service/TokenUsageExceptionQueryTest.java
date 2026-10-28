@@ -47,6 +47,7 @@ class TokenUsageExceptionQueryTest {
             assertEquals(5,repository.events(from,to,null,null,null,null,false,PageRequest.of(0,20)).getTotalElements());
             var unresolved = repository.events(from,to,null,null,null,null,true,PageRequest.of(0,20));
             assertEquals(3,unresolved.getTotalElements());
+            assertEquals(2L, ((Number) repository.overview(from,to,null,null,null,null).getFirst()[8]).longValue());
             assertTrue(unresolved.stream().noneMatch(row -> "RECONCILED".equals(row.getUsageStatus())));
         }
     }

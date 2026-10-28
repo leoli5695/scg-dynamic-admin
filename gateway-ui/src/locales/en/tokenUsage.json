@@ -1,4 +1,5 @@
 {
+  "tokenUsage.status.NOT_REQUIRED": "Metering only",
   "tokenUsage.reconcile.ledgerPending": "The request ledger is still recovering settlement. Refresh after recovery completes or stops before submitting a manual correction, to avoid duplicate quota adjustments.",
   "tokenUsage.reconcile.unresolvedOnly": "Show unresolved events only",
   "tokenUsage.status.RECONCILED": "Reconciled",
@@ -32,7 +33,7 @@
   "tokenUsage.reconcile.REVIEW_REQUIRED": "Quota bucket missing, expired or insufficient; investigate before retrying. Automatic retry is paused.",
   "tokenUsage.table.reserved": "Reserved tokens",
   "tokenUsage.table.charged": "Settlement tokens",
-  "tokenUsage.pendingWarning": "This range contains {{unknown}} records with unknown usage and {{failed}} failed settlements. Token totals exclude unknown usage and are not a complete bill.",
+  "tokenUsage.pendingWarning": "This range contains {{unknown}} records with unknown or estimated usage and {{failed}} failed settlements. Token totals exclude unverified usage and are not a complete bill.",
   "tokenUsage.table.usageStatus": "Usage status",
   "tokenUsage.table.settlementStatus": "Settlement status",
   "tokenUsage.table.service": "Upstream service",
@@ -45,7 +46,7 @@
   "tokenUsage.status.FAILED": "Settlement failed",
   "tokenUsage.status.APPLIED": "Applied",
   "tokenUsage.title": "Token Metering",
-  "tokenUsage.subtitle": "AI request usage observability: by tenant / route / model / instance / time",
+  "tokenUsage.subtitle": "AI requests proxied through the gateway, by tenant / route / model / instance / time. Direct model calls from the admin assistant are excluded.",
   "tokenUsage.filter.range": "Time range",
   "tokenUsage.filter.granularity": "Granularity",
   "tokenUsage.filter.granularity.hour": "Hour",

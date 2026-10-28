@@ -10,6 +10,7 @@ import com.leoli.gateway.limiter.TokenQuotaLedger;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.StrategyDefinition;
 import com.leoli.gateway.model.TokenQuotaConfig;
+import com.leoli.gateway.model.AiProxyConfig;
 import com.leoli.gateway.parser.TokenUsageParser;
 import com.leoli.gateway.parser.TokenUsageParser.TokenUsage;
 import com.leoli.gateway.parser.TokenUsageParser.ResponseType;
@@ -96,6 +97,8 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
     private static final String ATTR_ESTIMATED_INPUT = "token_quota_estimated_input";
     private static final String ATTR_TENANT_ID = "token_quota_tenant_id";
     public static final String SETTLEMENT_OWNER_ATTR = "token_quota_settlement_collector";
+    private static final String METERING_ONLY_ATTR = "ai.usage.metering-only";
+    public static final String UNASSIGNED_TENANT = "__unassigned__";
     private static final String ATTR_STREAM_INTERRUPTED = "token_quota_stream_interrupted";
 
     @Override
@@ -107,22 +110,24 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
         TokenQuotaConfig frozen = exchange.getAttribute(TokenQuotaLedger.CONFIG_ATTR);
         if (frozen != null) { config.enabled = frozen.isEnabled(); config.tokenQuotaConfig = frozen; }
 
-        if (!config.enabled || !config.tokenQuotaConfig.isEnabled()) {
-            return chain.filter(exchange);
-        }
-
         // Get tenant ID from exchange attributes (set by PreCheckFilter)
         String tenantId = exchange.getAttribute(ATTR_TENANT_ID);
-
-        if (tenantId == null) {
-            log.debug("No tenant ID in exchange attributes, skipping token collection");
-            return chain.filter(exchange);
+        boolean quotaActive = config.enabled && config.tokenQuotaConfig.isEnabled()
+                && tenantId != null && tokenQuotaManager != null;
+        if (!quotaActive) {
+            AiProxyConfig proxy = strategyManager.getConfig(routeId, StrategyDefinition.TYPE_AI_PROXY, AiProxyConfig.class);
+            if (proxy == null || !proxy.isEnabled()
+                    || exchange.getRequest().getMethod() != org.springframework.http.HttpMethod.POST) {
+                return chain.filter(exchange);
+            }
+            // Observability is unconditional for AI requests. Missing quota policy or
+            // tenant identity must never suppress usage or create a quota charge.
+            exchange.getAttributes().put(METERING_ONLY_ATTR, true);
+            if (tenantId == null) tenantId = verifiedMeteringTenant(exchange);
+            exchange.getAttributes().put(ATTR_TENANT_ID, tenantId);
         }
-
-        if (tokenQuotaManager == null) {
-            log.warn("TokenQuotaManager not available, skipping token collection");
-            return chain.filter(exchange);
-        }
+        final String meteringTenant = tenantId;
+        exchange.getAttributes().putIfAbsent(TokenQuotaPreCheckFilter.ATTR_START_NS, System.nanoTime());
 
         // Get pre-deducted tokens from PreCheckFilter (if any)
         Long preDeductedAttr = exchange.getAttribute(ATTR_PRE_DEDUCTED);
@@ -157,6 +162,20 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 // Accept header, so a streaming response requested with Accept:*/* was
                 // parsed as JSON and billed as 0 tokens.
                 if (!isSseRequest(exchange)) {
+                    if (!quotaActive) {
+                        // Metering must not turn an otherwise valid large AI response
+                        // into a 502. Capture within the bound and always pass through.
+                        return super.writeWith(flux.doOnNext(dataBuffer -> {
+                            int position = dataBuffer.readPosition();
+                            try {
+                                byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                                dataBuffer.read(bytes);
+                                handleJsonChunk(new String(bytes, StandardCharsets.UTF_8), buffer, bufferedChars);
+                            } finally {
+                                dataBuffer.readPosition(position);
+                            }
+                        }));
+                    }
                     // FIX (dead headers): X-Token-Usage-* were added in doFinally,
                     // AFTER the response was committed, so they were never sent.
                     // For JSON responses aggregate the body first, parse usage and
@@ -283,7 +302,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                     // FIX (blocking Redis on EventLoop): doFinally runs on the Netty
                     // EventLoop; settlement performs blocking Redis calls (consume/refund),
                     // so offload it to boundedElastic.
-                    Mono.fromRunnable(() -> processTokenUsageWithSettlement(exchange, tenantId,
+                    Mono.fromRunnable(() -> processTokenUsageWithSettlement(exchange, meteringTenant,
                                     config.tokenQuotaConfig, buffer, totalTokens.get(),
                                     preDeductedTokens, interrupted, isSse))
                             .subscribeOn(Schedulers.boundedElastic())
@@ -293,14 +312,26 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                         new AiUsageResult(AiUsageResult.Status.UNKNOWN, null, null, null, null,
                                                 preDeductedTokens, interrupted).publish(exchange);
                                         exchange.getAttributes().put("ai.settlement.status", "FAILED");
-                                        reportUsageToAdmin(exchange, tenantId, null, 0);
+                                        reportUsageToAdmin(exchange, meteringTenant, null, 0);
                                         log.error(
                                             "Token settlement task failed for tenant {} after internal "
                                                     + "handling; pre-deducted tokens ({}) may be unreconciled: {}",
-                                            tenantId, preDeductedTokens, error.getMessage(), error);
+                                            meteringTenant, preDeductedTokens, error.getMessage(), error);
                                     });
                 });
         return result;
+    }
+
+    private String verifiedMeteringTenant(ServerWebExchange exchange) {
+        for (String attribute : List.of("api_key_metadata", "jwt_claims")) {
+            Object value = exchange.getAttribute(attribute);
+            if (value instanceof Map<?, ?> identity) {
+                Object tenant = identity.get("api_key_metadata".equals(attribute) ? "tenantId" : "tenant_id");
+                if (tenant != null && !tenant.toString().isBlank()) return tenant.toString();
+            }
+        }
+        // Client-supplied tenant headers do not become trusted billing identities.
+        return UNASSIGNED_TENANT;
     }
 
     /**
@@ -456,10 +487,13 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                                   int incrementalTokens, long preDeductedTokens,
                                                   boolean interrupted, boolean isSse) {
         try {
-            if (exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP) == null)
+            boolean meteringOnly = Boolean.TRUE.equals(exchange.getAttribute(METERING_ONLY_ATTR));
+            if (!meteringOnly && exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP) == null)
                 exchange.getAttributes().put(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP, tokenQuotaManager.currentPeriodStamp());
-            String quotaPeriod = config.getTenantQuota(tenantId).getQuotaPeriod();
-            exchange.getAttributes().put("ai.quota.period", (quotaPeriod != null ? quotaPeriod : config.getQuotaPeriod()).toUpperCase(java.util.Locale.ROOT));
+            if (!meteringOnly) {
+                String quotaPeriod = config.getTenantQuota(tenantId).getQuotaPeriod();
+                exchange.getAttributes().put("ai.quota.period", (quotaPeriod != null ? quotaPeriod : config.getQuotaPeriod()).toUpperCase(java.util.Locale.ROOT));
+            }
             TokenUsage usage;
 
             if (isSse) {
@@ -477,6 +511,19 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             }
 
             long actualTokens = usage != null && usage.hasUsage() ? usage.getTotalTokens() : 0;
+
+            if (meteringOnly) {
+                AiUsageResult result = new AiUsageResult(usage != null && usage.hasUsage()
+                        ? AiUsageResult.Status.CONFIRMED : AiUsageResult.Status.UNKNOWN,
+                        usage != null && usage.hasUsage() ? (long) usage.getPromptTokens() : null,
+                        usage != null && usage.hasUsage() ? (long) usage.getCompletionTokens() : null,
+                        usage != null && usage.hasUsage() ? (long) usage.getTotalTokens() : null,
+                        0L, 0L, interrupted);
+                exchange.getAttributes().put("ai.settlement.status", "NOT_REQUIRED");
+                result.publish(exchange);
+                reportUsageToAdmin(exchange, tenantId, usage, actualTokens);
+                return;
+            }
 
             AiUsageResult.Status usageStatus = usage != null && usage.hasUsage()
                     ? AiUsageResult.Status.CONFIRMED : AiUsageResult.Status.UNKNOWN;
