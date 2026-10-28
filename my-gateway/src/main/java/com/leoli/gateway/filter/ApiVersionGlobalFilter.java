@@ -34,9 +34,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
 
+    public static final String TARGET_URI_ATTR = "apiVersionTargetUri";
+    public static final String VERSION_ATTR = "apiVersion";
+
     /** Pre-compiled pattern to avoid recompilation on every request (performance fix) */
     private static final java.util.regex.Pattern VERSION_PATH_PATTERN =
-            java.util.regex.Pattern.compile("/(v\\d+)/");
+            java.util.regex.Pattern.compile("^/(v\\d+)(?:/|$)");
 
     private final StrategyManager strategyManager;
 
@@ -83,6 +86,7 @@ public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
 
         log.info("API version routing: route={}, version={}, targetService={}",
                 routeId, targetVersion, targetService);
+        exchange.getAttributes().put(VERSION_ATTR, targetVersion);
 
         // Modify request based on version mode
         ServerHttpRequest request = exchange.getRequest();
@@ -90,19 +94,12 @@ public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
 
         if ("PATH".equals(versionMode)) {
             // Rewrite path: /users -> /v1/users (if needed)
-            String path = request.getURI().getPath();
+            String path = request.getURI().getRawPath();
             if (!VERSION_PATH_PATTERN.matcher(path).find()) {
                 String newPath = "/" + targetVersion + path;
                 try {
-                    URI newUri = new URI(
-                            request.getURI().getScheme(),
-                            request.getURI().getUserInfo(),
-                            request.getURI().getHost(),
-                            request.getURI().getPort(),
-                            newPath,
-                            request.getURI().getQuery(),
-                            request.getURI().getFragment()
-                    );
+                    URI newUri = org.springframework.web.util.UriComponentsBuilder.fromUri(request.getURI())
+                            .replacePath(newPath).build(true).toUri();
                     requestBuilder.uri(newUri);
                     exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, newUri);
                     log.debug("Rewritten path: {} -> {}", path, newPath);
@@ -111,32 +108,18 @@ public class ApiVersionGlobalFilter implements GlobalFilter, Ordered {
                 }
             }
         } else if ("HEADER".equals(versionMode) || "QUERY".equals(versionMode)) {
-            // Route to different service based on version
-            // Update URI to target service
-            URI originalUri = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR);
-            if (originalUri == null) {
-                originalUri = request.getURI();
-            }
-
             try {
-                URI newUri = new URI(
-                        "lb",
-                        null,
-                        targetService,
-                        -1,
-                        originalUri.getPath(),
-                        originalUri.getQuery(),
-                        null
-                );
-                exchange.getAttributes().put(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR, newUri);
-                exchange.getAttributes().put("original_static_uri", "static://" + targetService);
-
-                // Store selected service for DiscoveryLoadBalancerFilter
-                exchange.getAttributes().put(MultiServiceLoadBalancerFilter.TARGET_SERVICE_ID_ATTR, targetService);
-
-                log.debug("Routed to service: {}", targetService);
+                org.springframework.cloud.gateway.route.Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
+                String scheme = route != null && "static".equalsIgnoreCase(route.getUri().getScheme()) ? "static" : "lb";
+                URI target = URI.create(targetService.contains("://") ? targetService : scheme + "://" + targetService);
+                if (target.getHost() == null || !java.util.List.of("lb", "static", "http", "https").contains(target.getScheme())) {
+                    throw new IllegalArgumentException("Invalid version target");
+                }
+                // Apply after RouteToRequestUrlFilter and multi-service selection have set their URL.
+                exchange.getAttributes().put(TARGET_URI_ATTR, target);
             } catch (Exception e) {
-                log.warn("Failed to route to version service: {}", e.getMessage());
+                return Mono.error(new com.leoli.gateway.exception.GatewayException(
+                        com.leoli.gateway.exception.ErrorCode.CONFIG_ERROR, "Invalid API version target configuration"));
             }
         }
 

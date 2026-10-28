@@ -205,6 +205,7 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
         // execute them on boundedElastic so the Netty EventLoop is never stalled by a
         // Redis round-trip on the AI request hot path.
         final String strategy = config.tokenQuotaConfig.getPreDeductStrategy();
+        java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean();
         return Mono.fromCallable(() -> {
                     if ("ESTIMATE".equalsIgnoreCase(strategy) || "HYBRID".equalsIgnoreCase(strategy)) {
                         // Freeze the period ids NOW so settlement (which may run after a
@@ -224,10 +225,11 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
                             return tokenQuotaManager.checkQuota(tenantId, config.tokenQuotaConfig);
                         }
                         // Store pre-deducted amount for settlement in collector filter
-                        exchange.getAttributes().put("token_quota_pre_deducted", preDeducted);
                         if (preDeducted > 0) {
                             exchange.getAttributes().put(ATTR_PERIOD_STAMP, stamp);
                         }
+                        exchange.getAttributes().put("token_quota_pre_deducted", preDeducted);
+                        if (cancelled.get()) refundBeforeCollector(exchange, tenantId, config.tokenQuotaConfig);
                         return QuotaCheckResult.allowed(0, 0);
                     } else {
                         // NONE strategy: just check quota
@@ -248,8 +250,27 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
                                 tenantId, estimatedInputTokens, strategy);
                     }
 
-                    return chain.filter(exchange);
-                });
+                    return Mono.defer(() -> chain.filter(exchange));
+                })
+                .doOnCancel(() -> cancelled.set(true))
+                .doFinally(signal -> refundBeforeCollector(exchange, tenantId, config.tokenQuotaConfig));
+    }
+
+    /** No upstream call can occur before the collector: release reservations on an earlier short circuit. */
+    private void refundBeforeCollector(ServerWebExchange exchange, String tenantId, TokenQuotaConfig config) {
+        if (Boolean.TRUE.equals(exchange.getAttribute(TokenUsageCollectorFilter.SETTLEMENT_OWNER_ATTR))) return;
+        Long reserved = exchange.getAttribute("token_quota_pre_deducted");
+        if (reserved == null || reserved <= 0) return;
+        java.util.concurrent.atomic.AtomicBoolean refunded = (java.util.concurrent.atomic.AtomicBoolean)
+                exchange.getAttributes().computeIfAbsent("token_quota_early_refund", key -> new java.util.concurrent.atomic.AtomicBoolean());
+        if (!refunded.compareAndSet(false, true)) return;
+        TokenQuotaManager.QuotaPeriodStamp stamp = exchange.getAttribute(ATTR_PERIOD_STAMP);
+        Mono.fromRunnable(() -> {
+                    if (stamp != null) tokenQuotaManager.settleTokenUsage(tenantId, reserved, 0, config, stamp);
+                    else tokenQuotaManager.settleTokenUsage(tenantId, reserved, 0, config);
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(ignored -> { }, error -> log.error("Failed to release pre-deducted quota before collector: tenant={}", tenantId, error));
     }
 
     /**

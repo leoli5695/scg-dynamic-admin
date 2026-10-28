@@ -38,7 +38,8 @@ class AuthenticationGlobalFilterTest {
             int order = filter.getOrder();
 
             // Then
-            assertEquals(-250, order);
+            assertTrue(order < com.leoli.gateway.constants.FilterOrderConstants.REQUEST_TRANSFORM,
+                    "Authentication must verify the original body before request transformation");
         }
     }
     

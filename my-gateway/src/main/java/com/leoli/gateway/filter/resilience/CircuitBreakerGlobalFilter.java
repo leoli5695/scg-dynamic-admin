@@ -79,12 +79,6 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
 
         // Use Mono.defer to check state at subscription time (not at construction time)
         return Mono.defer(() -> {
-            // Check if circuit breaker is OPEN - reject immediately before subscribing
-            if (circuitBreaker.getState() == CircuitBreaker.State.OPEN) {
-                log.warn("Circuit breaker is OPEN for route {}, rejecting request", routeId);
-                return GatewayResponseHelper.writeCircuitBreakerOpen(exchange.getResponse(), routeId);
-            }
-
             // Acquire permission first (this handles HALF_OPEN correctly - only allows one request)
             try {
                 circuitBreaker.acquirePermission();
@@ -95,7 +89,7 @@ public class CircuitBreakerGlobalFilter implements GlobalFilter, Ordered {
 
             // Execute the filter chain and record result based on response status
             final long startTime = System.currentTimeMillis();
-            return chain.filter(exchange)
+            return Mono.defer(() -> chain.filter(exchange))
                     .doOnSuccess(response -> {
                         // Record result when request completes successfully (has response)
                         long duration = System.currentTimeMillis() - startTime;

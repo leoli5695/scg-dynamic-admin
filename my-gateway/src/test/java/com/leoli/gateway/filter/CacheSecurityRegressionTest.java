@@ -64,6 +64,50 @@ class CacheSecurityRegressionTest {
         assertEquals("HIT", second.getResponse().getHeaders().getFirst("X-Cache"));
     }
 
+    @Test
+    void cachedResponsesDoNotOverwriteTheCurrentRequestsTraceIdentity() {
+        var filter = filter();
+        var first = request("/trace", null, null);
+        first.getResponse().getHeaders().set("X-Trace-Id", "old-trace");
+        first.getResponse().getHeaders().set("X-Gateway-Span-Id", "old-span");
+        filter.filter(first, e -> respond(e, "cached")).block();
+        var second = request("/trace", null, null);
+        second.getResponse().getHeaders().set("X-Trace-Id", "current-trace");
+        second.getResponse().getHeaders().set("X-Gateway-Span-Id", "current-span");
+        filter.filter(second, e -> Mono.error(new AssertionError("Expected a cache hit"))).block();
+        assertEquals("current-trace", second.getResponse().getHeaders().getFirst("X-Trace-Id"));
+        assertEquals("current-span", second.getResponse().getHeaders().getFirst("X-Gateway-Span-Id"));
+        assertEquals("cached", second.getResponse().getBodyAsString().block());
+    }
+
+    @Test
+    void apiVersionTargetsCannotShareOneCachedResponse() {
+        var filter = filter();
+        var first = request("/versioned", null, null);
+        first.getAttributes().put(ApiVersionGlobalFilter.VERSION_ATTR, "v1");
+        first.getAttributes().put(ApiVersionGlobalFilter.TARGET_URI_ATTR, URI.create("lb://v1"));
+        filter.filter(first, e -> respond(e, "version-one")).block();
+        var second = request("/versioned", null, null);
+        second.getAttributes().put(ApiVersionGlobalFilter.VERSION_ATTR, "v2");
+        second.getAttributes().put(ApiVersionGlobalFilter.TARGET_URI_ATTR, URI.create("lb://v2"));
+        filter.filter(second, e -> respond(e, "version-two")).block();
+        assertEquals("version-two", second.getResponse().getBodyAsString().block());
+    }
+
+    @Test
+    void multiServiceRoutesCannotHaveGrayOrWeightedSelectionBypassedByTheResponseCache() {
+        var filter = filter(); var upstreamCalls = new AtomicInteger();
+        for (int i = 0; i < 2; i++) {
+            var exchange = request("/gray", null, null);
+            var config = new com.leoli.gateway.model.MultiServiceConfig();
+            config.setMode(com.leoli.gateway.model.MultiServiceConfig.RoutingMode.MULTI);
+            exchange.getAttributes().put(GATEWAY_ROUTE_ATTR, Route.async().id("cache-route").uri("lb://stable")
+                    .predicate(e -> true).metadata(com.leoli.gateway.model.MultiServiceConfig.METADATA_KEY, config).build());
+            filter.filter(exchange, e -> { upstreamCalls.incrementAndGet(); return respond(e, "body"); }).block();
+        }
+        assertEquals(2, upstreamCalls.get());
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"Authorization", "Cookie", "X-API-Key", "Api-Key", "ApiKey", "X-Access-Key"})
     void credentialedRequestsNeverReadOrPopulateSharedCache(String header) {

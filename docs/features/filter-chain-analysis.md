@@ -6,6 +6,46 @@
 
 ## Overview
 
+### Runtime correctness checks
+
+Custom filters run in ascending order before routing; response decorators are
+traversed in the opposite direction when the upstream body is written. The
+following interactions have regression coverage:
+
+- API-version selection happens early enough to rewrite paths, but its selected
+  service URI is applied by `ApiVersionRoutingFilter` at order 10002, after SCG URL
+  construction (10000) and multi-service selection (10001). Raw path/query encoding
+  survives `StripPrefix` and service resolution.
+- Retry preserves headers produced by earlier filters while removing the failed
+  attempt's headers, status and routing state. A committed response cannot retry.
+  Requests with bodies, including DELETE and explicitly framed GET bodies, require
+  bounded replay caching; unknown-length uploads pass through without global retry.
+- Trace capture wraps the whole retry operation, so success before the last allowed
+  attempt still produces a final trace. Header operations retain the canonical
+  trace ID; cache hits never replay another request's trace/span IDs.
+- Ordinary response-cache keys include the selected API version and target. MULTI
+  service routes bypass this cache because service weights and gray rules execute
+  later in the chain and must not be short-circuited by a cache hit.
+- Circuit-breaker permission acquisition handles OPEN-to-HALF_OPEN transitions even
+  when automatic transition is disabled. Synchronous downstream failures are
+  captured inside the reactive chain and recorded by the breaker.
+- Authentication rejects an explicitly disabled matched credential. Config-center
+  reads on a credential cache miss run outside the reactive event loop. Authentication
+  runs at -256 before request transformation (-255) and validation (-254), so HMAC
+  verifies the original wire body and the backend still receives the transformed body.
+- AI semantic-cache capture copies bounded response chunks without aggregating the
+  client stream. Exceeding the capture limit disables caching for that response;
+  it does not turn a valid upstream response into a gateway error.
+- Token pre-deductions are settled with zero upstream usage if an earlier filter
+  ends the request before the collector takes ownership. The original quota period
+  is retained and normal collector settlement prevents a duplicate early settlement.
+  SSE side-copy parsing preserves each buffer's original read position.
+- Optional access-log configuration failures retain the current configuration
+  instead of aborting gateway startup. A malformed `null` configuration cannot
+  replace the last valid logging configuration.
+
+These tests exercise filter combinations in addition to individual filter methods.
+
 Track each Filter's execution with accurate **self-time** measurement:
 
 ```

@@ -218,13 +218,29 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
                 if (status == null || !status.is2xxSuccessful()) {
                     return super.writeWith(body); // never cache errors
                 }
-                int limit = (int) Math.min(config.getMaxBodySize(), Integer.MAX_VALUE);
-                return DataBufferUtils.join(Flux.from(body), limit)
-                        .flatMap(buf -> {
-                            byte[] b = new byte[buf.readableByteCount()];
-                            buf.read(b);
-                            DataBufferUtils.release(buf);
-                            String bodyText = new String(b, StandardCharsets.UTF_8);
+                MediaType contentType = getHeaders().getContentType();
+                if (contentType != null && MediaType.TEXT_EVENT_STREAM.isCompatibleWith(contentType)) {
+                    return super.writeWith(body);
+                }
+                int limit = (int) Math.min(Math.max(0, config.getMaxBodySize()), Integer.MAX_VALUE);
+                java.io.ByteArrayOutputStream capture = new java.io.ByteArrayOutputStream();
+                java.util.concurrent.atomic.AtomicBoolean exceeded = new java.util.concurrent.atomic.AtomicBoolean();
+                Flux<? extends DataBuffer> forwarded = Flux.from(body).doOnNext(buf -> {
+                    if (exceeded.get()) return;
+                    int size = buf.readableByteCount();
+                    if (size > limit - capture.size()) {
+                        exceeded.set(true);
+                        capture.reset();
+                        return;
+                    }
+                    byte[] bytes = new byte[size];
+                    buf.asByteBuffer().get(bytes);
+                    capture.writeBytes(bytes);
+                });
+                return super.writeWith(forwarded)
+                        .doOnSuccess(ignored -> {
+                            if (exceeded.get() || capture.size() == 0) return;
+                            String bodyText = capture.toString(StandardCharsets.UTF_8);
                             // Pending writes have their own byte budget and bounded executor.
                             var lease = storeBudget.tryAcquire(2L * bodyText.length() + 4L * vector.length,
                                     8L * 1024 * 1024);
@@ -233,9 +249,8 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
                                             cacheStore.put(scope, vector, bodyText, config.getTtlSeconds());
                                             return true;
                                         }).doFinally(signal -> lease.close())
-                                        .subscribe(ignored -> { }, error -> log.debug("AI cache store skipped: {}", error.getMessage()));
+                                        .subscribe(stored -> { }, error -> log.debug("AI cache store skipped: {}", error.getMessage()));
                             }
-                            return super.writeWith(Mono.just(original.bufferFactory().wrap(b)));
                         });
             }
         };

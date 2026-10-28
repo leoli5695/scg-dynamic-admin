@@ -81,13 +81,18 @@ public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
                 log.debug("Removed request header: {}", headerName);
             }
         }
+        if (enableTraceId) {
+            String headerName = getStringValue(config, "traceIdHeader", "X-Trace-Id");
+            requestBuilder.header(isValidHeaderName(headerName) ? headerName : "X-Trace-Id", traceId);
+        }
 
         ServerHttpRequest newRequest = requestBuilder.build();
         ServerWebExchange newExchange = exchange.mutate().request(newRequest).build();
 
         // Capture values for lambda
         final boolean finalEnableTraceId = enableTraceId;
-        final String traceIdHeaderName = getStringValue(config, "traceIdHeader", "X-Trace-Id");
+        String configuredTraceHeader = getStringValue(config, "traceIdHeader", "X-Trace-Id");
+        final String traceIdHeaderName = isValidHeaderName(configuredTraceHeader) ? configuredTraceHeader : "X-Trace-Id";
         final Map<String, String> addRespHeaders = getStringMapValue(config, "addResponseHeaders");
         final List<String> removeRespHeaders = getStringListValue(config, "removeResponseHeaders");
 
@@ -99,6 +104,7 @@ public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
             // Add response headers
             if (addRespHeaders != null) {
                 for (Map.Entry<String, String> entry : addRespHeaders.entrySet()) {
+                    if (!isValidHeaderName(entry.getKey())) continue;
                     String value = resolveHeaderValue(entry.getValue(), newExchange, traceId);
                     headers.add(entry.getKey(), value);
                     log.debug("Added response header: {} = {}", entry.getKey(), value);
@@ -128,12 +134,14 @@ public class HeaderOpGlobalFilter implements GlobalFilter, Ordered {
      * Generate or get existing trace ID.
      */
     private String generateOrGetTraceId(ServerWebExchange exchange, Map<String, Object> config) {
+        String canonical = exchange.getAttribute(TRACE_ID_ATTR);
+        if (canonical != null && !canonical.isBlank()) return canonical;
         String traceIdHeader = getStringValue(config, "traceIdHeader", "X-Trace-Id");
 
         // Try to get from request header first
         String existingTraceId = exchange.getRequest().getHeaders().getFirst(traceIdHeader);
-        if (existingTraceId != null && !existingTraceId.isEmpty()) {
-            return existingTraceId;
+        if (existingTraceId != null && existingTraceId.matches("[a-fA-F0-9]{32}")) {
+            return existingTraceId.toLowerCase(java.util.Locale.ROOT);
         }
 
         // Generate new trace ID

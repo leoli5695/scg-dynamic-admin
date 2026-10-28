@@ -101,6 +101,31 @@ class TokenQuotaPreCheckEstimateTest {
     }
 
     @Test
+    void failureBeforeTheUsageCollectorReleasesThePreDeductionIntoItsOriginalPeriod() {
+        var config = new TokenQuotaConfig(); config.setEnabled(true); config.setPreDeductStrategy("ESTIMATE");
+        stubConfig(config);
+        when(tokenQuotaManager.preDeductTokens(anyString(), anyLong(), any(), any())).thenReturn(210L);
+        when(chain.filter(any())).thenReturn(Mono.error(new IllegalStateException("Earlier filter failed before collector")));
+        StepVerifier.create(filter.filter(post(chatBody()), chain)).expectError(IllegalStateException.class).verify();
+        verify(tokenQuotaManager, timeout(3000)).settleTokenUsage(eq("acme"), eq(210L), eq(0L), eq(config),
+                eq(new TokenQuotaManager.QuotaPeriodStamp("202610", "20261010")));
+    }
+
+    @Test
+    void collectorOwnershipPreventsThePreCheckFromIssuingASecondSettlement() {
+        var config = new TokenQuotaConfig(); config.setEnabled(true); config.setPreDeductStrategy("ESTIMATE");
+        stubConfig(config);
+        when(tokenQuotaManager.preDeductTokens(anyString(), anyLong(), any(), any())).thenReturn(210L);
+        when(chain.filter(any())).thenAnswer(call -> {
+            ServerWebExchange forwarded = call.getArgument(0);
+            forwarded.getAttributes().put(TokenUsageCollectorFilter.SETTLEMENT_OWNER_ATTR, true);
+            return Mono.empty();
+        });
+        filter.filter(post(chatBody()), chain).block();
+        verify(tokenQuotaManager, never()).settleTokenUsage(anyString(), anyLong(), anyLong(), any(), any());
+    }
+
+    @Test
     @DisplayName("ESTIMATE joins the body and pre-deducts proportionally (estimate * multiplier)")
     void estimateJoinsBodyAndPreDeductsProportionally() {
         TokenQuotaConfig config = new TokenQuotaConfig();

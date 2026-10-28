@@ -80,7 +80,7 @@ public interface FilterOrderConstants {
 
     /**
      * Request transform filter - Modify request before processing.
-     * Execute after security but before authentication.
+     * Execute after authentication so body signatures cover the original wire payload.
      */
     int REQUEST_TRANSFORM = -255;
 
@@ -92,9 +92,9 @@ public interface FilterOrderConstants {
 
     /**
      * Authentication filter - JWT/API Key/Basic auth.
-     * Execute after request transformation and validation.
+     * Execute before request transformation and validation; HMAC signs the original body.
      */
-    int AUTHENTICATION = -250;
+    int AUTHENTICATION = -256;
 
     /**
      * Mock response filter - Return mock data for testing.
@@ -292,6 +292,9 @@ public interface FilterOrderConstants {
      */
     int MULTI_SERVICE_LOAD_BALANCER = 10001;
 
+    /** Apply API version service targets after SCG URL construction and multi-service selection. */
+    int API_VERSION_ROUTING = 10002;
+
     /**
      * Nacos discovery load balancer filter.
      * Handles lb:// services with namespace/group override.
@@ -352,9 +355,9 @@ public interface FilterOrderConstants {
     // -400     AccessLogGlobalFilter           Request/response logging
     // -301     CorsGlobalFilter                CORS handling (preflight)
     // -300     TraceIdGlobalFilter             Trace ID generation
+    // -256     AuthenticationGlobalFilter      Authentication of original request bytes
     // -255     RequestTransformFilter          Request transformation
     // -254     RequestValidationFilter         Request validation
-    // -250     AuthenticationGlobalFilter      Authentication
     // -249     MockResponseFilter              Mock response
     // -246     AiSecurityGuardFilter           AI content moderation (inbound + outbound)
     // -245     HybridRateLimiterFilter         Rate limiting (after auth -> identity keys ready)

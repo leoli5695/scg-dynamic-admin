@@ -117,9 +117,10 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         // stream was already consumed by the first attempt, so retries were sent with an EMPTY body,
         // causing dirty data on non-idempotent endpoints. Cache the body (bounded) before first attempt.
         HttpMethod method = exchange.getRequest().getMethod();
-        boolean mayHaveBody = HttpMethod.POST.equals(method) || HttpMethod.PUT.equals(method)
-                || HttpMethod.PATCH.equals(method);
         long contentLength = exchange.getRequest().getHeaders().getContentLength();
+        boolean mayHaveBody = contentLength > 0
+                || exchange.getRequest().getHeaders().containsKey(org.springframework.http.HttpHeaders.TRANSFER_ENCODING)
+                || (!HttpMethod.GET.equals(method) && !HttpMethod.HEAD.equals(method));
         if (mayHaveBody && contentLength != 0) {
             int maxCachedBodyBytes = retryProperties.getMaxCachedBodyBytes();
             if (contentLength < 0 || contentLength > maxCachedBodyBytes) {
@@ -187,6 +188,9 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
             }
             // Initialize retry count tracker
             exchange.getAttributes().put("retry_count", 0);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            exchange.getResponse().getHeaders().forEach((name, values) -> headers.put(name, List.copyOf(values)));
+            exchange.getAttributes().put("retry_original_response_headers", headers);
         }
 
         log.debug("executeWithRetry called for route {}, attempt {}", RouteUtils.getRouteId(exchange), attempt);
@@ -195,6 +199,7 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         AtomicBoolean needRetry = new AtomicBoolean(false);
         // FIX: track whether any body was written downstream, used to detect the empty-body retryable case
         AtomicBoolean bodyWritten = new AtomicBoolean(false);
+        AtomicBoolean exceptionRetried = new AtomicBoolean(false);
         AtomicInteger currentAttempt = new AtomicInteger(attempt);
         ServerHttpResponse originalResponse = exchange.getResponse();
         
@@ -282,8 +287,9 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                 .response(decoratedResponse)
                 .build();
 
-        return chain.filter(mutatedExchange)
+        return Mono.defer(() -> chain.filter(mutatedExchange))
                 .onErrorResume(throwable -> {
+                    if (originalResponse.isCommitted()) return Mono.error(throwable);
                     // Check if we should retry for exceptions
                     // IMPORTANT: Use attempt + 1 to check because retry will be attempt + 1
                     // If retry attempt would exceed maxAttempts, propagate error immediately
@@ -301,9 +307,11 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
                     log.debug("Retrying request for route {} due to exception, attempt {}/{}",
                             RouteUtils.getRouteId(exchange), attempt + 1, config.maxAttempts);
 
+                    exceptionRetried.set(true);
                     return doRetry(exchange, chain, config, attempt);
                 })
                 .then(Mono.defer(() -> {
+                    if (exceptionRetried.get()) return Mono.empty();
                     // Check if retry is needed due to status code
                     if (needRetry.get()) {
                         log.debug("Retrying request for route {} due to status code, attempt {}/{}",
@@ -336,17 +344,8 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         Integer retryCount = exchange.getAttribute("retry_count");
         exchange.getAttributes().put("retry_count", retryCount != null ? retryCount + 1 : 1);
 
-        // Mark this as an intermediate retry request so TraceCaptureGlobalFilter can skip trace capture
-        // The last retry attempt (when attempt + 1 == config.maxAttempts - 1) will NOT be marked,
-        // allowing TraceCaptureGlobalFilter to capture the final result
-        if (attempt + 2 < config.maxAttempts) {
-            exchange.getAttributes().put(TraceCaptureGlobalFilter.IS_RETRY_REQUEST_ATTR, true);
-            log.debug("Marked as intermediate retry request, trace capture will be skipped: attempt={}", attempt + 1);
-        } else {
-            // This is the last retry attempt, ensure it can capture trace
-            exchange.getAttributes().remove(TraceCaptureGlobalFilter.IS_RETRY_REQUEST_ATTR);
-            log.debug("Last retry attempt, trace capture enabled: attempt={}", attempt + 1);
-        }
+        // Trace capture wraps this entire retry operation, not each attempt.
+        exchange.getAttributes().remove(TraceCaptureGlobalFilter.IS_RETRY_REQUEST_ATTR);
 
         // Restore original URL so load balancer can choose a new instance
         URI originalUrl = exchange.getAttribute("retry_original_url");
@@ -370,13 +369,16 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         // ([31, 31, 29]) and the client rejected the response. Reset the headers before
         // the next attempt; the final attempt repopulates them from its own response.
         exchange.getResponse().getHeaders().clear();
+        org.springframework.http.HttpHeaders originalHeaders = exchange.getAttribute("retry_original_response_headers");
+        if (originalHeaders != null) exchange.getResponse().getHeaders().putAll(originalHeaders);
+        exchange.getResponse().setStatusCode(null);
 
         // Clear instance selection markers so load balancer can pick new instance
         exchange.getAttributes().remove("selected_instance");
 
         // Wait before retry then execute
         return Mono.delay(java.time.Duration.ofMillis(config.retryIntervalMs))
-                .then(executeWithRetry(exchange, chain, config, attempt + 1));
+                .then(Mono.defer(() -> executeWithRetry(exchange, chain, config, attempt + 1)));
     }
     
     /**

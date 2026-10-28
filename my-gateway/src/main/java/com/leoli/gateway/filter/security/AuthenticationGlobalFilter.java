@@ -442,14 +442,26 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
         if (config == null) {
             log.warn("Credential config not found for policyId: {}", policyId);
-            // Try to load from Nacos
-            authBindingManager.loadPolicyWithRoutes(policyId);
-            config = authBindingManager.getAuthConfig(policyId);
-            if (config == null) {
-                log.error("Failed to load credential config for policyId: {}", policyId);
-                return writeUnauthorizedResponse(exchange, "Invalid authentication credential");
-            }
+            return Mono.fromCallable(() -> {
+                        authBindingManager.loadPolicyWithRoutes(policyId);
+                        return java.util.Optional.ofNullable(authBindingManager.getAuthConfig(policyId));
+                    })
+                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .onErrorMap(error -> new com.leoli.gateway.exception.GatewayException(
+                            com.leoli.gateway.exception.ErrorCode.SERVICE_UNAVAILABLE,
+                            "Authentication policy could not be loaded", error))
+                    .flatMap(loaded -> loaded.isEmpty()
+                            ? writeUnauthorizedResponse(exchange, "Invalid authentication credential")
+                            : authenticateResolvedPolicy(exchange, chain, routeId, policyId, requiredAuthType, loaded.get()));
         }
+        return authenticateResolvedPolicy(exchange, chain, routeId, policyId, requiredAuthType, config);
+    }
+
+    private Mono<Void> authenticateResolvedPolicy(ServerWebExchange exchange, GatewayFilterChain chain,
+                                                   String routeId, String policyId, String requiredAuthType, AuthConfig config) {
+        // A policy can be disabled between matching its credential and reading its config.
+        // AuthProcessManager treats disabled configs as a no-op, so reject here first.
+        if (!config.isEnabled()) return writeUnauthorizedResponse(exchange, "Authentication credential is disabled");
 
         // Check credential type matches required authType
         String credentialAuthType = config.getAuthType();

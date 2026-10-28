@@ -141,6 +141,33 @@ class AiSemanticCacheFilterTest {
     }
 
     @Test
+    void oversizedResponsesStreamUnchangedInsteadOfFailingTheRequestForCacheCapture() {
+        var config = config(); config.setMaxBodySize(2048); stubConfig(config);
+        when(embeddingClient.embed(anyString(), any(), any(), any(), any())).thenReturn(Mono.just(new float[]{1f, 0f}));
+        var produced = new java.util.concurrent.atomic.AtomicInteger();
+        var consumed = new java.util.concurrent.atomic.AtomicInteger();
+        var receivedBytes = new java.util.concurrent.atomic.AtomicInteger();
+        var exchange = post("{\"model\":\"qwen-plus\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}");
+        exchange.getResponse().setWriteHandler(body -> body.doOnNext(buffer -> {
+            assertEquals(produced.get(), consumed.incrementAndGet(), "forward each chunk before aggregating another");
+            receivedBytes.addAndGet(buffer.readableByteCount());
+            org.springframework.core.io.buffer.DataBufferUtils.release(buffer);
+        }).then());
+        when(chain.filter(any())).thenAnswer(invocation -> {
+            org.springframework.web.server.ServerWebExchange forwarded = invocation.getArgument(0);
+            forwarded.getResponse().setStatusCode(HttpStatus.OK);
+            forwarded.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+            return forwarded.getResponse().writeWith(Flux.range(0, 4).map(i -> {
+                produced.incrementAndGet(); return bufferFactory.wrap(new byte[1024]);
+            }));
+        });
+        filter.filter(exchange, chain).block(java.time.Duration.ofSeconds(5));
+        assertEquals(4096, receivedBytes.get());
+        assertEquals(HttpStatus.OK, exchange.getResponse().getStatusCode());
+        assertTrue(store.search("qwen-plus|*", new float[]{1f, 0f}, 0.95).isEmpty());
+    }
+
+    @Test
     @DisplayName("Streaming requests pass through without embedding (MVP non-streaming only)")
     void streamingPassthrough() {
         stubConfig(config());

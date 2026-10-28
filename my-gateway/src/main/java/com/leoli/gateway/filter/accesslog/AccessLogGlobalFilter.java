@@ -133,7 +133,11 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
             applyConfig(content);
             updateLogbackAppenders();
         };
-        configCenterService.addListener(ACCESS_LOG_CONFIG, GROUP, configListener);
+        try {
+            configCenterService.addListener(ACCESS_LOG_CONFIG, GROUP, configListener);
+        } catch (Exception error) {
+            log.warn("Access log listener unavailable; periodic config reconciliation remains active", error);
+        }
         log.info("AccessLogGlobalFilter initialized, enabled: {}", config.isEnabled());
         updateLogbackAppenders();
     }
@@ -148,7 +152,11 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
 
     private void loadConfig() {
         log.info("Loading access log config from Nacos: dataId={}, group={}", ACCESS_LOG_CONFIG, GROUP);
-        applyConfig(configCenterService.getConfig(ACCESS_LOG_CONFIG, GROUP));
+        try {
+            applyConfig(configCenterService.getConfig(ACCESS_LOG_CONFIG, GROUP));
+        } catch (Exception error) {
+            log.warn("Access log config unavailable; retaining the current logging configuration", error);
+        }
     }
 
     /**
@@ -167,7 +175,9 @@ public class AccessLogGlobalFilter implements GlobalFilter, Ordered {
         }
         appliedContent.recordIfChanged(ACCESS_LOG_CONFIG, content);
         try {
-            config = objectMapper.readValue(content, AccessLogConfig.class);
+            AccessLogConfig parsed = objectMapper.readValue(content, AccessLogConfig.class);
+            if (parsed == null) throw new IllegalArgumentException("Access log config must be a JSON object");
+            config = parsed;
             log.info("Loaded access log config successfully: enabled={}, mode={}, format={}, logToConsole={}, logDirectory={}",
                     config.isEnabled(), config.getDeployMode(), config.getLogFormat(),
                     config.isLogToConsole(), config.getLogDirectory());

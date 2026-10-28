@@ -160,6 +160,15 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         if (config == null || !getBoolValue(config, "enabled", true)) {
             return chain.filter(exchange);
         }
+        // Service selection runs after this cache. A hit must not bypass gray rules or weights.
+        org.springframework.cloud.gateway.route.Route route = exchange.getAttribute(
+                org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
+        Object routing = route == null ? null : route.getMetadata().get(com.leoli.gateway.model.MultiServiceConfig.METADATA_KEY);
+        if ((routing instanceof com.leoli.gateway.model.MultiServiceConfig multi
+                && multi.getMode() == com.leoli.gateway.model.MultiServiceConfig.RoutingMode.MULTI)
+                || (routing instanceof Map<?, ?> map && "MULTI".equals(String.valueOf(map.get("mode"))))) {
+            return chain.filter(exchange);
+        }
 
         // Shared caches must never reuse personalized responses, even with a custom key.
         if (hasCredentials(exchange) || forbidsCaching(request.getHeaders())) {
@@ -328,6 +337,8 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         List<String> configured = getStringListValue(config, "varyHeaders");
         if (configured != null) varyHeaders.addAll(configured);
         StringBuilder varyKey = new StringBuilder(key).append("|host=").append(request.getURI().getRawAuthority());
+        varyKey.append("|apiVersion=").append((Object) exchange.getAttribute(ApiVersionGlobalFilter.VERSION_ATTR));
+        varyKey.append("|apiVersionTarget=").append((Object) exchange.getAttribute(ApiVersionGlobalFilter.TARGET_URI_ATTR));
         for (String header : varyHeaders) {
             List<String> values = request.getHeaders().getOrEmpty(header);
             varyKey.append('|').append(header.toLowerCase(java.util.Locale.ROOT)).append(':').append(values.size());
@@ -409,7 +420,7 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
                 // shared cache entry - a cookie captured from one user's upstream
                 // response would otherwise be handed to every cache hit. Content-Length
                 // is dropped because the body is written as a single buffer.
-                if (!HttpHeaders.CONTENT_LENGTH.equalsIgnoreCase(name)
+                if (!isPerRequestHeader(name) && !HttpHeaders.CONTENT_LENGTH.equalsIgnoreCase(name)
                         && !HttpHeaders.SET_COOKIE.equalsIgnoreCase(name)) {
                     headers.put(name, values);
                 }
@@ -423,6 +434,12 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
         // Write cached body bytes (actual response content)
         DataBuffer buffer = response.bufferFactory().wrap(cached.body);
         return response.writeWith(Mono.just(buffer));
+    }
+
+    private boolean isPerRequestHeader(String name) {
+        return name.equalsIgnoreCase("X-Trace-Id") || name.equalsIgnoreCase("X-Gateway-Span-Id")
+                || name.equalsIgnoreCase("traceparent") || name.equalsIgnoreCase("tracestate")
+                || name.equalsIgnoreCase("X-Request-Id") || name.equalsIgnoreCase("X-Correlation-Id");
     }
 
     // Helper methods
