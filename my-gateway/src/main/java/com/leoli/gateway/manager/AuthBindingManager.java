@@ -90,7 +90,7 @@ public class AuthBindingManager {
         // Remove old credential indices if updating
         AuthConfig oldConfig = policyCache.get(policyId);
         if (oldConfig != null) {
-            removeCredentialIndices(oldConfig);
+            removeCredentialIndices(policyId, oldConfig);
         }
 
         policyCache.put(policyId, config);
@@ -119,10 +119,17 @@ public class AuthBindingManager {
 
         switch (authType) {
             case "API_KEY":
-                if (config.getApiKey() != null) {
+                if (!config.isEnabled()) break;
+                if (config.getApiKey() != null && !config.getApiKey().isEmpty()) {
                     apiKeyIndex.put(config.getApiKey(), policyId);
-                    log.debug("API Key index added: {} -> {}", config.getApiKey(), policyId);
                 }
+                if (config.getApiKeys() != null) {
+                    config.getApiKeys().forEach((key, metadata) -> {
+                        if (key != null && !key.isEmpty() && metadata != null && !Boolean.FALSE.equals(metadata.get("active")))
+                            apiKeyIndex.put(key, policyId);
+                    });
+                }
+                log.debug("API Key index built for policy {}", policyId);
                 break;
             case "BASIC":
                 if (config.getBasicUsername() != null) {
@@ -155,7 +162,7 @@ public class AuthBindingManager {
     /**
      * Remove credential indices for a policy.
      */
-    private void removeCredentialIndices(AuthConfig config) {
+    private void removeCredentialIndices(String policyId, AuthConfig config) {
         if (config == null) return;
 
         String authType = config.getAuthType();
@@ -164,7 +171,12 @@ public class AuthBindingManager {
         switch (authType) {
             case "API_KEY":
                 if (config.getApiKey() != null) {
-                    apiKeyIndex.remove(config.getApiKey());
+                    apiKeyIndex.remove(config.getApiKey(), policyId);
+                }
+                if (config.getApiKeys() != null) {
+                    config.getApiKeys().keySet().forEach(key -> {
+                        if (key != null) apiKeyIndex.remove(key, policyId);
+                    });
                 }
                 break;
             case "BASIC":
@@ -198,7 +210,7 @@ public class AuthBindingManager {
 
         // Remove credential indices
         if (config != null) {
-            removeCredentialIndices(config);
+            removeCredentialIndices(policyId, config);
         }
 
         // Invalidate JWT cache for this policy

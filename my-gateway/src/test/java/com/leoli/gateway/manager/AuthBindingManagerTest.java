@@ -359,6 +359,56 @@ class AuthBindingManagerTest {
         }
 
         @Test
+        void shouldResolveAllActiveTenantKeysFromAMultiKeyPolicy() {
+            AuthConfig config = createApiKeyConfig(null, null);
+            config.setApiKeys(Map.of("tenant-a-key",Map.of("tenantId","a","active",true),
+                    "tenant-b-key",Map.of("tenantId","b")));
+            manager.putPolicy("multi-key-policy",config);
+            assertEquals("multi-key-policy",manager.findPolicyByApiKey("tenant-a-key"));
+            assertEquals("multi-key-policy",manager.findPolicyByApiKey("tenant-b-key"));
+            assertEquals("a",manager.getAuthConfig("multi-key-policy").getApiKeys().get("tenant-a-key").get("tenantId"));
+        }
+
+        @Test
+        void shouldNotResolveInactiveOrDisabledMultiKeyCredentials() {
+            AuthConfig config = createApiKeyConfig(null,null);
+            config.setApiKeys(Map.of("active-key",Map.of("active",true),"inactive-key",Map.of("active",false)));
+            manager.putPolicy("multi",config);
+            assertEquals("multi",manager.findPolicyByApiKey("active-key"));
+            assertNull(manager.findPolicyByApiKey("inactive-key"));
+            config = createApiKeyConfig(null,null);
+            config.setApiKeys(Map.of("active-key",Map.of("active",true))); config.setEnabled(false);
+            manager.putPolicy("multi",config);
+            assertNull(manager.findPolicyByApiKey("active-key"));
+        }
+
+        @Test
+        void rotatingAndRemovingPolicyRemovesItsOldSingleAndMultipleKeys() {
+            AuthConfig config = createApiKeyConfig("legacy-key",null);
+            config.setApiKeys(Map.of("old-tenant-key",Map.of("tenantId","a")));
+            manager.putPolicy("rotating",config);
+            AuthConfig rotated = createApiKeyConfig(null,null);
+            rotated.setApiKeys(Map.of("new-tenant-key",Map.of("tenantId","a")));
+            manager.putPolicy("rotating",rotated);
+            assertNull(manager.findPolicyByApiKey("legacy-key"));
+            assertNull(manager.findPolicyByApiKey("old-tenant-key"));
+            assertEquals("rotating",manager.findPolicyByApiKey("new-tenant-key"));
+            manager.removePolicy("rotating");
+            assertNull(manager.findPolicyByApiKey("new-tenant-key"));
+        }
+
+        @Test
+        void removingOnePolicyDoesNotEraseAnIndexCurrentlyOwnedByAnotherPolicy() {
+            AuthConfig first = createApiKeyConfig(null,null);
+            first.setApiKeys(Map.of("shared-key",Map.of("tenantId","a")));
+            AuthConfig second = createApiKeyConfig(null,null);
+            second.setApiKeys(Map.of("shared-key",Map.of("tenantId","b")));
+            manager.putPolicy("first",first); manager.putPolicy("second",second);
+            manager.removePolicy("first");
+            assertEquals("second",manager.findPolicyByApiKey("shared-key"));
+        }
+
+        @Test
         @DisplayName("Should find policy by API Key with prefix")
         void shouldFindPolicyByApiKeyWithPrefix() {
             // Given
