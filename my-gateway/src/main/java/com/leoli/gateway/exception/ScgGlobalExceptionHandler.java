@@ -3,6 +3,8 @@ package com.leoli.gateway.exception;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.constants.InternalApiConstants;
 import com.leoli.gateway.util.ClientIpResolver;
+import com.leoli.gateway.util.RouteUtils;
+import com.leoli.gateway.filter.TraceCaptureGlobalFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
@@ -379,6 +381,10 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
                 return; // Not an error or capture disabled
             }
 
+            if (Boolean.TRUE.equals(exchange.getAttribute(TraceCaptureGlobalFilter.TRACE_CAPTURED_ATTR))) {
+                return;
+            }
+
             // Get request info
             org.springframework.http.server.reactive.ServerHttpRequest request = exchange.getRequest();
             org.springframework.http.server.reactive.ServerHttpResponse response = exchange.getResponse();
@@ -390,7 +396,7 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             Map<String, Object> trace = new LinkedHashMap<>();
             trace.put("traceId", traceId);
             trace.put("instanceId", instanceId);
-            trace.put("routeId", exchange.getAttribute("org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRoute"));
+            trace.put("routeId", RouteUtils.getRouteId(exchange));
             trace.put("method", request.getMethod().name());
             trace.put("uri", request.getURI().toString());
             trace.put("path", request.getURI().getPath());
@@ -457,6 +463,8 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             }
 
             // Send to admin asynchronously (don't block error response)
+            // The tracing filter's doFinally also runs after this handler writes the response.
+            exchange.getAttributes().put(TraceCaptureGlobalFilter.TRACE_CAPTURED_ATTR, true);
             sendErrorTraceToAdmin(trace);
 
             log.debug("Captured error trace: traceId={}, statusCode={}, duration={}ms", traceId, status.value(), duration);

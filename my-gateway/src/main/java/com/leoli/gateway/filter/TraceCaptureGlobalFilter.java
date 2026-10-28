@@ -55,7 +55,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     private static final String START_TIME_ATTR = "traceStartTime";
     private static final String REQUEST_BODY_ATTR = "traceRequestBody";
-    private static final String TRACE_CAPTURED_ATTR = "traceCaptured";
+    public static final String TRACE_CAPTURED_ATTR = "traceCaptured";
     public static final String IS_RETRY_REQUEST_ATTR = "isRetryRequest";
 
     @Value("${gateway.admin.url:http://127.0.0.1:9090}")
