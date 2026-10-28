@@ -241,6 +241,20 @@ export function buildStrategyConfig(
   strategyType: string,
 ): StrategyConfig {
   switch (strategyType) {
+    case 'AI_SECURITY': {
+      const keys = new Set(['scanRequest', 'scanResponse', 'inboundAction', 'outboundAction',
+        'bannedWords', 'prohibitedWords', 'bannedPatterns', 'enablePiiMasking', 'piiAction', 'piiTypes',
+        'blockMessage', 'maxBodySize', 'externalUrl', 'externalAdapter', 'externalTimeoutMs',
+        'externalFailureAction', 'streamingPolicy', 'responseTimeoutMs', 'moderator']);
+      const config: StrategyConfig = Object.fromEntries(Object.entries(values)
+        .filter(([key, value]) => keys.has(key) && value !== undefined));
+      const rowsToObject = (rows: unknown): Record<string, unknown> => Object.fromEntries(
+        (Array.isArray(rows) ? rows : []).filter((row) => row.key).map((row) => [row.key, row.value]));
+      config.enabled = true; // Outer strategy.enabled controls whether the strategy is selected by the gateway.
+      config.externalHeaders = rowsToObject(values.externalHeaderRows);
+      config.externalOptions = rowsToObject(values.externalOptionRows);
+      return config;
+    }
     case 'RATE_LIMITER':
       return {
         qps: toInt(values.qps, 100),
@@ -555,6 +569,13 @@ export function strategyToFormValues(strategy: StrategyDefinition): StrategyForm
     addResponseHeaders: config.addResponseHeaders ? JSON.stringify(config.addResponseHeaders) : '',
   };
 
+  if (strategy.strategyType === 'AI_SECURITY') {
+    formValues.enabled = strategy.enabled;
+    formValues.externalHeaderRows = Object.entries((config.externalHeaders ?? {}) as Record<string, unknown>)
+      .map(([key, value]) => ({ key, value }));
+    formValues.externalOptionRows = Object.entries((config.externalOptions ?? {}) as Record<string, unknown>)
+      .map(([key, value]) => ({ key, value }));
+  }
   if (strategy.strategyType === 'MULTI_DIM_RATE_LIMITER') {
     formValues.dimensions = multiDimToDimensions(config);
     ['globalQuota', 'tenantQuota', 'userQuota', 'ipQuota', 'headerNames', 'keySource', 'userIdSource']

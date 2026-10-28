@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Locale;
 
 /**
  * Built-in rule-based {@link ContentModerator}: sensitive-word dictionary, regex
@@ -44,6 +45,16 @@ public class RuleBasedModerator implements ContentModerator {
         ModerationResult result = new ModerationResult();
         String sanitized = text;
 
+        if (config.getProhibitedWords() != null) {
+            for (String word : config.getProhibitedWords()) {
+                if (word != null && !word.isBlank() && containsIgnoreCase(sanitized, word)) {
+                    result.setFlagged(true);
+                    result.getCategories().add("PROHIBITED_WORD");
+                    sanitized = replaceIgnoreCase(sanitized, word, MASK);
+                }
+            }
+        }
+
         if (config.getBannedWords() != null) {
             for (String word : config.getBannedWords()) {
                 if (word == null || word.isBlank()) {
@@ -59,10 +70,7 @@ public class RuleBasedModerator implements ContentModerator {
 
         if (config.getBannedPatterns() != null) {
             for (String p : config.getBannedPatterns()) {
-                Pattern pattern = PatternCache.compile(p).orElse(null);
-                if (pattern == null) {
-                    continue;
-                }
+                Pattern pattern = PatternCache.compile(p).orElseThrow(() -> new IllegalArgumentException("Invalid moderation regex"));
                 if (pattern.matcher(sanitized).find()) {
                     result.setFlagged(true);
                     result.getCategories().add("BANNED_PATTERN");
@@ -90,7 +98,7 @@ public class RuleBasedModerator implements ContentModerator {
     }
 
     private static boolean containsIgnoreCase(String haystack, String needle) {
-        return haystack.toLowerCase().contains(needle.toLowerCase());
+        return haystack.toLowerCase(Locale.ROOT).contains(needle.toLowerCase(Locale.ROOT));
     }
 
     private static String replaceIgnoreCase(String haystack, String needle, String replacement) {

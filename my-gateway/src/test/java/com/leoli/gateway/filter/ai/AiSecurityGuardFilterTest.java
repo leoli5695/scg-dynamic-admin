@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.ai.security.RuleBasedModerator;
+import com.leoli.gateway.ai.security.AiContentInspector;
+import com.leoli.gateway.ai.security.ExternalContentModerator;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.AiSecurityConfig;
 import com.leoli.gateway.model.StrategyDefinition;
@@ -59,7 +61,8 @@ class AiSecurityGuardFilterTest {
     @BeforeEach
     void setUp() {
         bufferFactory = new DefaultDataBufferFactory();
-        filter = new AiSecurityGuardFilter(strategyManager, objectMapper, List.of(new RuleBasedModerator()));
+        filter = new AiSecurityGuardFilter(strategyManager, objectMapper,
+                new AiContentInspector(new RuleBasedModerator(), mock(ExternalContentModerator.class)));
     }
 
     private MockServerWebExchange post(String body) {
@@ -186,5 +189,157 @@ class AiSecurityGuardFilterTest {
     void orderIsAiSecurity() {
         assertEquals(-246, filter.getOrder());
         assertTrue(filter.getOrder() < -1);
+    }
+
+    @Test
+    void prohibitedWordsBlockStructuredTextParts() {
+        AiSecurityConfig c = config("BLOCK");
+        c.setProhibitedWords(List.of("违禁测试词"));
+        stub(c);
+        var exchange = post("{\"messages\":[{\"content\":[{\"type\":\"text\",\"text\":\"违禁测试词\"}]}]}");
+        filter.filter(exchange, chain).block();
+        assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    void piiIsMaskedWithoutBlockingOrdinaryRequests() {
+        stub(config("BLOCK"));
+        var exchange = post("{\"input\":\"mail a@b.com\"}");
+        filter.filter(exchange, chain).block();
+        assertEquals("mail ***", forwardedBody().path("input").asText());
+        assertNotEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+    }
+
+    private void respond(String type, String... chunks) {
+        when(chain.filter(any())).thenAnswer(invocation -> {
+            ServerWebExchange forwarded = invocation.getArgument(0);
+            forwarded.getResponse().getHeaders().setContentType(MediaType.parseMediaType(type));
+            Flux<DataBuffer> body = Flux.fromArray(chunks).map(s -> bufferFactory.wrap(s.getBytes(StandardCharsets.UTF_8)));
+            return forwarded.getResponse().writeWith(body);
+        });
+    }
+
+    @Test
+    void responseOnlyPolicyMasksContentAndPreservesUsage() {
+        AiSecurityConfig c = config("BLOCK", "bomb");
+        c.setScanRequest(false);
+        stub(c);
+        respond("application/json", "{\"model\":\"bomb-model\",\"choices\":[{\"message\":{\"content\":\"BOMB\"}}],\"usage\":{\"total_tokens\":7}}");
+        var exchange = post("{}");
+        filter.filter(exchange, chain).block();
+        String body = exchange.getResponse().getBodyAsString().block();
+        assertNotNull(body);
+        assertTrue(body.contains("bomb-model"));
+        assertFalse(body.contains("BOMB"));
+        assertTrue(body.contains("\"total_tokens\":7"));
+        assertTrue(exchange.getResponse().getHeaders().containsKey(AiSecurityGuardFilter.RESPONSE_VERDICT_HEADER));
+    }
+
+    @Test
+    void responseBlockReplacesOriginalBodyAndStatus() {
+        AiSecurityConfig c = config("BLOCK", "bomb");
+        c.setOutboundAction("BLOCK");
+        stub(c);
+        respond("application/json", "{\"choices\":[{\"message\":{\"content\":\"bomb\"}}]}");
+        var exchange = post("{\"messages\":[{\"content\":\"hello\"}]}");
+        filter.filter(exchange, chain).block();
+        assertEquals(HttpStatus.BAD_GATEWAY, exchange.getResponse().getStatusCode());
+        assertFalse(exchange.getResponse().getBodyAsString().block().contains("bomb"));
+    }
+
+    @Test
+    void bufferedSseDetectsWordsSplitAcrossFramesAndKeepsProtocol() {
+        stub(config("BLOCK", "bomb"));
+        respond("text/event-stream", "data: {\"choices\":[{\"delta\":{\"content\":\"bo\"}}]}\n\n",
+                "data: {\"choices\":[{\"delta\":{\"content\":\"mb\"}}]}\n\n", "data: [DONE]\n\n");
+        var exchange = post("{}");
+        filter.filter(exchange, chain).block();
+        String body = exchange.getResponse().getBodyAsString().block();
+        assertTrue(body.contains("***"));
+        assertFalse(body.contains("\"bo\""));
+        assertTrue(body.contains("data: [DONE]"));
+    }
+
+    @Test
+    void explicitStreamSkipPreservesFlushPath() {
+        AiSecurityConfig c = config("BLOCK", "bomb");
+        c.setStreamingPolicy("SKIP");
+        stub(c);
+        when(chain.filter(any())).thenAnswer(invocation -> {
+            ServerWebExchange forwarded = invocation.getArgument(0);
+            forwarded.getResponse().getHeaders().setContentType(MediaType.TEXT_EVENT_STREAM);
+            return forwarded.getResponse().writeAndFlushWith(Flux.just(Mono.just(bufferFactory.wrap("bomb".getBytes(StandardCharsets.UTF_8)))));
+        });
+        var exchange = post("{}");
+        filter.filter(exchange, chain).block();
+        assertEquals("bomb", exchange.getResponse().getBodyAsString().block());
+        assertEquals("STREAM_SKIPPED", exchange.getResponse().getHeaders().getFirst(AiSecurityGuardFilter.RESPONSE_VERDICT_HEADER));
+    }
+
+    @Test
+    void oversizedResponseFailsClosed() {
+        AiSecurityConfig c = config("BLOCK");
+        c.setMaxBodySize(1024);
+        stub(c);
+        respond("text/plain", "x".repeat(1025));
+        var exchange = post("{}");
+        filter.filter(exchange, chain).block();
+        assertEquals(HttpStatus.BAD_GATEWAY, exchange.getResponse().getStatusCode());
+        assertTrue(exchange.getResponse().getBodyAsString().block().contains("RESPONSE_AUDIT_FAILED"));
+    }
+
+    @Test
+    void malformedRequestIsNotForwarded() {
+        stub(config("BLOCK"));
+        var exchange = post("not json");
+        filter.filter(exchange, chain).block();
+        assertEquals(HttpStatus.BAD_REQUEST, exchange.getResponse().getStatusCode());
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    void stringArrayInputsAreAudited() {
+        stub(config("BLOCK", "bomb"));
+        var exchange = post("{\"input\":[\"hello\",\"bomb\"]}");
+        filter.filter(exchange, chain).block();
+        assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    void unknownPayloadIsMarkedAsUnscannedRatherThanClean() {
+        stub(config("BLOCK"));
+        var exchange = post("{\"unknownPayload\":\"text\"}");
+        filter.filter(exchange, chain).block();
+        assertEquals("NO_TEXT_FIELDS", exchange.getResponse().getHeaders().getFirst(AiSecurityGuardFilter.REQUEST_VERDICT_HEADER));
+    }
+
+    @Test
+    void oversizedRequestIsRejectedBeforeProxying() {
+        AiSecurityConfig c = config("BLOCK");
+        c.setMaxBodySize(1024);
+        stub(c);
+        var exchange = post("{\"input\":\"" + "x".repeat(1100) + "\"}");
+        filter.filter(exchange, chain).block();
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, exchange.getResponse().getStatusCode());
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    void blockStreamCancelsSourceWithoutReleasingContent() {
+        AiSecurityConfig c = config("BLOCK");
+        c.setStreamingPolicy("BLOCK");
+        stub(c);
+        java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        when(chain.filter(any())).thenAnswer(invocation -> {
+            ServerWebExchange forwarded = invocation.getArgument(0);
+            forwarded.getResponse().getHeaders().setContentType(MediaType.TEXT_EVENT_STREAM);
+            return forwarded.getResponse().writeWith(Flux.<DataBuffer>never().doOnCancel(() -> cancelled.set(true)));
+        });
+        var exchange = post("{}");
+        filter.filter(exchange, chain).block(java.time.Duration.ofSeconds(2));
+        assertEquals(HttpStatus.BAD_GATEWAY, exchange.getResponse().getStatusCode());
+        assertTrue(cancelled.get());
     }
 }

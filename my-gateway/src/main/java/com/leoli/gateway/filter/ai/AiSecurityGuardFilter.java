@@ -3,16 +3,14 @@ package com.leoli.gateway.filter.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.leoli.gateway.ai.security.ContentModerator;
-import com.leoli.gateway.ai.security.ContentModerator.ModerationResult;
+import com.leoli.gateway.ai.security.AiContentInspector;
 import com.leoli.gateway.constants.FilterOrderConstants;
 import com.leoli.gateway.manager.StrategyManager;
 import com.leoli.gateway.model.AiSecurityConfig;
 import com.leoli.gateway.model.StrategyDefinition;
+import com.leoli.gateway.util.RequestBodyCache;
 import com.leoli.gateway.util.RouteUtils;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.reactivestreams.Publisher;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -23,196 +21,218 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.http.server.reactive.ServerHttpResponseDecorator;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
-/**
- * AI security guard filter (mirrors Higress ai-security-guard). Local, rule-based
- * content moderation of the inbound request: sensitive words, regex patterns and
- * PII, with DETECT / BLOCK / REPLACE actions. The moderator is pluggable so a
- * model-based moderator can be added without touching this filter.
- * <p>
- * Runs at {@link FilterOrderConstants#AI_SECURITY} (-246): after authentication
- * (identity known) but before the rate limiters / token quota, so a blocked request
- * never spends quota; and &lt; NettyWriteResponseFilter (-1) so an outbound response
- * decorator can be added later without re-ordering.
- * <p>
- * Scope: this increment moderates the INBOUND request. Outbound (response) moderation
- * is a follow-up increment (it needs response-body interception + a streaming policy).
- *
- * @author leoli
- */
-@Slf4j
+/** Request/response text guard. External I/O is reactive; SSE BUFFER explicitly delays delivery. */
 @Component
 public class AiSecurityGuardFilter implements GlobalFilter, Ordered {
-
-    /** Response header carrying the inbound moderation verdict (DETECT/REPLACE). */
     public static final String REQUEST_VERDICT_HEADER = "X-AI-Security-Request";
+    public static final String RESPONSE_VERDICT_HEADER = "X-AI-Security-Response";
+    private final StrategyManager strategies;
+    private final ObjectMapper mapper;
+    private final AiContentInspector inspector;
 
-    private final StrategyManager strategyManager;
-    private final ObjectMapper objectMapper;
-    private final Map<String, ContentModerator> moderators;
-
-    @Autowired
-    public AiSecurityGuardFilter(StrategyManager strategyManager,
-                                 ObjectMapper objectMapper,
-                                 List<ContentModerator> moderatorList) {
-        this.strategyManager = strategyManager;
-        this.objectMapper = objectMapper;
-        this.moderators = moderatorList.stream()
-                .collect(Collectors.toMap(m -> m.type().toUpperCase(), m -> m, (a, b) -> a, LinkedHashMap::new));
+    public AiSecurityGuardFilter(StrategyManager strategies, ObjectMapper mapper, AiContentInspector inspector) {
+        this.strategies = strategies;
+        this.mapper = mapper;
+        this.inspector = inspector;
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String routeId = RouteUtils.getRouteId(exchange);
-        AiSecurityConfig config = strategyManager.getConfig(routeId,
+        AiSecurityConfig config = strategies.getConfig(RouteUtils.getRouteId(exchange),
                 StrategyDefinition.TYPE_AI_SECURITY, AiSecurityConfig.class);
-
-        if (config == null || !config.isEnabled() || !config.isScanRequest()) {
-            return chain.filter(exchange);
-        }
-        if (exchange.getRequest().getMethod() != HttpMethod.POST) {
-            return chain.filter(exchange);
-        }
-        ContentModerator moderator = resolveModerator(config);
-        if (moderator == null) {
-            log.warn("AI security: no moderator '{}' available on route {}, passing through",
-                    config.getModerator(), routeId);
-            return chain.filter(exchange);
-        }
-
-        long maxBodySize = Math.max(1024, config.getMaxBodySize());
-        ServerHttpResponse response = exchange.getResponse();
-
-        return com.leoli.gateway.util.RequestBodyCache.read(exchange, (int) Math.min(maxBodySize, Integer.MAX_VALUE))
+        if (config == null || !config.isEnabled()) return chain.filter(exchange);
+        ServerWebExchange guarded = config.isScanResponse()
+                ? exchange.mutate().response(guardResponse(exchange, config)).build() : exchange;
+        if (!config.isScanRequest() || exchange.getRequest().getMethod() != HttpMethod.POST) return chain.filter(guarded);
+        return RequestBodyCache.read(exchange, bodyLimit(config))
+                .onErrorResume(DataBufferLimitException.class, error -> failure(exchange.getResponse(),
+                        HttpStatus.PAYLOAD_TOO_LARGE, "内容超过审核大小限制", "BODY_TOO_LARGE").then(Mono.empty()))
                 .flatMap(bytes -> {
-                    if (bytes.length == 0) {
-                        return chain.filter(exchange);
-                    }
-
-                    byte[] outBytes = bytes;
-                    try {
-                        JsonNode root = objectMapper.readTree(bytes);
-                        if (root instanceof ObjectNode && root.get("messages") instanceof ArrayNode) {
-                            Verdict verdict = moderateMessages((ArrayNode) root.get("messages"), config, moderator);
-                            if (verdict.flagged) {
-                                String action = normalizeAction(config.getInboundAction(), "BLOCK");
-                                if ("BLOCK".equals(action)) {
-                                    log.warn("AI security BLOCK on route {}: {}", routeId, verdict.categories);
-                                    return writeBlock(exchange, config, verdict.categories);
-                                }
-                                response.getHeaders().add(REQUEST_VERDICT_HEADER, String.join(",", verdict.categories));
-                                if ("REPLACE".equals(action) && verdict.sanitizedAny) {
-                                    outBytes = objectMapper.writeValueAsBytes(root);
-                                }
-                                log.info("AI security {} on route {}: {}", action, routeId, verdict.categories);
-                            }
-                        }
-                    } catch (DataBufferLimitException dble) {
-                        throw dble;
-                    } catch (Exception e) {
-                        log.warn("AI security: moderation failed on route {}, forwarding original: {}",
-                                routeId, e.getMessage());
-                    }
-
-                    ServerHttpRequest newRequest = decorateRequest(exchange, outBytes);
-                    return chain.filter(exchange.mutate().request(newRequest).build());
-                })
-                .onErrorResume(DataBufferLimitException.class, e -> {
-                    log.warn("AI security: body exceeds maxBodySize {} on route {}", maxBodySize, routeId);
-                    response.setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
-                    return response.setComplete();
-                });
+            if (bytes.length == 0) return chain.filter(guarded);
+            JsonNode root;
+            try { root = mapper.readTree(bytes); }
+            catch (Exception error) {
+                return failure(exchange.getResponse(), HttpStatus.BAD_REQUEST, "请求不是可审核的 JSON", "INVALID_JSON");
+            }
+            return inspector.inspect(root, "REQUEST", config, false).flatMap(result -> {
+                verdict(exchange.getResponse(), REQUEST_VERDICT_HEADER, result);
+                if (result.blocked()) return failure(exchange.getResponse(),
+                        result.externalFailed() ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.FORBIDDEN,
+                        result.externalFailed() ? "内容审核服务不可用" : config.getBlockMessage(),
+                        result.externalFailed() ? "MODERATION_UNAVAILABLE" : "CONTENT_BLOCKED");
+                try {
+                    byte[] output = mapper.writeValueAsBytes(result.body());
+                    return chain.filter(guarded.mutate().request(RequestBodyCache.wrap(exchange, output)).build());
+                } catch (Exception error) { return Mono.error(error); }
+            });
+        });
     }
 
-    /** Moderate every textual message content; for REPLACE, rewrite content in place. */
-    private Verdict moderateMessages(ArrayNode messages, AiSecurityConfig config, ContentModerator moderator) {
-        Verdict verdict = new Verdict();
-        for (JsonNode message : messages) {
-            if (!(message instanceof ObjectNode)) {
-                continue;
-            }
-            ObjectNode msg = (ObjectNode) message;
-            JsonNode content = msg.get("content");
-            if (content == null || !content.isTextual()) {
-                continue; // multimodal / tool messages: out of MVP scope
-            }
-            ModerationResult result = moderator.moderate(content.asText(), config);
-            if (result.isFlagged()) {
-                verdict.flagged = true;
-                verdict.categories.addAll(result.getCategories());
-                String sanitized = result.getSanitizedText();
-                if (sanitized != null && !sanitized.equals(content.asText())) {
-                    msg.put("content", sanitized);
-                    verdict.sanitizedAny = true;
+    private ServerHttpResponse guardResponse(ServerWebExchange exchange, AiSecurityConfig config) {
+        return new ServerHttpResponseDecorator(exchange.getResponse()) {
+            @Override
+            public Mono<Void> writeWith(Publisher<? extends DataBuffer> body) {
+                MediaType type = getHeaders().getContentType();
+                boolean stream = type != null && MediaType.TEXT_EVENT_STREAM.isCompatibleWith(type);
+                boolean json = type != null && (type.getSubtype().equals("json") || type.getSubtype().endsWith("+json"));
+                boolean text = type != null && "text".equals(type.getType());
+                if (!json && !text) {
+                    getHeaders().set(RESPONSE_VERDICT_HEADER, "UNSUPPORTED_MEDIA_TYPE");
+                    return super.writeWith(body);
                 }
+                if (stream && "SKIP".equalsIgnoreCase(config.getStreamingPolicy())) {
+                    getHeaders().set(RESPONSE_VERDICT_HEADER, "STREAM_SKIPPED");
+                    return super.writeWith(body);
+                }
+                if (stream && "BLOCK".equalsIgnoreCase(config.getStreamingPolicy())) {
+                    return discard(body).then(failure(getDelegate(), HttpStatus.BAD_GATEWAY,
+                            "当前内容安全策略不允许流式响应", "STREAM_BLOCKED"));
+                }
+                // Reject compressed payloads rather than accidentally scanning compressed bytes as text.
+                String encoding = getHeaders().getFirst(HttpHeaders.CONTENT_ENCODING);
+                if (encoding != null && !"identity".equalsIgnoreCase(encoding)) {
+                    return discard(body).then(failure(getDelegate(), HttpStatus.BAD_GATEWAY,
+                            "内容审核不支持压缩响应，请禁用上游压缩", "ENCODED_RESPONSE"));
+                }
+                return DataBufferUtils.join(Flux.from(body), bodyLimit(config))
+                        .timeout(Duration.ofMillis(Math.max(1000, Math.min(config.getResponseTimeoutMs(), 300000))))
+                        .flatMap(buffer -> {
+                            byte[] bytes = new byte[buffer.readableByteCount()];
+                            buffer.read(bytes);
+                            DataBufferUtils.release(buffer);
+                            return audit(bytes, stream, json);
+                        })
+                        .onErrorResume(error -> getDelegate().isCommitted() ? Mono.error(error)
+                                : failure(getDelegate(), HttpStatus.BAD_GATEWAY,
+                                    "响应内容审核失败或超过限制", "RESPONSE_AUDIT_FAILED"));
+            }
+
+            private Mono<Void> audit(byte[] bytes, boolean stream, boolean json) {
+                try {
+                    String original = new String(bytes, StandardCharsets.UTF_8);
+                    SseDocument sse = stream ? parseSse(original) : null;
+                    JsonNode root = stream ? sse.roots : json ? mapper.readTree(bytes) : mapper.createObjectNode().put("text", original);
+                    return inspector.inspect(root, "RESPONSE", config, stream).flatMap(result -> {
+                        verdict(getDelegate(), RESPONSE_VERDICT_HEADER, result);
+                        if (result.blocked()) return failure(getDelegate(), HttpStatus.BAD_GATEWAY,
+                                result.externalFailed() ? "内容审核服务不可用" : config.getBlockMessage(),
+                                result.externalFailed() ? "MODERATION_UNAVAILABLE" : "CONTENT_BLOCKED");
+                        try {
+                            byte[] output = stream ? sse.render().getBytes(StandardCharsets.UTF_8)
+                                    : json ? mapper.writeValueAsBytes(result.body())
+                                    : result.body().path("text").asText().getBytes(StandardCharsets.UTF_8);
+                            clearBodyHeaders(getHeaders());
+                            getHeaders().setContentLength(output.length);
+                            if (stream) getHeaders().set(RESPONSE_VERDICT_HEADER,
+                                    result.categories().isEmpty() ? "BUFFERED_CLEAN" : String.join(",", result.categories()));
+                            return getDelegate().writeWith(Mono.just(bufferFactory().wrap(output)));
+                        } catch (Exception error) { return Mono.error(error); }
+                    });
+                } catch (Exception error) { return Mono.error(error); }
+            }
+
+            @Override
+            public Mono<Void> writeAndFlushWith(Publisher<? extends Publisher<? extends DataBuffer>> body) {
+                // Explicit SKIP must preserve real-time flushing.
+                MediaType type = getHeaders().getContentType();
+                if (type != null && MediaType.TEXT_EVENT_STREAM.isCompatibleWith(type)
+                        && "SKIP".equalsIgnoreCase(config.getStreamingPolicy())) {
+                    getHeaders().set(RESPONSE_VERDICT_HEADER, "STREAM_SKIPPED");
+                    return getDelegate().writeAndFlushWith(body);
+                }
+                return writeWith(Flux.from(body).concatMap(publisher -> publisher));
+            }
+        };
+    }
+
+    private int bodyLimit(AiSecurityConfig config) {
+        return (int) Math.max(1024, Math.min(config.getMaxBodySize(), 10485760));
+    }
+
+    private void verdict(ServerHttpResponse response, String header, AiContentInspector.Result result) {
+        if (!result.categories().isEmpty()) response.getHeaders().set(header, String.join(",", result.categories()));
+    }
+
+    private Mono<Void> failure(ServerHttpResponse response, HttpStatus status, String message, String code) {
+        response.setStatusCode(status);
+        clearBodyHeaders(response.getHeaders());
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        try {
+            byte[] bytes = mapper.writeValueAsBytes(Map.of("httpStatus", status.value(), "code", code, "message", message));
+            response.getHeaders().setContentLength(bytes.length);
+            return response.writeWith(Mono.just(response.bufferFactory().wrap(bytes)));
+        } catch (Exception error) { return Mono.error(error); }
+    }
+
+    private void clearBodyHeaders(HttpHeaders headers) {
+        headers.remove(HttpHeaders.CONTENT_LENGTH);
+        headers.remove(HttpHeaders.TRANSFER_ENCODING);
+        headers.remove(HttpHeaders.CONTENT_ENCODING);
+        headers.remove(HttpHeaders.ETAG);
+        headers.remove("Content-MD5");
+        headers.remove("Digest");
+    }
+
+    private Mono<Void> discard(Publisher<? extends DataBuffer> body) {
+        return Mono.create(sink -> Flux.from(body).doOnDiscard(DataBuffer.class, DataBufferUtils::release)
+                .subscribe(new reactor.core.publisher.BaseSubscriber<DataBuffer>() {
+                    @Override protected void hookOnSubscribe(org.reactivestreams.Subscription subscription) {
+                        cancel();
+                        sink.success();
+                    }
+                    @Override protected void hookOnNext(DataBuffer buffer) { DataBufferUtils.release(buffer); }
+                    @Override protected void hookOnError(Throwable error) { sink.error(error); }
+                }));
+    }
+
+    private SseDocument parseSse(String text) throws Exception {
+        SseDocument document = new SseDocument();
+        for (String frame : text.replace("\r\n", "\n").split("\n\n")) {
+            if (frame.isBlank()) continue;
+            List<String> prefix = new ArrayList<>();
+            List<String> data = new ArrayList<>();
+            for (String line : frame.split("\n")) {
+                if (line.startsWith("data:")) data.add(line.substring(5).stripLeading());
+                else prefix.add(line);
+            }
+            String payload = String.join("\n", data);
+            if (payload.isBlank() || "[DONE]".equals(payload)) document.frames.add(frame + "\n\n");
+            else {
+                JsonNode node = mapper.readTree(payload);
+                document.roots.add(node);
+                document.frames.add(new SseFrame(String.join("\n", prefix), node));
             }
         }
-        return verdict;
+        return document;
     }
 
-    private ContentModerator resolveModerator(AiSecurityConfig config) {
-        String type = config.getModerator() == null ? "RULE" : config.getModerator().trim().toUpperCase();
-        ContentModerator m = moderators.get(type);
-        return m != null ? m : moderators.get("RULE");
-    }
-
-    private String normalizeAction(String action, String fallback) {
-        if (action == null || action.isBlank()) {
-            return fallback;
+    private record SseFrame(String prefix, JsonNode body) {}
+    private class SseDocument {
+        final ArrayNode roots = mapper.createArrayNode();
+        final List<Object> frames = new ArrayList<>();
+        String render() throws Exception {
+            StringBuilder output = new StringBuilder();
+            for (Object frame : frames) {
+                if (frame instanceof SseFrame data) {
+                    if (!data.prefix().isEmpty()) output.append(data.prefix()).append('\n');
+                    output.append("data: ").append(mapper.writeValueAsString(data.body())).append("\n\n");
+                } else output.append(frame);
+            }
+            return output.toString();
         }
-        String a = action.trim().toUpperCase();
-        return ("DETECT".equals(a) || "BLOCK".equals(a) || "REPLACE".equals(a)) ? a : fallback;
     }
 
-    private Mono<Void> writeBlock(ServerWebExchange exchange, AiSecurityConfig config, Set<String> categories) {
-        ServerHttpResponse response = exchange.getResponse();
-        response.setStatusCode(HttpStatus.FORBIDDEN);
-        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        response.getHeaders().add(REQUEST_VERDICT_HEADER, String.join(",", categories));
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("httpStatus", 403);
-        body.put("code", 40301);
-        body.put("error", "Content Blocked");
-        body.put("message", config.getBlockMessage());
-        body.put("categories", categories);
-        body.put("data", null);
-        byte[] bytes;
-        try {
-            bytes = objectMapper.writeValueAsBytes(body);
-        } catch (Exception e) {
-            bytes = "{\"httpStatus\":403,\"code\":40301,\"error\":\"Content Blocked\"}".getBytes(StandardCharsets.UTF_8);
-        }
-        return response.writeWith(Mono.just(response.bufferFactory().wrap(bytes)));
-    }
-
-    private ServerHttpRequest decorateRequest(ServerWebExchange exchange, byte[] outBytes) {
-        return com.leoli.gateway.util.RequestBodyCache.wrap(exchange, outBytes);
-    }
-
-    @Override
-    public int getOrder() {
-        return FilterOrderConstants.AI_SECURITY;
-    }
-
-    /** Inbound moderation verdict. */
-    private static final class Verdict {
-        boolean flagged;
-        boolean sanitizedAny;
-        final Set<String> categories = new LinkedHashSet<>();
-    }
+    @Override public int getOrder() { return FilterOrderConstants.AI_SECURITY; }
 }

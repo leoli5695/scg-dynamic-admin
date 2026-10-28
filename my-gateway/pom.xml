@@ -25,6 +25,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>com.leoli.gateway</groupId>
+            <artifactId>gateway-moderation-spi</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- Spring Cloud Gateway Starter (自动管理版本) -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>

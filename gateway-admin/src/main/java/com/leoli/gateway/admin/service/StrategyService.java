@@ -1012,6 +1012,9 @@ public class StrategyService {
         StrategyConfigValidator.ValidationResult result = null;
 
         switch (type.toUpperCase()) {
+            case StrategyDefinition.TYPE_AI_SECURITY:
+                AiSecurityStrategyValidator.validate(config);
+                return;
             case StrategyDefinition.TYPE_RATE_LIMITER:
                 result = validateRateLimiterConfig(config);
                 break;

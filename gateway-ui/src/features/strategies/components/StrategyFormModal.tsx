@@ -47,6 +47,7 @@ import DynamicConfigFields, {
 } from './DynamicConfigFields';
 import { TokenRateLimiterFields } from './TokenRateLimiterFields';
 import { AiProxyFields } from './AiProxyFields';
+import { AiSecurityFields } from './AiSecurityFields';
 
 const { Text } = Typography;
 
@@ -100,6 +101,7 @@ function renderConfigFields(
   t: (key: string, options?: Record<string, unknown>) => string,
 ): React.ReactNode {
   const schema = typeInfo.configSchema;
+  if (typeInfo.typeCode === 'AI_SECURITY') return <AiSecurityFields />;
   if (!schema) return null;
   const code = typeInfo.typeCode;
 

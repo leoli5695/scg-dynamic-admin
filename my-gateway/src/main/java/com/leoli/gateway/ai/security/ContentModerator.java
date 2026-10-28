@@ -7,9 +7,8 @@ import java.util.List;
 
 /**
  * Pluggable content moderator. The built-in {@link RuleBasedModerator} does
- * dictionary / regex / PII checks locally; a model-based moderator can be added
- * later and selected via {@link AiSecurityConfig#getModerator()} without changing
- * the filter.
+ * dictionary / regex / PII checks locally. Provider protocol extensions implement
+ * {@link ModerationAdapter}, executed by {@link ExternalContentModerator}.
  *
  * @author leoli
  */

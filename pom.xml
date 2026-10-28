@@ -39,6 +39,7 @@
         <module>license-client</module>
         <module>gateway-trace-starter</module>
         <module>license-server</module>
+        <module>gateway-moderation-spi</module>
         <module>my-gateway</module>
         <module>gateway-admin</module>
         <module>demo-service</module>
