@@ -3,7 +3,7 @@
  * 数据源 = 网关结算后上报的 token_usage_history（/api/token-usage 聚合）。
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Col, DatePicker, Input, Row, Select, Spin, Table } from 'antd';
+import { Alert, Button, Card, Checkbox, Col, DatePicker, Input, Row, Select, Spin, Table } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import ReactECharts from 'echarts-for-react';
@@ -17,7 +17,8 @@ import {
   getTokenUsageTimeseries,
   getTokenQuotaTenants,
 } from '../../api/tokenUsage';
-import type { TokenUsageBucket, TokenUsageFilters } from '../../api/tokenUsage';
+import type { TokenUsageBucket, TokenUsageFilters, TokenUsageEvent } from '../../api/tokenUsage';
+import TokenUsageReconciliationDrawer from './TokenUsageReconciliationDrawer';
 import {
   ApiOutlined,
   BarChartOutlined,
@@ -107,6 +108,8 @@ const TokenUsagePage: React.FC = () => {
   const [routeId, setRouteId] = useState('');
   const [model, setModel] = useState('');
   const [page, setPage] = useState(0);
+  const [unresolvedOnly, setUnresolvedOnly] = useState(false);
+  const [reconciling, setReconciling] = useState<TokenUsageEvent | null>(null);
   const committedRoute = useDebouncedFilter(routeId);
   const committedModel = useDebouncedFilter(model);
 
@@ -122,7 +125,7 @@ const TokenUsagePage: React.FC = () => {
     [range, instanceId, tenantId, committedRoute, committedModel],
   );
 
-  const deps = [filters, granularity, page];
+  const deps = [filters, granularity, page, unresolvedOnly];
 
   const instancesReq = useRequest((signal) => listInstances({ signal }), {});
   const tenantsReq = useRequest((signal) => getTokenQuotaTenants({ signal }), {});
@@ -144,7 +147,7 @@ const TokenUsagePage: React.FC = () => {
   const modelReq = useRequest((signal) => getTokenUsageBreakdown(filters, 'model', 8, { signal }), {
     deps: [filters],
   });
-  const eventsReq = useRequest((signal) => getTokenUsageEvents(filters, page, 20, { signal }), {
+  const eventsReq = useRequest((signal) => getTokenUsageEvents({ ...filters, unresolvedOnly }, page, 20, { signal }), {
     deps,
   });
 
@@ -229,6 +232,7 @@ const TokenUsagePage: React.FC = () => {
     setTenantId('');
     setRouteId('');
     setModel('');
+    setUnresolvedOnly(false);
     setPage(0);
   };
 
@@ -495,7 +499,11 @@ const TokenUsagePage: React.FC = () => {
             </Col>
           </Row>
 
-          <Card size="small" title={t('tokenUsage.table.title')}>
+          <Card size="small" title={t('tokenUsage.table.title')} extra={
+            <Checkbox checked={unresolvedOnly} onChange={(e) => { setUnresolvedOnly(e.target.checked); setPage(0); }}>
+              {t('tokenUsage.reconcile.unresolvedOnly')}
+            </Checkbox>
+          }>
             <Table
               scroll={{ x: 1800 }}
               rowKey="id"
@@ -510,6 +518,8 @@ const TokenUsagePage: React.FC = () => {
                 onChange: (p) => setPage(p - 1),
               }}
               columns={[
+                { title: t('tokenUsage.reconcile.action'), key: 'reconciliation', width: 100, fixed: 'right',
+                  render: (_: unknown, record: TokenUsageEvent) => <Button type="link" onClick={() => setReconciling(record)}>{t('tokenUsage.reconcile.action')}</Button> },
                 {
                   title: t('tokenUsage.table.time'),
                   dataIndex: 'requestTime',
@@ -596,6 +606,8 @@ const TokenUsagePage: React.FC = () => {
           </Card>
         </>
       )}
+      {reconciling && <TokenUsageReconciliationDrawer key={reconciling.id} event={reconciling}
+        onClose={() => setReconciling(null)} onApplied={refresh} />}
     </div>
   );
 };

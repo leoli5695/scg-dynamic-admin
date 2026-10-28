@@ -26,6 +26,13 @@ public class TokenUsageHistoryEntity {
     @Column(name = "event_id", length = 64, unique = true)
     private String eventId;
 
+    @Column(name = "quota_month", length = 6)
+    private String quotaMonth;
+    @Column(name = "quota_day", length = 8)
+    private String quotaDay;
+    @Column(name = "quota_period", length = 10)
+    private String quotaPeriod;
+
     @Column(name = "usage_status", length = 20)
     private String usageStatus;
     @Column(name = "settlement_status", length = 20)

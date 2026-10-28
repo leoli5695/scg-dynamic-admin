@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class AiUsageLifecycleTest {
+    private static final TokenQuotaManager.QuotaPeriodStamp STAMP = new TokenQuotaManager.QuotaPeriodStamp("202610", "20261028");
     private final StrategyManager strategies = mock(StrategyManager.class);
     private final TokenQuotaManager quota = mock(TokenQuotaManager.class);
     private final TokenUsageReporter reporter = mock(TokenUsageReporter.class);
@@ -58,6 +59,7 @@ class AiUsageLifecycleTest {
         var exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/v1/chat/completions"));
         exchange.getAttributes().put("token_quota_tenant_id", "tenant");
         exchange.getAttributes().put("token_quota_pre_deducted", 100L);
+        exchange.getAttributes().put(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP, STAMP);
         exchange.getAttributes().put("ai.model", "gpt-test");
         exchange.getAttributes().put("ai.provider", "openai");
         exchange.getAttributes().put("ai.service", "channel-a");
@@ -74,9 +76,10 @@ class AiUsageLifecycleTest {
         run("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"total_tokens\":30}}");
         assertEquals(10, meters.get("ai.tokens.input").counter().count());
         assertEquals(20, meters.get("ai.tokens.output").counter().count());
-        verify(quota).settleTokenUsage("tenant", 100L, 30L, config);
+        verify(quota).settleTokenUsage("tenant", 100L, 30L, config, STAMP);
         verify(reporter).report(argThat(row -> "CONFIRMED".equals(row.get("usageStatus"))
-                && "APPLIED".equals(row.get("settlementStatus")) && Long.valueOf(30).equals(row.get("chargedTokens"))));
+                && "APPLIED".equals(row.get("settlementStatus")) && Long.valueOf(30).equals(row.get("chargedTokens"))
+                && "202610".equals(row.get("quotaMonth")) && "20261028".equals(row.get("quotaDay"))));
     }
 
     @Test void missingUsageRetainsReservationAndNeverProducesConfirmedZeroMetrics() {
@@ -97,14 +100,14 @@ class AiUsageLifecycleTest {
         AiUsageResult result = exchange.getAttribute(AiUsageResult.RESULT_ATTR);
         assertEquals(AiUsageResult.Status.CONFIRMED, result.status());
         assertEquals(0L, result.totalTokens());
-        verify(quota).settleTokenUsage("tenant", 100L, 0L, config);
+        verify(quota).settleTokenUsage("tenant", 100L, 0L, config, STAMP);
     }
 
     @Test void uncertainRedisFailureDoesNotTriggerASecondQuotaAdjustment() {
         doThrow(new IllegalStateException("Redis connection lost after write"))
-                .when(quota).settleTokenUsage("tenant", 100L, 30L, config);
+                .when(quota).settleTokenUsage("tenant", 100L, 30L, config, STAMP);
         run("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"total_tokens\":30}}");
-        verify(quota).settleTokenUsage("tenant", 100L, 30L, config);
+        verify(quota).settleTokenUsage("tenant", 100L, 30L, config, STAMP);
         verifyNoMoreInteractions(quota);
         verify(reporter).report(argThat(row -> "FAILED".equals(row.get("settlementStatus"))
                 && Long.valueOf(30).equals(row.get("totalTokens"))));

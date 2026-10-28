@@ -61,6 +61,7 @@ class TokenQuotaTenantSourceTest {
         ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
         ReflectionTestUtils.setField(filter, "tokenQuotaManager", tokenQuotaManager);
         ReflectionTestUtils.setField(filter, "objectMapper", new ObjectMapper());
+        when(tokenQuotaManager.currentPeriodStamp()).thenReturn(new TokenQuotaManager.QuotaPeriodStamp("202610", "20261028"));
         when(tokenQuotaManager.checkQuota(anyString(), any()))
                 .thenReturn(TokenQuotaManager.QuotaCheckResult.allowed(0, 0));
         when(chain.filter(any())).thenReturn(Mono.empty());

@@ -107,14 +107,18 @@ public class TokenUsageAnalyticsService {
 
     /** 明细分页（时间倒序），供页面表格逐条核对（含 traceId 可回链追踪页）。 */
     public Map<String, Object> events(LocalDateTime from, LocalDateTime to, int page, int size,
-                                      String instanceId, String routeId, String tenantId, String model) {
+                                      String instanceId, String routeId, String tenantId, String model, boolean unresolvedOnly) {
         Page<TokenUsageHistoryEntity> p = repository.events(
-                from, to, instanceId, routeId, tenantId, model,
+                from, to, instanceId, routeId, tenantId, model, unresolvedOnly,
                 PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 200)));
         List<Map<String, Object>> items = new ArrayList<>();
         for (TokenUsageHistoryEntity e : p.getContent()) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", e.getId());
+            m.put("eventId", e.getEventId());
+            m.put("quotaMonth", e.getQuotaMonth());
+            m.put("quotaDay", e.getQuotaDay());
+            m.put("quotaPeriod", e.getQuotaPeriod());
             m.put("requestTime", e.getRequestTime() != null ? e.getRequestTime().toString() : null);
             m.put("tenantId", e.getTenantId());
             m.put("routeId", e.getRouteId());

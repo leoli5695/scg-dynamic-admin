@@ -717,7 +717,8 @@ public class TokenQuotaManager {
         if (preDeductedTokens <= 0) {
             // No pre-deduct, just consume actual
             if (actualTokens > 0) {
-                consumeTokens(tenantId, actualTokens, config, stamp);
+                if (!consumeTokens(tenantId, actualTokens, config, stamp))
+                    throw new IllegalStateException("Token consumption was not applied");
             }
             return;
         }
@@ -726,11 +727,13 @@ public class TokenQuotaManager {
 
         if (diff > 0) {
             // Pre-deducted more than actual, refund excess
-            refundTokens(tenantId, diff, config, "ESTIMATE_DIFF", stamp);
+            if (!refundTokens(tenantId, diff, config, "ESTIMATE_DIFF", stamp))
+                throw new IllegalStateException("Token refund was not applied");
         } else if (diff < 0) {
             // Actual exceeds pre-deducted, consume additional
             long additional = Math.abs(diff);
-            consumeTokens(tenantId, additional, config, stamp);
+            if (!consumeTokens(tenantId, additional, config, stamp))
+                throw new IllegalStateException("Additional token consumption was not applied");
             log.debug("Additional {} tokens consumed for tenant {} (actual > estimate)",
                     additional, tenantId);
         } else {

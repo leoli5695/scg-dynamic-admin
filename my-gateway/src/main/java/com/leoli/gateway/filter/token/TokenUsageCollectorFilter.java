@@ -467,6 +467,10 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                                   int incrementalTokens, long preDeductedTokens,
                                                   boolean interrupted, boolean isSse) {
         try {
+            if (exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP) == null)
+                exchange.getAttributes().put(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP, tokenQuotaManager.currentPeriodStamp());
+            String quotaPeriod = config.getTenantQuota(tenantId).getQuotaPeriod();
+            exchange.getAttributes().put("ai.quota.period", (quotaPeriod != null ? quotaPeriod : config.getQuotaPeriod()).toUpperCase(java.util.Locale.ROOT));
             TokenUsage usage;
 
             if (isSse) {
@@ -526,7 +530,8 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                 }
             } else if (actualTokens > 0) {
                 // No pre-deduct, just consume actual
-                tokenQuotaManager.consumeTokens(tenantId, actualTokens, config);
+                if (!tokenQuotaManager.consumeTokens(tenantId, actualTokens, config, stamp))
+                    throw new IllegalStateException("Token consumption was not applied");
             }
 
             // FIX (dead headers): X-Token-Usage-* were previously added here, after
@@ -607,6 +612,10 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             }
             payload.put("settlementStatus", exchange.getAttributeOrDefault("ai.settlement.status",
                     result != null && result.status() == AiUsageResult.Status.UNKNOWN ? "PENDING" : "APPLIED"));
+            TokenQuotaManager.QuotaPeriodStamp stamp = exchange.getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP);
+            payload.put("quotaMonth", stamp != null ? stamp.monthId() : null);
+            payload.put("quotaDay", stamp != null ? stamp.dayId() : null);
+            payload.put("quotaPeriod", exchange.getAttribute("ai.quota.period"));
             payload.put("provider", exchange.getAttribute(AiProviderRoutingFilter.AI_PROVIDER_ATTR));
             payload.put("serviceId", exchange.getAttribute(AiProviderRoutingFilter.AI_SERVICE_ATTR));
             payload.put("model", exchange.getAttributeOrDefault(AiProviderRoutingFilter.AI_MODEL_ATTR,

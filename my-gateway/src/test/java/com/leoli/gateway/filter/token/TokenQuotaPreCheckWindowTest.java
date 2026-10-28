@@ -54,6 +54,7 @@ class TokenQuotaPreCheckWindowTest {
         ReflectionTestUtils.setField(filter, "strategyManager", strategyManager);
         ReflectionTestUtils.setField(filter, "tokenQuotaManager", tokenQuotaManager);
         ReflectionTestUtils.setField(filter, "objectMapper", new ObjectMapper());
+        when(tokenQuotaManager.currentPeriodStamp()).thenReturn(new TokenQuotaManager.QuotaPeriodStamp("202610", "20261028"));
     }
 
     private MockServerWebExchange postWithTenant(String tenant) {

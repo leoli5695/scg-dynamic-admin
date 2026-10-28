@@ -85,13 +85,14 @@ public class TokenUsageController extends BaseController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean unresolvedOnly,
             @RequestParam(required = false) String instanceId,
             @RequestParam(required = false) String routeId,
             @RequestParam(required = false) String tenantId,
             @RequestParam(required = false) String model) {
         Range r = range(from, to);
         return ok(analyticsService.events(r.from(), r.to(), page, size,
-                blankToNull(instanceId), blankToNull(routeId), blankToNull(tenantId), blankToNull(model)));
+                blankToNull(instanceId), blankToNull(routeId), blankToNull(tenantId), blankToNull(model), unresolvedOnly));
     }
 
     private record Range(LocalDateTime from, LocalDateTime to) {

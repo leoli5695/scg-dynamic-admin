@@ -86,6 +86,8 @@ class TokenUsageCollectorFilterSseTest {
         ReflectionTestUtils.setField(filter, "tokenUsageParser", new TokenUsageParser());
         ReflectionTestUtils.setField(filter, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(filter, "maxBodySize", 65536);
+        when(tokenQuotaManager.currentPeriodStamp()).thenReturn(new TokenQuotaManager.QuotaPeriodStamp("202610", "20261028"));
+        when(tokenQuotaManager.consumeTokens(anyString(), org.mockito.ArgumentMatchers.anyLong(), any(), any())).thenReturn(true);
 
         StrategyDefinition strategy = new StrategyDefinition();
         strategy.setEnabled(true);
@@ -132,7 +134,7 @@ class TokenUsageCollectorFilterSseTest {
     private void assertCharged(long expectedTokens) {
         // Settlement is offloaded to boundedElastic, so await it.
         verify(tokenQuotaManager, timeout(5000))
-                .consumeTokens(eq(TENANT), eq(expectedTokens), any(TokenQuotaConfig.class));
+                .consumeTokens(eq(TENANT), eq(expectedTokens), any(TokenQuotaConfig.class), any(TokenQuotaManager.QuotaPeriodStamp.class));
     }
 
     @Test

@@ -442,6 +442,9 @@ public class TokenQuotaService {
         history.setServiceId((String) usageData.get("serviceId"));
         history.setChargedTokens(asLong(usageData.get("chargedTokens")));
         history.setReservedTokens(asLong(usageData.get("reservedTokens")));
+        history.setQuotaMonth((String) usageData.get("quotaMonth"));
+        history.setQuotaDay((String) usageData.get("quotaDay"));
+        history.setQuotaPeriod((String) usageData.get("quotaPeriod"));
 
         Integer promptTokens = asInt(usageData.get("promptTokens"));
         Integer completionTokens = asInt(usageData.get("completionTokens"));
@@ -491,12 +494,13 @@ public class TokenQuotaService {
                     Optional.ofNullable(asInt(row.get("totalTokens"))).orElse(0), row.get("instanceId"),
                     row.get("responseFormat"), asLong(row.get("latencyMs")), requestTime, now,
                     row.getOrDefault("usageStatus", "LEGACY"), row.getOrDefault("settlementStatus", "LEGACY"),
-                    row.get("provider"), row.get("serviceId"), asLong(row.get("chargedTokens")), asLong(row.get("reservedTokens")), eventId});
+                    row.get("provider"), row.get("serviceId"), asLong(row.get("chargedTokens")), asLong(row.get("reservedTokens")), eventId,
+                    row.get("quotaMonth"), row.get("quotaDay"), row.get("quotaPeriod")});
         }
         String insert = "INSERT INTO token_usage_history (tenant_id,trace_id,route_id,model,prompt_tokens,"
                 + "completion_tokens,total_tokens,instance_id,response_format,latency_ms,request_time,created_at,"
-                + "usage_status,settlement_status,provider,service_id,charged_tokens,reserved_tokens,event_id)"
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                + "usage_status,settlement_status,provider,service_id,charged_tokens,reserved_tokens,event_id,quota_month,quota_day,quota_period)"
+                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         List<Object[]> events = rows.stream().filter(row -> row[18] != null).toList();
         List<Object[]> legacy = rows.stream().filter(row -> row[18] == null).toList();
         try {

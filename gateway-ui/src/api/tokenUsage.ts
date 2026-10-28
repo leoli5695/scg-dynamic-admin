@@ -6,7 +6,40 @@ import httpClient, { RequestOptions } from './http';
 
 const BASE = '/api/token-usage';
 
+export interface TokenUsageCorrection {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  chargedTokens: number;
+  monthlyDelta: number;
+  dailyDelta: number;
+  reason: string;
+}
+export interface TokenUsageReconciliation {
+  id: string;
+  status: 'PENDING' | 'APPLIED' | 'REVIEW_REQUIRED';
+  operator: string;
+  reason: string;
+  monthly_delta: number;
+  daily_delta: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  charged_tokens: number;
+  original_usage: string;
+  last_error: string | null;
+  attempts: number;
+}
+const reconciliationUrl = (usageId: number) => `${BASE}/events/${usageId}/reconciliation`;
+export const getTokenUsageReconciliation = (usageId: number, options?: RequestOptions) =>
+  httpClient.get<TokenUsageReconciliation | null>(reconciliationUrl(usageId), options);
+export const reconcileTokenUsage = (usageId: number, correction: TokenUsageCorrection) =>
+  httpClient.post<TokenUsageReconciliation>(reconciliationUrl(usageId), correction);
+export const retryTokenUsageReconciliation = (usageId: number) =>
+  httpClient.post<TokenUsageReconciliation>(`${reconciliationUrl(usageId)}/retry`);
+
 export interface TokenUsageFilters {
+  unresolvedOnly?: boolean;
   from?: string;
   to?: string;
   instanceId?: string;
@@ -47,7 +80,11 @@ export interface TokenUsageBreakdownRow {
 }
 
 export interface TokenUsageEvent {
-  usageStatus?: 'CONFIRMED' | 'ESTIMATED' | 'UNKNOWN' | 'NOT_BILLED' | 'LEGACY';
+  usageStatus?: 'CONFIRMED' | 'ESTIMATED' | 'UNKNOWN' | 'NOT_BILLED' | 'LEGACY' | 'RECONCILED';
+  eventId?: string | null;
+  quotaMonth?: string | null;
+  quotaDay?: string | null;
+  quotaPeriod?: string | null;
   settlementStatus?: string;
   provider?: string | null;
   serviceId?: string | null;

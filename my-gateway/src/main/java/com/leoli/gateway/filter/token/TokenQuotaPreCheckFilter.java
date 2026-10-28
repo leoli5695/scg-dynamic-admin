@@ -207,10 +207,11 @@ public class TokenQuotaPreCheckFilter implements GlobalFilter, Ordered {
         final String strategy = config.tokenQuotaConfig.getPreDeductStrategy();
         java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean();
         return Mono.fromCallable(() -> {
+                    TokenQuotaManager.QuotaPeriodStamp stamp = tokenQuotaManager.currentPeriodStamp();
+                    exchange.getAttributes().put(ATTR_PERIOD_STAMP, stamp);
                     if ("ESTIMATE".equalsIgnoreCase(strategy) || "HYBRID".equalsIgnoreCase(strategy)) {
                         // Freeze the period ids NOW so settlement (which may run after a
                         // day/month boundary) refunds into the same bucket pre-deduct charged.
-                        TokenQuotaManager.QuotaPeriodStamp stamp = tokenQuotaManager.currentPeriodStamp();
                         long preDeducted = applyPreDeductStrategy(tenantId, estimatedInputTokens,
                                 config.tokenQuotaConfig, stamp);
                         // FIX (P0, quota bypass): this was `< 0`, so it only ran the quota check when

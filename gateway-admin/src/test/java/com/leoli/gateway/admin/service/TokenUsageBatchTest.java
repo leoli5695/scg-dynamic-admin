@@ -28,7 +28,8 @@ class TokenUsageBatchTest {
                 """);
         new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
                 new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-outcome.sql"),
-                new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-event-id.sql")).execute(source);
+                new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-event-id.sql"),
+                new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-reconciliation.sql")).execute(source);
     }
     @Test void recordsNumbersUnicodeAndLifecycleFields() {
         tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(Map.of("tenantId", "租户", "traceId", "one",
@@ -49,6 +50,7 @@ class TokenUsageBatchTest {
         row.put("tenantId", "tenant"); row.put("usageStatus", "UNKNOWN");
         row.put("settlementStatus", "PENDING"); row.put("reservedTokens", 100L);
         row.put("provider", "openai"); row.put("serviceId", "channel-a"); row.put("totalTokens", null);
+        row.put("quotaMonth", "202609"); row.put("quotaDay", "20260930"); row.put("quotaPeriod", "BOTH");
         tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(row)));
         var stored = jdbc.queryForMap("SELECT * FROM token_usage_history");
         assertEquals("UNKNOWN", stored.get("USAGE_STATUS"));
@@ -56,6 +58,9 @@ class TokenUsageBatchTest {
         assertNull(stored.get("CHARGED_TOKENS"));
         assertEquals(100L, stored.get("RESERVED_TOKENS"));
         assertEquals("channel-a", stored.get("SERVICE_ID"));
+        assertEquals("20260930", stored.get("QUOTA_DAY"));
+        assertEquals("202609", stored.get("QUOTA_MONTH"));
+        assertEquals("BOTH", stored.get("QUOTA_PERIOD"));
     }
     @Test void validatesBatchBeforeWriting() {
         assertThrows(IllegalArgumentException.class, () -> service.recordTokenUsageBatch(List.of(Map.of("tenantId", "t"), Map.of())));

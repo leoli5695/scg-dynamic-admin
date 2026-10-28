@@ -161,10 +161,12 @@ public interface TokenUsageHistoryRepository extends JpaRepository<TokenUsageHis
            " AND (:instanceId IS NULL OR h.instanceId = :instanceId)" +
            " AND (:routeId IS NULL OR h.routeId = :routeId)" +
            " AND (:tenantId IS NULL OR h.tenantId = :tenantId)" +
-           " AND (:model IS NULL OR h.model = :model) ORDER BY h.requestTime DESC, h.id DESC")
+           " AND (:model IS NULL OR h.model = :model)" +
+           " AND (:unresolvedOnly = false OR h.usageStatus IN ('UNKNOWN','ESTIMATED') OR h.settlementStatus IN ('PENDING','FAILED'))" +
+           " ORDER BY h.requestTime DESC, h.id DESC")
     org.springframework.data.domain.Page<TokenUsageHistoryEntity> events(
             @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
             @Param("instanceId") String instanceId, @Param("routeId") String routeId,
-            @Param("tenantId") String tenantId, @Param("model") String model,
+            @Param("tenantId") String tenantId, @Param("model") String model, @Param("unresolvedOnly") boolean unresolvedOnly,
             org.springframework.data.domain.Pageable pageable);
 }
