@@ -52,8 +52,8 @@ class TraceCaptureGlobalFilterTest {
             forwarded.getResponse().setStatusCode(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR);
             return Mono.empty();
         }).block();
-        ArgumentCaptor<Object> trace = ArgumentCaptor.forClass(Object.class);
-        org.mockito.Mockito.verify(bodySpec).bodyValue(trace.capture());
+        ArgumentCaptor<Map<String, Object>> trace = ArgumentCaptor.forClass(Map.class);
+        org.mockito.Mockito.verify(reportDispatcher).submit(trace.capture());
         Map<?, ?> payload = (Map<?, ?>) trace.getValue();
         assertEquals(500, payload.get("statusCode"));
         org.junit.jupiter.api.Assertions.assertNull(payload.get("responseBody"));
@@ -91,7 +91,7 @@ class TraceCaptureGlobalFilterTest {
     private TrustedProxyProperties trustedProxyProperties;
 
     @Mock
-    private WebClient webClient;
+    private com.leoli.gateway.monitor.TraceReportDispatcher reportDispatcher;
     @Mock
     private WebClient.RequestBodyUriSpec uriSpec;
     @Mock
@@ -114,16 +114,9 @@ class TraceCaptureGlobalFilterTest {
         ReflectionTestUtils.setField(filter, "instanceId", "gateway-test");
         ReflectionTestUtils.setField(filter, "includeFilterChain", false);
         ReflectionTestUtils.setField(filter, "maskSensitiveBody", true);
-        ReflectionTestUtils.setField(filter, "webClient", webClient);
+        ReflectionTestUtils.setField(filter, "reportDispatcher", reportDispatcher);
 
-        // Fluent WebClient chain ending in a no-op Mono so sendTraceToAdmin can be captured.
-        lenient().when(webClient.post()).thenReturn(uriSpec);
-        lenient().when(uriSpec.uri(anyString())).thenReturn(bodySpec);
-        lenient().when(bodySpec.contentType(any(MediaType.class))).thenReturn(bodySpec);
-        lenient().when(bodySpec.headers(any())).thenReturn(bodySpec);
-        lenient().when(bodySpec.bodyValue(any())).thenReturn((WebClient.RequestHeadersSpec) headersSpec);
-        lenient().when(headersSpec.retrieve()).thenReturn(responseSpec);
-        lenient().when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("ok"));
+
     }
 
     @Test
@@ -179,7 +172,7 @@ class TraceCaptureGlobalFilterTest {
     @SuppressWarnings("unchecked")
     private String capturedClientIp() {
         ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
-        org.mockito.Mockito.verify(bodySpec).bodyValue(captor.capture());
+        org.mockito.Mockito.verify(reportDispatcher).submit(captor.capture());
         return (String) captor.getValue().get("clientIp");
     }
 }

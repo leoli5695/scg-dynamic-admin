@@ -114,7 +114,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             "(?i)\\b(password|passwd|pwd|secret|token|access_token|refresh_token|api_key|apikey|access_key|private_key|credential|cvv)=([^&\\s\"]*)");
 
     @Autowired
-    private WebClient webClient;
+    private com.leoli.gateway.monitor.TraceReportDispatcher reportDispatcher;
 
     @Autowired(required = false)
     private FilterChainTracker filterChainTracker;
@@ -131,6 +131,10 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        return Mono.defer(() -> filterSubscribed(exchange, chain));
+    }
+
+    private Mono<Void> filterSubscribed(ServerWebExchange exchange, GatewayFilterChain chain) {
         // Record start time
         final long startTime = System.currentTimeMillis();
         exchange.getAttributes().put(START_TIME_ATTR, startTime);
@@ -187,7 +191,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         boolean shouldCaptureBody = shouldCaptureBody(request);
 
         // Create a StringBuilder to capture response body (always capture for all requests including retries)
-        StringBuilder responseBodyBuilder = new StringBuilder();
+        com.leoli.gateway.util.BoundedBodyCapture responseBodyBuilder = new com.leoli.gateway.util.BoundedBodyCapture(maxBodySize);
 
         // Wrap response to capture response body (always wrap, even for retry requests)
         ServerHttpResponse decoratedResponse = new ServerHttpResponseDecorator(exchange.getResponse()) {
@@ -195,26 +199,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             public Mono<Void> writeWith(org.reactivestreams.Publisher<? extends DataBuffer> body) {
                 // Convert any Publisher to Flux for consistent handling
                 Flux<? extends DataBuffer> flux = Flux.from(body);
-                return super.writeWith(flux.doOnNext(dataBuffer -> {
-                    // Skip copying once the capture buffer is full - avoids
-                    // allocating/discarding byte[] for every remaining chunk
-                    // of large responses.
-                    if (responseBodyBuilder.length() >= maxBodySize) {
-                        return;
-                    }
-                    // Cache response body
-                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                    dataBuffer.read(bytes);
-                    String chunk = new String(bytes, StandardCharsets.UTF_8);
-                    if (responseBodyBuilder.length() + chunk.length() <= maxBodySize) {
-                        responseBodyBuilder.append(chunk);
-                    } else {
-                        int remaining = maxBodySize - responseBodyBuilder.length();
-                        responseBodyBuilder.append(chunk.substring(0, remaining)).append("...[TRUNCATED]");
-                    }
-                    // Reset buffer position for actual write
-                    dataBuffer.readPosition(0);
-                }));
+                return super.writeWith(flux.doOnNext(responseBodyBuilder::append));
             }
         };
 
@@ -247,13 +232,13 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      *   同时请求体不会被二次消费，转发始终携带完整原始 body。
      */
     private Mono<Void> cacheRequestBodyAndContinue(ServerWebExchange exchange, GatewayFilterChain chain,
-                                                   long startTime, String traceId, StringBuilder responseBodyBuilder) {
+                                                   long startTime, String traceId, com.leoli.gateway.util.BoundedBodyCapture responseBodyBuilder) {
         ServerHttpRequest request = exchange.getRequest();
 
         // 【OOM 防护】检查 Content-Length，超过限制直接跳过缓存
         long contentLength = request.getHeaders().getContentLength();
         if (contentLength > maxBodySize) {
-            log.warn("Request body too large, skipping capture: traceId={}, contentLength={}, maxBodySize={}",
+            log.debug("Request body too large, skipping capture: traceId={}, contentLength={}, maxBodySize={}",
                     traceId, contentLength, maxBodySize);
 
             // 不缓存请求体，但仍然继续处理请求
@@ -265,20 +250,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         }
 
         // 【旁路拷贝】流经过时同步捕获最多 maxBodySize 字节，原始 buffer 位置恢复后继续转发
-        StringBuilder requestBodyBuilder = new StringBuilder();
-        AtomicLong capturedBytes = new AtomicLong(0);
-        Flux<DataBuffer> sideCopyBody = request.getBody().doOnNext(buffer -> {
-            long remaining = maxBodySize - capturedBytes.get();
-            if (remaining > 0) {
-                int toRead = (int) Math.min(buffer.readableByteCount(), remaining);
-                byte[] chunk = new byte[toRead];
-                buffer.read(chunk);
-                // Reset buffer position so downstream still receives the full original body
-                buffer.readPosition(0);
-                requestBodyBuilder.append(new String(chunk, StandardCharsets.UTF_8));
-                capturedBytes.addAndGet(toRead);
-            }
-        });
+        com.leoli.gateway.util.BoundedBodyCapture requestBodyBuilder = new com.leoli.gateway.util.BoundedBodyCapture(maxBodySize);
+        Flux<DataBuffer> sideCopyBody = request.getBody().doOnNext(requestBodyBuilder::append);
 
         ServerHttpRequest newRequest = new ServerHttpRequestDecorator(request) {
             @Override
@@ -292,9 +265,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
                 .doFinally(signalType -> {
                     String requestBody = null;
                     if (requestBodyBuilder.length() > 0) {
-                        requestBody = capturedBytes.get() >= maxBodySize
-                                ? requestBodyBuilder + "...[TRUNCATED]"
-                                : requestBodyBuilder.toString();
+                        requestBody = requestBodyBuilder.toString();
                         exchange.getAttributes().put(REQUEST_BODY_ATTR, requestBody);
                     }
                     String responseBody = responseBodyBuilder.length() > 0 ? responseBodyBuilder.toString() : null;
@@ -714,93 +685,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      * Also sends filter execution data separately for database persistence.
      */
     private void sendTraceToAdmin(Map<String, Object> trace) {
-        try {
-            String traceId = (String) trace.get("traceId");
-            String instanceId = (String) trace.get("instanceId");
-            String clientIp = (String) trace.get("clientIp");
-            String routeId = (String) trace.get("routeId");
-
-            log.debug("Sending trace to admin: traceId={}, instanceId={}, clientIp={}, routeId={}, adminUrl={}",
-                    traceId, instanceId, clientIp, routeId, adminUrl);
-
-            // Send trace data
-            webClient
-                    .post()
-                    .uri(adminUrl + "/api/traces/internal")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .headers(h -> { if (!internalToken.isEmpty()) h.set(InternalApiConstants.TOKEN_HEADER, internalToken); })
-                    .bodyValue(trace)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .subscribe(
-                            response -> log.debug("Trace saved successfully: traceId={}, response={}", traceId, response),
-                            error -> log.error("Failed to send trace to admin: traceId={}, error={}", traceId, error.getMessage())
-                    );
-
-            // Send filter execution data separately for database persistence
-            if (trace.containsKey("filterExecutions") && includeFilterChain) {
-                sendFilterExecutionsToAdmin(traceId, instanceId,
-                        (List<Map<String, Object>>) trace.get("filterExecutions"),
-                        (Long) trace.get("latencyMs"));
-            }
-        } catch (Exception e) {
-            log.error("Failed to send trace to admin", e);
-        }
-    }
-
-    /**
-     * Send filter execution data to admin service for database persistence.
-     */
-    private void sendFilterExecutionsToAdmin(String traceId, String instanceId,
-                                             List<Map<String, Object>> filterExecutions,
-                                             Long totalDurationMs) {
-        if (filterExecutions == null || filterExecutions.isEmpty()) {
-            return;
-        }
-
-        try {
-            // Convert to format for database storage
-            List<Map<String, Object>> executionData = filterExecutions.stream()
-                    .map(exec -> {
-                        Map<String, Object> data = new HashMap<>();
-                        data.put("traceId", traceId);
-                        data.put("instanceId", instanceId);
-                        data.put("filterName", exec.get("filterName"));
-                        data.put("filterOrder", exec.get("order"));
-                        data.put("durationMs", exec.get("durationMs"));
-                        data.put("durationMicros", exec.get("durationMicros"));
-                        data.put("selfTimeMs", exec.get("selfTimeMs"));        // Filter's own logic time
-                        data.put("selfTimeMicros", exec.get("selfTimeMicros")); // For precision
-                        data.put("success", exec.get("success"));
-
-                        // Calculate numeric percentage
-                        Long durationMs = (Long) exec.get("durationMs");
-                        if (totalDurationMs != null && totalDurationMs > 0 && durationMs != null) {
-                            data.put("timePercentage", durationMs * 100.0 / totalDurationMs);
-                        }
-
-                        if (exec.get("error") != null) {
-                            data.put("errorMessage", exec.get("error"));
-                        }
-                        return data;
-                    })
-                    .toList();
-
-            webClient
-                    .post()
-                    .uri(adminUrl + "/api/filter-executions/internal")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .headers(h -> { if (!internalToken.isEmpty()) h.set(InternalApiConstants.TOKEN_HEADER, internalToken); })
-                    .bodyValue(executionData)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .subscribe(
-                            response -> log.debug("Filter executions saved for trace: {}", traceId),
-                            error -> log.error("Failed to send filter executions: {}", error.getMessage())
-                    );
-        } catch (Exception e) {
-            log.error("Failed to send filter executions to admin", e);
-        }
+        reportDispatcher.submit(trace);
     }
 
     /**

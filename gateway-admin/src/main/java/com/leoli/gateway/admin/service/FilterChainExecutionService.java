@@ -62,7 +62,7 @@ public class FilterChainExecutionService {
     /**
      * Convert raw map data to entity.
      */
-    private FilterChainExecution convertFromMap(Map<String, Object> data) {
+    FilterChainExecution convertFromMap(Map<String, Object> data) {
         try {
             FilterChainExecution execution = new FilterChainExecution();
             execution.setTraceId((String) data.get("traceId"));

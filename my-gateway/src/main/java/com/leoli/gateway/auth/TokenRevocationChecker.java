@@ -19,6 +19,10 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Revocation check for data-plane JWTs.
@@ -87,6 +91,12 @@ public class TokenRevocationChecker {
             .build();
 
     private final AtomicBoolean missingRedisWarned = new AtomicBoolean(false);
+    private final Map<LookupKey, Mono<Boolean>> inFlight = new HashMap<>();
+    private final AtomicLong generation = new AtomicLong();
+    private final AtomicLong unavailableUntilNanos = new AtomicLong();
+    @Value("${gateway.jwt.revocation.timeout-ms:500}")
+    private long timeoutMs = 500;
+    private record LookupKey(String value, long generation) { }
 
     /**
      * Whether the given token has been revoked.
@@ -95,6 +105,10 @@ public class TokenRevocationChecker {
      * @param token  raw JWT, used for the hash-based blacklist entry
      */
     public Mono<Boolean> isRevoked(Claims claims, String token) {
+        return Mono.defer(() -> checkRevoked(claims, token));
+    }
+
+    private Mono<Boolean> checkRevoked(Claims claims, String token) {
         if (!enabled || token == null || token.isEmpty()) {
             return Mono.just(Boolean.FALSE);
         }
@@ -113,10 +127,30 @@ public class TokenRevocationChecker {
             return Mono.just(Boolean.FALSE);
         }
 
-        return runtimeCheckEnabled()
-                .flatMap(active -> active
-                        ? lookupBlacklist(claims, tokenHash)
-                        : Mono.just(Boolean.FALSE));
+        if (System.nanoTime() < unavailableUntilNanos.get()) {
+            return Mono.error(new RevocationUnavailableException(null));
+        }
+        long epoch = generation.get();
+        return share(new LookupKey(tokenHash, epoch), () -> runtimeCheckEnabled(epoch)
+                .flatMap(active -> active ? lookupBlacklist(claims, tokenHash, epoch) : Mono.just(false))
+                .timeout(Duration.ofMillis(Math.max(1, timeoutMs)))
+                .onErrorResume(error -> {
+                    unavailableUntilNanos.set(System.nanoTime() + Duration.ofSeconds(1).toNanos());
+                    return Mono.error(new RevocationUnavailableException(error));
+                }));
+    }
+
+    private Mono<Boolean> share(LookupKey key, Supplier<Mono<Boolean>> lookup) {
+        synchronized (inFlight) {
+            Mono<Boolean> existing = inFlight.get(key);
+            if (existing != null) return existing;
+            if (inFlight.size() >= 512) return Mono.error(new RevocationUnavailableException(null));
+            Mono<Boolean> shared = Mono.defer(lookup)
+                    .doFinally(signal -> { synchronized (inFlight) { inFlight.remove(key); } })
+                    .cache();
+            inFlight.put(key, shared);
+            return shared;
+        }
     }
 
     /**
@@ -124,23 +158,23 @@ public class TokenRevocationChecker {
      * stays enabled if the flag cannot be read - turning revocation off must be an
      * explicit operator action, not a side effect of a Redis hiccup.
      */
-    private Mono<Boolean> runtimeCheckEnabled() {
+    private Mono<Boolean> runtimeCheckEnabled(long epoch) {
         Boolean cached = runtimeFlagCache.getIfPresent(RUNTIME_FLAG_KEY);
         if (cached != null) {
             return Mono.just(cached);
         }
-        return reactiveRedisTemplate.opsForValue().get(RUNTIME_FLAG_KEY)
+        return share(new LookupKey("runtime-flag", epoch), () -> reactiveRedisTemplate.opsForValue().get(RUNTIME_FLAG_KEY)
                 .map(value -> !"false".equalsIgnoreCase(value))
                 .defaultIfEmpty(Boolean.TRUE)
-                .doOnNext(value -> runtimeFlagCache.put(RUNTIME_FLAG_KEY, value))
-                .onErrorResume(e -> {
-                    log.error("Could not read the JWT revocation switch, treating it as enabled: {}",
-                            e.getMessage());
-                    return Mono.just(Boolean.TRUE);
-                });
+                .timeout(Duration.ofMillis(Math.max(1, timeoutMs)))
+                .doOnNext(value -> {
+                    synchronized (inFlight) {
+                        if (generation.get() == epoch) runtimeFlagCache.put(RUNTIME_FLAG_KEY, value);
+                    }
+                }));
     }
 
-    private Mono<Boolean> lookupBlacklist(Claims claims, String tokenHash) {
+    private Mono<Boolean> lookupBlacklist(Claims claims, String tokenHash, long epoch) {
         List<String> ids = new ArrayList<>(2);
         String jti = claims != null ? claims.getId() : null;
         if (jti != null && !jti.isBlank()) {
@@ -152,18 +186,14 @@ public class TokenRevocationChecker {
                 .flatMap(id -> reactiveRedisTemplate.hasKey(REVOKED_KEY_PREFIX + id))
                 .any(Boolean.TRUE::equals)
                 .doOnNext(revoked -> {
-                    verdictCache.put(tokenHash, revoked);
+                    // Check and write must be atomic with invalidation, not just two atomic reads.
+                    synchronized (inFlight) {
+                        if (generation.get() == epoch) verdictCache.put(tokenHash, revoked);
+                    }
                     if (revoked) {
                         log.warn("Rejected revoked JWT (subject={})",
                                 claims != null ? claims.getSubject() : "unknown");
                     }
-                })
-                .onErrorResume(e -> {
-                    // Fail open: a Redis outage must not take down every JWT-protected
-                    // route. The trade-off is that revoked tokens are accepted while
-                    // Redis is unreachable, which is why this is logged at error level.
-                    log.error("JWT revocation check failed, allowing token through: {}", e.getMessage());
-                    return Mono.just(Boolean.FALSE);
                 });
     }
 
@@ -173,8 +203,11 @@ public class TokenRevocationChecker {
      * local cache TTL (5s).
      */
     public void invalidateLocalCache() {
-        verdictCache.invalidateAll();
-        runtimeFlagCache.invalidateAll();
+        synchronized (inFlight) {
+            generation.incrementAndGet();
+            verdictCache.invalidateAll();
+            runtimeFlagCache.invalidateAll();
+        }
     }
 
     private static String sha256Hex(String value) {

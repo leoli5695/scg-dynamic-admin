@@ -1,7 +1,6 @@
 package com.leoli.gateway.admin.service;
 
 import com.leoli.gateway.admin.model.RequestTrace;
-import com.leoli.gateway.admin.repository.RequestTraceRepository;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -16,6 +15,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Trace 异步缓冲服务
@@ -39,12 +40,15 @@ import java.util.concurrent.atomic.AtomicLong;
 @Service
 public class TraceBufferService {
 
-    private final RequestTraceRepository requestTraceRepository;
+    private final DiagnosticBatchWriter writer;
 
     /**
      * Trace 缓冲队列
      */
-    private final BlockingQueue<RequestTrace> traceQueue;
+    private record PendingTrace(RequestTrace trace, long bytes) { }
+    private final BlockingQueue<PendingTrace> traceQueue;
+    private final AtomicLong queuedBytes = new AtomicLong();
+    private static final long MAX_QUEUED_BYTES = 16L * 1024 * 1024;
 
     /**
      * 后台批量落库线程
@@ -85,13 +89,15 @@ public class TraceBufferService {
      * 上次刷新时间
      */
     private volatile long lastFlushTime = System.currentTimeMillis();
+    private final AtomicBoolean flushScheduled = new AtomicBoolean();
+    private volatile boolean closed;
 
-    public TraceBufferService(RequestTraceRepository requestTraceRepository) {
-        this.requestTraceRepository = requestTraceRepository;
+    public TraceBufferService(DiagnosticBatchWriter writer) {
+        this.writer = writer;
         this.traceQueue = new LinkedBlockingQueue<>(QUEUE_SIZE);
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "trace-buffer-flush");
-            t.setDaemon(false);
+            t.setDaemon(true);
             return t;
         });
 
@@ -109,11 +115,24 @@ public class TraceBufferService {
      */
     public boolean offer(RequestTrace trace) {
         receivedCount.incrementAndGet();
-
-        if (!traceQueue.offer(trace)) {
+        long bytes = 512;
+        for (String value : java.util.Arrays.asList(trace.getInstanceId(), trace.getTraceId(), trace.getRouteId(),
+                trace.getMethod(), trace.getUri(), trace.getPath(), trace.getQueryString(), trace.getRequestHeaders(),
+                trace.getRequestBody(), trace.getResponseHeaders(), trace.getResponseBody(), trace.getTargetInstance(),
+                trace.getErrorMessage(), trace.getErrorType(), trace.getClientIp(), trace.getUserAgent(),
+                trace.getTraceType(), trace.getReplayType(), trace.getLastReplayResult())) {
+            if (value != null) bytes += 2L * value.length();
+        }
+        long current;
+        do {
+            current = queuedBytes.get();
+            if (closed || bytes > 512 * 1024 || bytes > MAX_QUEUED_BYTES - current) {
+                droppedCount.incrementAndGet(); return false;
+            }
+        } while (!queuedBytes.compareAndSet(current, current + bytes));
+        if (closed || !traceQueue.offer(new PendingTrace(trace, bytes))) {
+            queuedBytes.addAndGet(-bytes);
             droppedCount.incrementAndGet();
-            log.warn("Trace queue full, dropping trace: traceId={}, queueSize={}, dropped={}",
-                    trace.getTraceId(), QUEUE_SIZE, droppedCount.get());
             return false;
         }
 
@@ -141,6 +160,7 @@ public class TraceBufferService {
         stats.put("saved", savedCount.get());
         stats.put("dropped", droppedCount.get());
         stats.put("queueSize", (long) traceQueue.size());
+        stats.put("queuedBytes", queuedBytes.get());
         return stats;
     }
 
@@ -154,7 +174,7 @@ public class TraceBufferService {
 
         // 队列有数据且超过最大攒批时间
         if (traceQueue.size() > 0 && elapsed >= MAX_BATCH_WAIT_MS) {
-            flushBatch();
+            triggerFlush();
         }
     }
 
@@ -162,7 +182,13 @@ public class TraceBufferService {
      * 异步触发批量落库
      */
     private void triggerFlush() {
-        executor.submit(this::flushBatch);
+        if (closed || !flushScheduled.compareAndSet(false, true)) return;
+        try {
+            executor.execute(() -> {
+                try { flushBatch(); }
+                finally { flushScheduled.set(false); }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException error) { flushScheduled.set(false); }
     }
 
     /**
@@ -174,10 +200,17 @@ public class TraceBufferService {
         }
 
         // 批量取出（最多 BATCH_SIZE * 2 条）
-        List<RequestTrace> batch = new ArrayList<>();
+        List<PendingTrace> pending = new ArrayList<>();
         int maxBatch = BATCH_SIZE * 2;
 
-        traceQueue.drainTo(batch, maxBatch);
+        long batchBytes = 0;
+        while (pending.size() < maxBatch) {
+            PendingTrace next = traceQueue.peek();
+            if (next == null || batchBytes + next.bytes() > 1024 * 1024) break;
+            next = traceQueue.poll();
+            if (next != null) { pending.add(next); batchBytes += next.bytes(); }
+        }
+        List<RequestTrace> batch = pending.stream().map(PendingTrace::trace).toList();
 
         if (batch.isEmpty()) {
             return;
@@ -187,40 +220,20 @@ public class TraceBufferService {
 
         try {
             // 执行批量插入
-            List<RequestTrace> saved = requestTraceRepository.saveAll(batch);
-            savedCount.addAndGet(saved.size());
+            int saved = writer.writeTraces(batch);
+            savedCount.addAndGet(saved);
 
             log.info("Batch saved {} traces, queue remaining {}, totalSaved={}",
-                    saved.size(), traceQueue.size(), savedCount.get());
+                    saved, traceQueue.size(), savedCount.get());
 
         } catch (Exception e) {
             log.error("Failed to batch save traces: batchSize={}, error={}", batch.size(), e.getMessage());
 
-            // 失败时尝试逐条保存
-            retryOneByOne(batch);
+            // Diagnostics are best effort. Per-row retries amplify a database outage.
+            droppedCount.addAndGet(batch.size());
+        } finally {
+            queuedBytes.addAndGet(-pending.stream().mapToLong(PendingTrace::bytes).sum());
         }
-    }
-
-    /**
-     * 批量落库失败时，逐条重试
-     */
-    private void retryOneByOne(List<RequestTrace> batch) {
-        int successCount = 0;
-        int failCount = 0;
-
-        for (RequestTrace trace : batch) {
-            try {
-                requestTraceRepository.save(trace);
-                successCount++;
-                savedCount.incrementAndGet();
-            } catch (Exception e) {
-                failCount++;
-                log.warn("Failed to save trace individually: traceId={}, error={}",
-                        trace.getTraceId(), e.getMessage());
-            }
-        }
-
-        log.warn("Retry completed: success={}, fail={}", successCount, failCount);
     }
 
     /**
@@ -230,19 +243,17 @@ public class TraceBufferService {
      */
     @PreDestroy
     public void shutdown() {
+        closed = true;
         log.info("TraceBufferService shutting down, queue remaining: {}", traceQueue.size());
 
         // 落库剩余数据
-        while (!traceQueue.isEmpty()) {
-            flushBatch();
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException e) {
-                break;
-            }
-        }
-
         executor.shutdown();
+        try { if (!executor.awaitTermination(2, TimeUnit.SECONDS)) executor.shutdownNow(); }
+        catch (InterruptedException e) { executor.shutdownNow(); Thread.currentThread().interrupt(); }
+        PendingTrace pending;
+        while ((pending = traceQueue.poll()) != null) {
+            droppedCount.incrementAndGet(); queuedBytes.addAndGet(-pending.bytes());
+        }
         log.info("TraceBufferService shutdown complete. Stats: received={}, saved={}, dropped={}",
                 receivedCount.get(), savedCount.get(), droppedCount.get());
     }

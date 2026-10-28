@@ -528,6 +528,7 @@ public class RequestTraceController {
      */
     @PostMapping("/internal/batch")
     public ResponseEntity<Void> receiveTraceBatch(@RequestBody List<Map<String, Object>> traceBatch) {
+        if (traceBatch.size() > 64) return ResponseEntity.badRequest().build();
         try {
             log.debug("Received batch traces: count={}", traceBatch.size());
             
@@ -546,7 +547,8 @@ public class RequestTraceController {
             log.debug("Batch received: success={}, fail={}", successCount, failCount);
             
             // 立刻返回 202 Accepted
-            return ResponseEntity.accepted().build();
+            return successCount > 0 || traceBatch.isEmpty()
+                    ? ResponseEntity.accepted().build() : ResponseEntity.status(503).build();
             
         } catch (Exception e) {
             log.error("Failed to parse batch traces: error={}", e.getMessage());
@@ -565,26 +567,38 @@ public class RequestTraceController {
     /**
      * 转换 Trace 数据
      */
+    private static final com.fasterxml.jackson.databind.ObjectMapper TRACE_JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    private String traceText(Map<String, Object> data, String field) {
+        Object value = data.get(field);
+        if (value == null) return null;
+        if (value instanceof String text) return text;
+        try { return TRACE_JSON.writeValueAsString(value); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalArgumentException("Invalid trace field: " + field, e); }
+    }
+
     private RequestTrace convertTrace(Map<String, Object> traceData) {
         RequestTrace trace = new RequestTrace();
-        trace.setTraceId((String) traceData.get("traceId"));
-        trace.setInstanceId((String) traceData.get("instanceId"));
-        trace.setRouteId((String) traceData.get("routeId"));
-        trace.setMethod((String) traceData.get("method"));
-        trace.setUri((String) traceData.get("uri"));
-        trace.setPath((String) traceData.get("path"));
-        trace.setQueryString((String) traceData.get("queryString"));
-        trace.setRequestHeaders((String) traceData.get("requestHeaders"));
-        trace.setRequestBody((String) traceData.get("requestBody"));
-        trace.setClientIp((String) traceData.get("clientIp"));
-        trace.setUserAgent((String) traceData.get("userAgent"));
-        trace.setTargetInstance((String) traceData.get("targetInstance"));
-        trace.setErrorMessage((String) traceData.get("errorMessage"));
-        trace.setErrorType((String) traceData.get("errorType"));
-        trace.setTraceType((String) traceData.get("traceType"));
+        trace.setTraceId(traceText(traceData, "traceId"));
+        trace.setInstanceId(traceText(traceData, "instanceId"));
+        trace.setRouteId(traceText(traceData, "routeId"));
+        trace.setMethod(traceText(traceData, "method"));
+        trace.setUri(traceText(traceData, "uri"));
+        trace.setPath(traceText(traceData, "path"));
+        trace.setQueryString(traceText(traceData, "queryString"));
+        trace.setRequestHeaders(traceText(traceData, "requestHeaders"));
+        trace.setRequestBody(traceText(traceData, "requestBody"));
+        trace.setResponseHeaders(traceText(traceData, "responseHeaders"));
+        trace.setResponseBody(traceText(traceData, "responseBody"));
+        trace.setClientIp(traceText(traceData, "clientIp"));
+        trace.setUserAgent(traceText(traceData, "userAgent"));
+        trace.setTargetInstance(traceText(traceData, "targetInstance"));
+        trace.setErrorMessage(traceText(traceData, "errorMessage"));
+        trace.setErrorType(traceText(traceData, "errorType"));
+        trace.setTraceType(traceText(traceData, "traceType"));
 
         // Handle replayType and replayable from Gateway
-        String replayType = (String) traceData.get("replayType");
+        String replayType = traceText(traceData, "replayType");
         if (replayType != null) {
             trace.setReplayType(replayType);
         }
@@ -605,7 +619,7 @@ public class RequestTraceController {
 
         // Parse trace time
         if (traceData.get("traceTime") != null) {
-            String timeStr = (String) traceData.get("traceTime");
+            String timeStr = traceText(traceData, "traceTime");
             try {
                 trace.setTraceTime(LocalDateTime.parse(timeStr.replace("Z", "")));
             } catch (Exception e) {

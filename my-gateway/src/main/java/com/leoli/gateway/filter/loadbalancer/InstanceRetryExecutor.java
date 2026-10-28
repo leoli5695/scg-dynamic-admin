@@ -23,6 +23,7 @@ import reactor.core.publisher.Mono;
 import java.net.URI;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Handles request execution with instance-level retry on failure.
@@ -47,7 +48,18 @@ public class InstanceRetryExecutor {
     // Cap the cacheable size; larger requests run without instance-level retry instead of
     // buffering unbounded uploads. Previously cacheRequestBodyAndRequest joined the body
     // WITHOUT any limit, so one large upload could exhaust heap.
-    private static final int MAX_RETRY_BODY_SIZE = 1024 * 1024;
+    private static final int MAX_RETRY_BODY_SIZE = 64 * 1024;
+    private static final long MAX_INFLIGHT_RETRY_BYTES = 16L * 1024 * 1024;
+    private final AtomicLong inflightRetryBytes = new AtomicLong();
+
+    private boolean reserveRetryBytes(long bytes) {
+        long current;
+        do {
+            current = inflightRetryBytes.get();
+            if (bytes > MAX_INFLIGHT_RETRY_BYTES - current) return false;
+        } while (!inflightRetryBytes.compareAndSet(current, current + bytes));
+        return true;
+    }
 
     // Marks requests whose body cannot be cached, so doExecute must not switch instances on error
     private static final String INSTANCE_RETRY_DISABLED_ATTR = "instanceRetryDisabled";
@@ -59,17 +71,37 @@ public class InstanceRetryExecutor {
     public Mono<Void> execute(ServerWebExchange exchange, GatewayFilterChain chain,
                               String serviceId, ServiceInstance instance,
                               List<ServiceInstance> allInstances, Set<String> triedInstances) {
+        return Mono.defer(() -> executeSubscribed(exchange, chain, serviceId, instance, allInstances, triedInstances));
+    }
+
+    private Mono<Void> executeSubscribed(ServerWebExchange exchange, GatewayFilterChain chain,
+                              String serviceId, ServiceInstance instance,
+                              List<ServiceInstance> allInstances, Set<String> triedInstances) {
         // Check if this is the first attempt (need to cache request body)
         boolean isFirstAttempt = !exchange.getAttributes().containsKey(CACHED_BODY_ATTR);
 
         if (isFirstAttempt) {
             // FIX (OOM): pre-check Content-Length - large bodies are executed without instance retry
             long contentLength = exchange.getRequest().getHeaders().getContentLength();
-            if (contentLength > MAX_RETRY_BODY_SIZE) {
-                log.warn("Request body ({} bytes) exceeds instance retry cache limit ({} bytes), "
-                        + "instance-level retry disabled for this request", contentLength, MAX_RETRY_BODY_SIZE);
+            if (contentLength < 0 && (exchange.getRequest().getMethod() == org.springframework.http.HttpMethod.GET
+                    || exchange.getRequest().getMethod() == org.springframework.http.HttpMethod.HEAD)
+                    && !exchange.getRequest().getHeaders().containsKey(HttpHeaders.TRANSFER_ENCODING)) {
+                contentLength = 0;
+            }
+            boolean hasAlternative = allInstances.stream().anyMatch(candidate ->
+                    (!candidate.getHost().equals(instance.getHost()) || candidate.getPort() != instance.getPort())
+                    && !triedInstances.contains(candidate.getHost() + ":" + candidate.getPort()));
+            // Streaming uploads must not be buffered merely for a retry that cannot occur.
+            // Unknown-length uploads also stream directly; never partially consume then reject them.
+            long reservation = 2L * MAX_RETRY_BODY_SIZE;
+            if (!hasAlternative || contentLength < 0 || contentLength > MAX_RETRY_BODY_SIZE
+                    || (contentLength > 0 && !reserveRetryBytes(reservation))) {
                 exchange.getAttributes().put(INSTANCE_RETRY_DISABLED_ATTR, true);
                 exchange.getAttributes().put(CACHED_BODY_ATTR, true); // avoid re-entering this branch
+                return doExecute(exchange, chain, serviceId, instance, allInstances, triedInstances);
+            }
+            if (contentLength == 0) {
+                exchange.getAttributes().put(CACHED_BODY_ATTR, true);
                 return doExecute(exchange, chain, serviceId, instance, allInstances, triedInstances);
             }
 
@@ -102,7 +134,8 @@ public class InstanceRetryExecutor {
                         ServerHttpResponse response = exchange.getResponse();
                         response.setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
                         return response.setComplete();
-                    });
+                    })
+                    .doFinally(signal -> inflightRetryBytes.addAndGet(-reservation));
         }
 
         // Already cached, proceed directly

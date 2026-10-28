@@ -464,7 +464,8 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         return Mono.defer(() -> authProcessManager.authenticate(exchange, finalConfig))
                 .thenReturn(true)
                 .onErrorResume(e -> {
-                    if (e instanceof java.util.concurrent.RejectedExecutionException) {
+                    if (e instanceof java.util.concurrent.RejectedExecutionException
+                            || e instanceof com.leoli.gateway.auth.RevocationUnavailableException) {
                         exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
                         return exchange.getResponse().setComplete().thenReturn(false);
                     }

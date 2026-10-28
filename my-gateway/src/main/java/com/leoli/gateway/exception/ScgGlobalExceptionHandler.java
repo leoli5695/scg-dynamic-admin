@@ -45,7 +45,8 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
 
     private final ObjectMapper objectMapper;
     
-    private WebClient webClient;
+    @Autowired
+    private com.leoli.gateway.monitor.TraceReportDispatcher reportDispatcher;
     
     @org.springframework.beans.factory.annotation.Value("${gateway.admin.url:http://127.0.0.1:9090}")
     private String adminUrl;
@@ -65,11 +66,6 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     public ScgGlobalExceptionHandler(ObjectMapper objectMapper, ClientIpResolver clientIpResolver) {
         this.objectMapper = objectMapper;
         this.clientIpResolver = clientIpResolver;
-    }
-
-    @jakarta.annotation.PostConstruct
-    public void init() {
-        this.webClient = WebClient.builder().build();
     }
 
     @Override
@@ -456,31 +452,7 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
      * Send error trace to admin service.
      */
     private void sendErrorTraceToAdmin(Map<String, Object> trace) {
-        try {
-            String traceId = (String) trace.get("traceId");
-
-            // Use async execution to not block error response
-            java.util.concurrent.CompletableFuture.runAsync(() -> {
-                try {
-                    webClient
-                            .post()
-                            .uri(adminUrl + "/api/traces/internal")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .headers(h -> { if (internalToken != null && !internalToken.isEmpty()) h.set(InternalApiConstants.TOKEN_HEADER, internalToken); })
-                            .bodyValue(trace)
-                            .retrieve()
-                            .bodyToMono(String.class)
-                            .subscribe(
-                                    response -> log.debug("Error trace saved: traceId={}", traceId),
-                                    error -> log.error("Failed to send error trace: traceId={}, error={}", traceId, error.getMessage())
-                            );
-                } catch (Exception e) {
-                    log.error("Failed to send error trace async", e);
-                }
-            });
-        } catch (Exception e) {
-            log.error("Failed to initiate error trace send", e);
-        }
+        if (reportDispatcher != null) reportDispatcher.submit(trace);
     }
 
     /**

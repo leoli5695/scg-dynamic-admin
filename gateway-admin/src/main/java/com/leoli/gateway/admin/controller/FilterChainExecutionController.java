@@ -22,6 +22,7 @@ import java.util.*;
 public class FilterChainExecutionController {
 
     private final FilterChainExecutionService filterChainExecutionService;
+    private final com.leoli.gateway.admin.service.FilterExecutionBuffer buffer;
 
     /**
      * Internal API: Receive filter execution data from gateway.
@@ -29,15 +30,17 @@ public class FilterChainExecutionController {
      */
     @PostMapping("/internal")
     public ResponseEntity<ApiResponse<Map<String, Object>>> saveFilterExecutions(@RequestBody List<Map<String, Object>> executions) {
-        log.info("Received {} filter execution records", executions.size());
-
         try {
-            int saved = filterChainExecutionService.saveFromRawData(executions);
+            if (!buffer.offer(executions)) {
+                return ResponseEntity.status(503).body(ApiResponse.error("Filter execution buffer full"));
+            }
             
             Map<String, Object> data = new HashMap<>();
-            data.put("saved", saved);
+            data.put("accepted", executions.size());
             
-            return ResponseEntity.ok(ApiResponse.success(data, "Filter executions saved successfully"));
+            return ResponseEntity.accepted().body(ApiResponse.success(data, "Filter executions queued"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to save filter executions", e);
             return ResponseEntity.ok(ApiResponse.error("Failed to save filter executions: " + e.getMessage()));

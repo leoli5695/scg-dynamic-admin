@@ -33,6 +33,22 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR;
 
 class AuthenticationFlowRegressionTest {
+    @Test
+    void unavailableRevocationServiceReturns503WithoutCallingTheUpstream() {
+        var manager = org.mockito.Mockito.mock(AuthProcessManager.class);
+        org.mockito.Mockito.when(manager.authenticate(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(Mono.error(new com.leoli.gateway.auth.RevocationUnavailableException(null)));
+        var unavailable = new AuthenticationGlobalFilter(strategies, bindings, manager);
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/private")
+                .header("Authorization", "Basic " + Base64.getEncoder().encodeToString(
+                        "alice:correct-password".getBytes(StandardCharsets.UTF_8))));
+        exchange.getAttributes().put(GATEWAY_ROUTE_ATTR, Route.async().id("private-route")
+                .uri("http://localhost").predicate(e -> true).build());
+        var forwarded = new AtomicBoolean();
+        unavailable.filter(exchange, e -> { forwarded.set(true); return Mono.empty(); }).block();
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, exchange.getResponse().getStatusCode());
+        assertFalse(forwarded.get());
+    }
     private final AuthBindingManager bindings = new AuthBindingManager(new ObjectMapper());
     private final StrategyManager strategies = new StrategyManager(new ObjectMapper());
     private final AuthConfig config = new AuthConfig();

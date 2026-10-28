@@ -36,6 +36,57 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class TokenRevocationCheckerContractTest {
 
+    @Test
+    void coalescesConcurrentChecksIncludingTheRuntimeSwitch() {
+        var flag = reactor.core.publisher.Sinks.<String>one();
+        var verdict = reactor.core.publisher.Sinks.<Boolean>one();
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(RUNTIME_FLAG_KEY)).thenReturn(flag.asMono());
+        when(redisTemplate.hasKey(anyString())).thenReturn(verdict.asMono());
+        var values = new java.util.concurrent.CopyOnWriteArrayList<Boolean>();
+        reactor.core.publisher.Flux.range(0, 64).flatMap(i -> checker.isRevoked(null, TOKEN), 64).subscribe(values::add);
+        verify(valueOps, times(1)).get(RUNTIME_FLAG_KEY);
+        flag.tryEmitEmpty();
+        verify(redisTemplate, times(1)).hasKey(anyString());
+        verdict.tryEmitValue(false);
+        assertEquals(64, values.size());
+        assertEquals(false, checker.isRevoked(null, TOKEN).block());
+        verify(redisTemplate, times(1)).hasKey(anyString());
+    }
+
+    @Test
+    void redisFailureRejectsInsteadOfAllowingAndBrieflyFailsFast() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(RUNTIME_FLAG_KEY)).thenReturn(Mono.empty());
+        when(redisTemplate.hasKey(anyString())).thenReturn(Mono.error(new IllegalStateException("offline")));
+        StepVerifier.create(checker.isRevoked(null, TOKEN)).expectError(RevocationUnavailableException.class).verify();
+        StepVerifier.create(checker.isRevoked(null, TOKEN)).expectError(RevocationUnavailableException.class).verify();
+        verify(redisTemplate, times(1)).hasKey(anyString());
+    }
+
+    @Test
+    void totalLookupHasABoundedDeadline() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(RUNTIME_FLAG_KEY)).thenReturn(Mono.never());
+        StepVerifier.withVirtualTime(() -> checker.isRevoked(null, TOKEN))
+                .thenAwait(java.time.Duration.ofMillis(501))
+                .expectError(RevocationUnavailableException.class).verify();
+    }
+
+    @Test
+    void invalidationPreventsAnOlderLookupFromRepopulatingTheCache() {
+        var old = reactor.core.publisher.Sinks.<Boolean>one();
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(RUNTIME_FLAG_KEY)).thenReturn(Mono.empty());
+        when(redisTemplate.hasKey(anyString())).thenReturn(old.asMono(), Mono.just(true));
+        checker.isRevoked(null, TOKEN).subscribe();
+        checker.invalidateLocalCache();
+        assertEquals(true, checker.isRevoked(null, TOKEN).block());
+        old.tryEmitValue(false);
+        assertEquals(true, checker.isRevoked(null, TOKEN).block());
+        verify(redisTemplate, times(2)).hasKey(anyString());
+    }
+
     /** Protocol literals — duplicated verbatim in the writer-side contract test. */
     private static final String KEY_PREFIX = "gateway:jwt:revoked:";
     private static final String RUNTIME_FLAG_KEY = "gateway:jwt:revocation:enabled";
