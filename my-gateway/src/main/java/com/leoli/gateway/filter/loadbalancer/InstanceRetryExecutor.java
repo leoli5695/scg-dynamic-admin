@@ -71,12 +71,19 @@ public class InstanceRetryExecutor {
     public Mono<Void> execute(ServerWebExchange exchange, GatewayFilterChain chain,
                               String serviceId, ServiceInstance instance,
                               List<ServiceInstance> allInstances, Set<String> triedInstances) {
-        return Mono.defer(() -> executeSubscribed(exchange, chain, serviceId, instance, allInstances, triedInstances));
+        return execute(exchange, chain, serviceId, instance, () -> allInstances, triedInstances);
+    }
+
+    public Mono<Void> execute(ServerWebExchange exchange, GatewayFilterChain chain,
+                              String serviceId, ServiceInstance instance,
+                              java.util.function.Supplier<List<ServiceInstance>> instances, Set<String> triedInstances) {
+        return Mono.defer(() -> executeSubscribed(exchange, chain, serviceId, instance, instances, triedInstances));
     }
 
     private Mono<Void> executeSubscribed(ServerWebExchange exchange, GatewayFilterChain chain,
                               String serviceId, ServiceInstance instance,
-                              List<ServiceInstance> allInstances, Set<String> triedInstances) {
+                              java.util.function.Supplier<List<ServiceInstance>> instances, Set<String> triedInstances) {
+        List<ServiceInstance> allInstances = instances.get();
         // Check if this is the first attempt (need to cache request body)
         boolean isFirstAttempt = !exchange.getAttributes().containsKey(CACHED_BODY_ATTR);
 
@@ -98,11 +105,11 @@ public class InstanceRetryExecutor {
                     || (contentLength > 0 && !reserveRetryBytes(reservation))) {
                 exchange.getAttributes().put(INSTANCE_RETRY_DISABLED_ATTR, true);
                 exchange.getAttributes().put(CACHED_BODY_ATTR, true); // avoid re-entering this branch
-                return doExecute(exchange, chain, serviceId, instance, allInstances, triedInstances);
+                return doExecute(exchange, chain, serviceId, instance, instances, triedInstances);
             }
             if (contentLength == 0) {
                 exchange.getAttributes().put(CACHED_BODY_ATTR, true);
-                return doExecute(exchange, chain, serviceId, instance, allInstances, triedInstances);
+                return doExecute(exchange, chain, serviceId, instance, instances, triedInstances);
             }
 
             // Cache request body before first execution to support potential retry
@@ -125,21 +132,23 @@ public class InstanceRetryExecutor {
                             }
                         };
                         ServerWebExchange cachedExchange = exchange.mutate().request(cachedRequest).build();
-                        return doExecute(cachedExchange, chain, serviceId, instance, allInstances, triedInstances);
+                        return doExecute(cachedExchange, chain, serviceId, instance, instances, triedInstances);
                     })
                     .onErrorResume(DataBufferLimitException.class, e -> {
                         // Chunked body exceeded the limit mid-stream - cannot forward safely
                         log.warn("Request body exceeds instance retry cache limit ({} bytes), rejecting with 413",
                                 MAX_RETRY_BODY_SIZE);
                         ServerHttpResponse response = exchange.getResponse();
-                        response.setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
-                        return response.setComplete();
+                        return com.leoli.gateway.util.GatewayResponseHelper.writeErrorResponse(response,
+                                HttpStatus.PAYLOAD_TOO_LARGE, 413,
+                                "The request body exceeded the " + MAX_RETRY_BODY_SIZE
+                                        + "-byte instance retry buffer limit. Check Content-Length and reduce the request body.");
                     })
                     .doFinally(signal -> inflightRetryBytes.addAndGet(-reservation));
         }
 
         // Already cached, proceed directly
-        return doExecute(exchange, chain, serviceId, instance, allInstances, triedInstances);
+        return doExecute(exchange, chain, serviceId, instance, instances, triedInstances);
     }
 
     /**
@@ -147,8 +156,44 @@ public class InstanceRetryExecutor {
      */
     private Mono<Void> doExecute(ServerWebExchange exchange, GatewayFilterChain chain,
                                  String serviceId, ServiceInstance instance,
-                                 List<ServiceInstance> allInstances, Set<String> triedInstances) {
-        URI uri = exchange.getRequest().getURI();
+                                 java.util.function.Supplier<List<ServiceInstance>> instances, Set<String> triedInstances) {
+        return Mono.defer(() -> {
+            List<ServiceInstance> current = instances.get().stream()
+                    .filter(candidate -> candidate.getMetadata() == null
+                            || Boolean.parseBoolean(candidate.getMetadata().getOrDefault("enabled", "true")))
+                    .filter(candidate -> !triedInstances.contains(candidate.getHost() + ":" + candidate.getPort()))
+                    .toList();
+            ServiceInstance selected = current.stream()
+                    .filter(candidate -> candidate.getHost().equals(instance.getHost()) && candidate.getPort() == instance.getPort())
+                    .findFirst().orElse(null);
+            if (selected == null) {
+                selected = instanceFilter.findAlternative(serviceId, current, triedInstances);
+            } else {
+                // Only replace an unhealthy selection with a confirmed healthy one.
+                // Do not walk past every unhealthy candidate before making a real attempt.
+                InstanceHealth health = healthChecker.getHealth(serviceId, selected.getHost(), selected.getPort());
+                if (health == null || !health.isHealthy() || "INIT".equals(health.getCheckType())
+                        || "REINIT".equals(health.getCheckType())) {
+                    selected = current.stream().filter(candidate -> {
+                        InstanceHealth status = healthChecker.getHealth(serviceId, candidate.getHost(), candidate.getPort());
+                        return status != null && status.isHealthy() && !"INIT".equals(status.getCheckType())
+                                && !"REINIT".equals(status.getCheckType());
+                    }).findFirst().orElse(selected);
+                }
+            }
+            if (selected == null) {
+                return Mono.error(new org.springframework.web.server.ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE, "No enabled instances for service: " + serviceId));
+            }
+            return executeSelected(exchange, chain, serviceId, selected, instances, triedInstances);
+        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    private Mono<Void> executeSelected(ServerWebExchange exchange, GatewayFilterChain chain,
+                                 String serviceId, ServiceInstance instance,
+                                 java.util.function.Supplier<List<ServiceInstance>> instances, Set<String> triedInstances) {
+        URI uri = exchange.getAttributeOrDefault(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR,
+                exchange.getRequest().getURI());
         String overrideScheme = instance.isSecure() ? "https" : "http";
         DelegatingServiceInstance serviceInstance = new DelegatingServiceInstance(instance, overrideScheme);
         URI requestUrl = LoadBalancerUriTools.reconstructURI(serviceInstance, uri);
@@ -163,27 +208,16 @@ public class InstanceRetryExecutor {
         String instanceKey = instance.getHost() + ":" + instance.getPort();
         triedInstances.add(instanceKey);
 
-        // Pre-check: if known unhealthy, try alternative first
-        InstanceHealth health = healthChecker.getHealth(serviceId, instance.getHost(), instance.getPort());
-        if (health != null && !health.isHealthy()) {
-            log.warn("Instance {}:{} is known to be unhealthy ({}), attempting to find alternative",
-                    instance.getHost(), instance.getPort(), health.getUnhealthyReason());
-
-            ServiceInstance alternative = instanceFilter.findAlternative(serviceId, allInstances, triedInstances);
-            if (alternative != null) {
-                log.info("Found alternative healthy instance {}:{}", alternative.getHost(), alternative.getPort());
-                return doExecute(exchange, chain, serviceId, alternative, allInstances, triedInstances);
-            }
-            log.warn("No healthy alternative found, will try unhealthy instance {}:{} (might have recovered)",
-                    instance.getHost(), instance.getPort());
-        }
-
         log.debug("[RETRY-DEBUG] doExecute calling chain.filter, exchange response class={}",
                 exchange.getResponse().getClass().getSimpleName());
         return chain.filter(exchange)
                 .doOnSuccess(aVoid -> {
-                    healthChecker.recordSuccess(serviceId, instance.getHost(), instance.getPort());
                     ServerHttpResponse response = exchange.getResponse();
+                    if (response.getStatusCode() != null && response.getStatusCode().is5xxServerError()) {
+                        healthChecker.recordFailure(serviceId, instance.getHost(), instance.getPort());
+                    } else {
+                        healthChecker.recordSuccess(serviceId, instance.getHost(), instance.getPort());
+                    }
                     log.debug("[RETRY-DEBUG] chain.filter success, response class={}, statusCode={}",
                             response.getClass().getSimpleName(), response.getStatusCode());
                 })
@@ -204,7 +238,7 @@ public class InstanceRetryExecutor {
                     // This is the ROOT CAUSE of "fake 200" (statusCode=200 but no body)
                     // Netty sets statusCode=200 before body is written, so if error occurs after that,
                     // we cannot retry because response state is already polluted
-                    HttpStatus currentStatus = (HttpStatus) response.getStatusCode();
+                    org.springframework.http.HttpStatusCode currentStatus = response.getStatusCode();
                     if (currentStatus != null) {
                         log.error("[RETRY-BLOCKED] Response statusCode already set to {} BEFORE error occurred! " +
                                 "This indicates response state pollution. Cannot retry, returning 503. " +
@@ -223,18 +257,10 @@ public class InstanceRetryExecutor {
                         return Mono.error(buildServiceUnavailableError(serviceId, instance, error));
                     }
 
-                    ServiceInstance next = instanceFilter.findAlternative(serviceId, allInstances, triedInstances);
-                    if (next != null) {
-                        log.info("Retrying with different instance {}:{}", next.getHost(), next.getPort());
-                        return doExecute(exchange, chain, serviceId, next, allInstances, triedInstances);
-                    }
-
-                    // No alternative instance available - return real 503
-                    InstanceHealth currentHealth = healthChecker.getHealth(serviceId, instance.getHost(), instance.getPort());
-                    String detailedMessage = buildDetailedErrorMessage(serviceId, instance, currentHealth, error);
-                    log.warn("{} - Health: {}, Error: {}",
-                            detailedMessage, currentHealth != null && currentHealth.isHealthy() ? "HEALTHY" : "UNHEALTHY", error.getMessage());
-                    return Mono.error(buildServiceUnavailableError(serviceId, instance, error));
+                    return Mono.fromCallable(() -> instanceFilter.findAlternative(serviceId, instances.get(), triedInstances))
+                            .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                            .switchIfEmpty(Mono.error(buildServiceUnavailableError(serviceId, instance, error)))
+                            .flatMap(next -> doExecute(exchange, chain, serviceId, next, instances, triedInstances));
                 });
     }
 
@@ -303,6 +329,11 @@ public class InstanceRetryExecutor {
         @Override
         public boolean isSecure() {
             return "https".equals(scheme);
+        }
+
+        @Override
+        public String getScheme() {
+            return scheme;
         }
 
         @Override

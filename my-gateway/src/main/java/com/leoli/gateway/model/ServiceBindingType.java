@@ -71,11 +71,13 @@ public enum ServiceBindingType {
             return STATIC; // Default to STATIC for backward compatibility
         }
 
-        switch (value.toUpperCase()) {
+        switch (value.toUpperCase(java.util.Locale.ROOT)) {
             case "STATIC":
                 return STATIC;
             case "DISCOVERY":
             case "LB":
+            case "NACOS":
+            case "CONSUL":
                 return DISCOVERY;
             default:
                 return STATIC;

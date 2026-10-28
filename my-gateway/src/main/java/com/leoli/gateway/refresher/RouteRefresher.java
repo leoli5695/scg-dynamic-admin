@@ -459,7 +459,7 @@ public class RouteRefresher {
                 }
 
                 // Parse services list
-                if (routeMap.containsKey("services")) {
+                if (routeMap.get("services") != null) {
                     List<Map<String, Object>> servicesList = (List<Map<String, Object>>) routeMap.get("services");
                     List<MultiServiceConfig.ServiceBinding> bindings = new ArrayList<>();
 
@@ -475,8 +475,9 @@ public class RouteRefresher {
                             binding.setEnabled((Boolean) svc.get("enabled"));
                         }
                         // Parse service binding type (STATIC or DISCOVERY)
-                        if (svc.get("type") != null) {
-                            String typeStr = (String) svc.get("type");
+                        Object bindingType = svc.get("type") != null ? svc.get("type") : svc.get("serviceType");
+                        if (bindingType != null) {
+                            String typeStr = (String) bindingType;
                             binding.setType(com.leoli.gateway.model.ServiceBindingType.fromString(typeStr));
                         }
                         // Parse serviceNamespace (for DISCOVERY type)
@@ -528,7 +529,7 @@ public class RouteRefresher {
                         multiConfig.getServices() != null ? multiConfig.getServices().size() : 0);
 
             } catch (Exception e) {
-                log.warn("Failed to parse multi-service config for route: {}", route.getId(), e);
+                throw new IllegalArgumentException("Invalid multi-service config for route: " + route.getId(), e);
             }
         }
 

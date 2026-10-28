@@ -35,10 +35,18 @@ public class ActiveHealthChecker {
     @Value("${gateway.health-check.http-path:/actuator/health}")
     private String healthCheckPath;
 
+    @Value("${gateway.health.enabled:true}")
+    private boolean checksEnabled = true;
+
+    private final java.util.Set<String> inFlight = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     /**
      * Probe instance health status using TCP ping and optional HTTP check.
      */
     public void probe(String serviceId, String ip, int port) {
+        if (!checksEnabled) return;
+        String key = InstanceHealth.buildKey(serviceId, ip, port);
+        if (!inFlight.add(key)) return;
         log.debug("Probing instance health: {}:{}:{}", serviceId, ip, port);
 
         try {
@@ -52,7 +60,11 @@ public class ActiveHealthChecker {
             }
 
             // Step 2: Optional HTTP health check (application-level health)
-            if (httpCheckEnabled && healthCheckRestTemplate != null) {
+            if (httpCheckEnabled) {
+                if (healthCheckRestTemplate == null) {
+                    handleUnhealthy(serviceId, ip, port, "HTTP_CHECK_UNAVAILABLE: Health HTTP client is not configured");
+                    return;
+                }
                 boolean httpHealthy = checkHttpHealth(ip, port);
                 if (!httpHealthy) {
                     handleUnhealthy(serviceId, ip, port, "HTTP_UNHEALTHY: Health endpoint returned error");
@@ -66,6 +78,8 @@ public class ActiveHealthChecker {
 
         } catch (Exception e) {
             handleUnhealthy(serviceId, ip, port, "CHECK_ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        } finally {
+            inFlight.remove(key);
         }
     }
 

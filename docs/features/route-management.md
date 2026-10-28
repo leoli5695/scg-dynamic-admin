@@ -89,6 +89,91 @@ Requires instance configuration in `gateway-services.json`:
 
 ---
 
+## Service selection and gray release
+
+Routing has two selection stages:
+
+1. In `SINGLE` mode the configured service is used. In `MULTI` mode, enabled gray
+   rules are checked in list order; the first matching rule chooses its target.
+   `HEADER`, `COOKIE`, and `QUERY` compare exact values. A target may be a version
+   label or service ID; disabled or nonexistent targets are ignored. Use distinct
+   version labels when targeting a particular binding by version.
+2. If no rule matches, enabled service bindings are selected with smooth weighted
+   round-robin. For example, weights 80 and 20 produce 800 and 200 selections over
+   1,000 requests on one gateway. Each gateway maintains its own selection state.
+   Version labels can repeat without merging the weighted service candidates.
+
+The selected binding determines instance resolution:
+
+- `static://`: use the configured static instances and the service's instance
+  balancing strategy. Disabled instances are excluded. Healthy instances are
+  preferred; when none are healthy, the existing availability policy can attempt
+  enabled unhealthy instances. An empty eligible instance list returns 503.
+- `lb://`: the Nacos resolver queries the requested namespace/group (or the
+  gateway defaults), removes disabled instances, and selects healthy instances
+  by weight. Only when every enabled instance is unhealthy does it select an
+  enabled unhealthy instance as a recovery attempt. No enabled instance returns 503.
+
+Service weights and instance weights are separate. A zero-weight binding receives
+no ordinary weighted traffic while another enabled binding has positive weight,
+but can still be selected by an explicit gray rule. If all enabled weights are
+zero, the selector falls back to round-robin. An empty or fully disabled service
+binding list returns 503 instead of forwarding to the route's placeholder URI.
+
+`WEIGHT` gray rules are probability gates evaluated in rule order. Unmatched
+requests still enter the ordinary service weight selection. Therefore a 10% gray
+rule targeting a service that also has 20% of the fallback weight yields about
+`10% + 90% * 20% = 28%` overall, when there are no other matching rules. To configure
+an overall 10% split, use service weights 90/10 without a WEIGHT rule, or give the
+gray target fallback weight zero and use a 10% WEIGHT rule. This routing does not
+provide user affinity; repeated requests from a user may reach different services.
+
+Instance resolution preserves the path after route filters such as `StripPrefix`
+and `RewritePath`, along with raw URL encoding and query parameters. The final
+upstream URL uses HTTP or HTTPS according to the selected instance.
+
+Static instance retries read the current gateway configuration before each
+attempt, excluding nodes that have since been disabled or removed. A request
+already sent before a configuration update is not cancelled by that update.
+
+## Health checks
+
+Static nodes use active probes and passive request feedback. The default active
+probe checks TCP connectivity; application readiness requires enabling
+`gateway.health-check.http-enabled` and configuring `gateway.health-check.http-path`.
+When HTTP probing is enabled, both TCP and HTTP checks must succeed. HTTP checks
+have bounded connection/read timeouts. Active probes never change the configured
+`enabled` flag, including probes of disabled nodes.
+
+New observations start in `INIT` and are confirmed by a probe or a successful
+request. Passive transport failures and upstream 5xx responses contribute to
+`gateway.health.failure-threshold` (default 3). Successful responses reset the
+passive failure count. Active probe failure marks the node unhealthy immediately;
+a successful probe or request can confirm recovery.
+
+Regular, stable, and degraded probe schedules are retained. A node becoming
+unhealthy through passive failures leaves stable mode so regular recovery probes
+continue. Configuration changes preserve health observations for unchanged
+addresses. Removed addresses are pruned once no configured service references them.
+Transition reports are supplemented by a full health snapshot every
+`gateway.health.sync-interval-ms` (default 30 seconds) to reconcile missed reports.
+
+## Gateway error messages
+
+Gateway-generated error responses retain `httpStatus`, `code`, `error`, `message`
+and `data`. The global exception handler also returns `traceId` and the matching
+`X-Trace-Id` header for correlation with gateway logs.
+
+Messages describe the failure and a useful next check: unmatched routes (404),
+authentication or policy rejection (401/403), request validation or size limits
+(400/413/422), rate limiting (429), invalid backend responses (502), unavailable
+service bindings/instances or connection failures (503), and backend timeouts
+(504). For 503, messages distinguish missing enabled bindings, disabled instances,
+unavailable discovery results, and exhausted connection attempts. Unknown internal
+errors return a safe explanation and traceId instead of raw exception details.
+Explicit validation messages, business error codes and rate-limit headers are
+preserved. Backend responses forwarded by the gateway retain their own bodies.
+
 ## Predicates
 
 Predicates define route matching conditions.

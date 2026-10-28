@@ -87,7 +87,7 @@ public class HybridHealthChecker {
 
         healthCache.asMap().compute(key, (k, health) -> {
             if (health == null) {
-                // New instance, no need to push (will be confirmed by active check)
+                recovered.set(true);
                 return createHealthy(serviceId, ip, port);
             }
 
@@ -126,12 +126,11 @@ public class HybridHealthChecker {
     /**
      * Initialize instance (called when discovered from Nacos or config update).
      * Does NOT set initial health status - waits for immediate health check to determine status.
-     * If instance already exists in cache, marks it as needing re-check.
+     * Existing observations and failure history survive configuration-only changes.
      */
     public void initializeInstance(String serviceId, String ip, int port) {
         String key = InstanceHealth.buildKey(serviceId, ip, port);
-
-        if (!healthCache.asMap().containsKey(key)) {
+        healthCache.asMap().computeIfAbsent(key, ignored -> {
             log.info("Initializing new instance from config: {}:{} (waiting for immediate health check)", ip, port);
             // Create instance but do NOT set health status yet
             // The immediate health check will determine the actual status
@@ -139,7 +138,7 @@ public class HybridHealthChecker {
             health.setServiceId(serviceId);
             health.setIp(ip);
             health.setPort(port);
-            health.setHealthy(true);  // Assume healthy initially - will be updated by health check
+            health.setHealthy(false); // INIT is pending, not a confirmed healthy observation.
             health.setUnhealthyReason(null);
             health.setConsecutiveFailures(0);
             health.setTotalUnhealthyChecks(0);
@@ -147,24 +146,8 @@ public class HybridHealthChecker {
             health.setDegradedModeEnteredTime(null);
             health.setLastRequestTime(System.currentTimeMillis());
             health.setCheckType("INIT");
-            healthCache.put(key, health);
-
-            // Do NOT push to admin yet - wait for health check result
-        } else {
-            // Instance already in cache - mark as needing re-check
-            InstanceHealth existing = healthCache.getIfPresent(key);
-            if (existing != null) {
-                log.debug("Instance {}:{} already in cache, marking for re-check (current healthy={})",
-                        ip, port, existing.isHealthy());
-                // Reset degraded mode counters for re-check
-                existing.setTotalUnhealthyChecks(0);
-                existing.setDegradedCheckMode(false);
-                existing.setDegradedModeEnteredTime(null);
-                existing.setUnhealthyReason("PENDING: Configuration changed, awaiting re-check");
-                existing.setCheckType("REINIT");
-                // Keep current healthy status - let the health check update it
-            }
-        }
+            return health;
+        });
     }
 
     /**
@@ -192,6 +175,9 @@ public class HybridHealthChecker {
             // Mark as unhealthy if threshold exceeded
             if (newFailures >= failureThreshold) {
                 health.setHealthy(false);
+                health.setStableCheckMode(false);
+                health.setStableModeEnteredTime(null);
+                health.setTotalHealthyChecks(0);
                 health.setUnhealthyReason("Gateway request failed " + newFailures + " times consecutively");
                 log.warn("Instance {}:{} marked as unhealthy (failures={})", ip, port, newFailures);
 
@@ -229,6 +215,7 @@ public class HybridHealthChecker {
             // Get from cache (contains the latest health status from previous checks)
             if (health == null) {
                 // First time seeing this instance, create as healthy
+                isFirstCheckAfterInit.set(true);
                 health = createHealthy(serviceId, ip, port);
             }
 
@@ -241,6 +228,7 @@ public class HybridHealthChecker {
                     ip, port, wasHealthy, wasStable, previousCheckType);
 
             health.setHealthy(true);
+            health.setUnhealthyReason(null);
             health.setConsecutiveFailures(0);
             health.setLastActiveCheckTime(System.currentTimeMillis());
             health.setCheckType(checkType);
@@ -308,7 +296,7 @@ public class HybridHealthChecker {
     /**
      * FIX (unbounded queue): if admin is down for a long time, retried entries
      * plus new state changes would grow this queue without bound. Cap it; the
-     * periodic full sync (HealthStatusSyncTask) reconciles any dropped updates.
+     * periodic full snapshot reconciles any dropped updates.
      */
     private static final int MAX_BATCH_QUEUE_SIZE = 5000;
 
@@ -320,11 +308,12 @@ public class HybridHealthChecker {
         }
 
         InstanceHealth health = new InstanceHealth();
+        InstanceHealth current = getHealth(serviceId, ip, port);
+        if (current != null) org.springframework.beans.BeanUtils.copyProperties(current, health);
         health.setServiceId(serviceId);
         health.setIp(ip);
         health.setPort(port);
-        health.setHealthy(healthy);
-        health.setLastActiveCheckTime(System.currentTimeMillis());
+        health.setHealthy(current != null ? current.isHealthy() : healthy);
 
         // ConcurrentLinkedQueue.offer() is thread-safe, no synchronized needed
         batchPushQueue.add(health);
@@ -334,7 +323,7 @@ public class HybridHealthChecker {
      * Push batched health status to admin (BATCH PROCESSING).
      * FIX (H5): No-lock drain using while(poll()) to avoid potential data loss from copy+clear.
      */
-    public void pushBatchHealthStatusToAdmin() {
+    public synchronized void pushBatchHealthStatusToAdmin() {
         List<InstanceHealth> drained = new ArrayList<>();
 
         // Drain queue without lock - poll() is thread-safe
@@ -352,7 +341,11 @@ public class HybridHealthChecker {
         // state after a newer one. Keep only the latest entry per instance.
         java.util.Map<String, InstanceHealth> latestByKey = new java.util.LinkedHashMap<>();
         for (InstanceHealth h : drained) {
-            latestByKey.put(h.getServiceId() + ":" + h.getIp() + ":" + h.getPort(), h);
+            InstanceHealth current = getHealth(h.getServiceId(), h.getIp(), h.getPort());
+            if (current == null || "INIT".equals(current.getCheckType()) || "REINIT".equals(current.getCheckType())) continue;
+            InstanceHealth snapshot = new InstanceHealth();
+            org.springframework.beans.BeanUtils.copyProperties(current, snapshot);
+            latestByKey.put(InstanceHealth.buildKey(h.getServiceId(), h.getIp(), h.getPort()), snapshot);
         }
         List<InstanceHealth> toPush = new ArrayList<>(latestByKey.values());
 
@@ -393,6 +386,7 @@ public class HybridHealthChecker {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Instance-Id", instanceId);
+        headers.set("X-Gateway-Id", instanceId);
         if (internalToken != null && !internalToken.isEmpty()) {
             headers.set(InternalApiConstants.TOKEN_HEADER, internalToken);
         }
@@ -424,6 +418,7 @@ public class HybridHealthChecker {
 
             boolean wasHealthy = health.isHealthy();
             boolean wasStable = health.isStableCheckMode();
+            boolean pending = "INIT".equals(health.getCheckType()) || "REINIT".equals(health.getCheckType());
 
             log.debug("markUnhealthy called for {}:{} - wasHealthy={}, wasStable={}, reason={}",
                     ip, port, wasHealthy, wasStable, reason);
@@ -457,7 +452,7 @@ public class HybridHealthChecker {
             }
 
             // Record state transition (true -> false) for push decision
-            if (wasHealthy) {
+            if (wasHealthy || pending) {
                 becameUnhealthy.set(true);
             }
             return health;
@@ -557,6 +552,28 @@ public class HybridHealthChecker {
         List<InstanceHealth> allHealth = new ArrayList<>(healthCache.asMap().values());
         log.debug("Returning {} instance health statuses", allHealth.size());
         return allHealth;
+    }
+
+    /** Reconcile dropped transition reports and refresh observation timestamps in admin. */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelayString = "${gateway.health.sync-interval-ms:30000}")
+    public synchronized void syncCurrentHealthStatus() {
+        List<InstanceHealth> confirmed = new ArrayList<>();
+        for (InstanceHealth health : getAllHealthStatus()) {
+            if (!"INIT".equals(health.getCheckType()) && !"REINIT".equals(health.getCheckType())) {
+                InstanceHealth snapshot = new InstanceHealth();
+                org.springframework.beans.BeanUtils.copyProperties(health, snapshot);
+                confirmed.add(snapshot);
+            }
+        }
+        // Full snapshots must not be truncated by the bounded transition queue.
+        for (int offset = 0; offset < confirmed.size(); offset += Math.max(1, batchSize)) {
+            try {
+                pushSingleBatch(confirmed.subList(offset, Math.min(offset + Math.max(1, batchSize), confirmed.size())));
+            } catch (Exception failure) {
+                log.warn("Full health sync failed; the next periodic snapshot will retry", failure);
+                return;
+            }
+        }
     }
 
     /**
@@ -687,6 +704,10 @@ public class HybridHealthChecker {
             java.util.Map.Entry<String, InstanceHealth> entry = iterator.next();
             InstanceHealth health = entry.getValue();
             Long lastTime = health.getLastRequestTime();
+            if (health.getLastActiveCheckTime() != null) {
+                lastTime = lastTime == null ? health.getLastActiveCheckTime()
+                        : Math.max(lastTime, health.getLastActiveCheckTime());
+            }
 
             // Keep unhealthy instances for retry
             if (!health.isHealthy()) {
@@ -727,15 +748,11 @@ public class HybridHealthChecker {
             // Note: Due to shared health status, health.getServiceId() may be from a different service
             // We check by ip:port instead
 
-            // Parse ip:port from key
-            String[] parts = key.split(":");
-            if (parts.length != 2) continue;
-
-            String ip = parts[0];
-            int port = Integer.parseInt(parts[1]);
+            String ip = health.getIp();
+            int port = health.getPort();
 
             // Check if this instance is still used by other services
-            if (serviceManager.isInstanceUsedByOtherServices(ip, port, serviceId)) {
+            if (serviceManager.isInstanceUsedByOtherServices(ip, port, null)) {
                 keysToKeep.add(key);
                 log.debug("Keeping health record for {}:{} - still used by other services", ip, port);
             } else {

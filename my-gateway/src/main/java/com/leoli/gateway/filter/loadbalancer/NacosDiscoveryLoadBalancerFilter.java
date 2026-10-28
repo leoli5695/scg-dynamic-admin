@@ -25,7 +25,7 @@ import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilt
 import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilter.TARGET_SERVICE_ID_ATTR;
 
 /**
- * Load Balancer Filter for DISCOVERY type services with namespace/group override.
+ * Nacos load balancing for DISCOVERY services, with optional namespace/group override.
  * <p>
  * <b>Problem:</b> SCG's native ReactiveLoadBalancerClientFilter uses Spring Cloud LoadBalancer
  * which binds to a single Nacos namespace (gateway's namespace). This filter allows querying
@@ -34,7 +34,7 @@ import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilt
  * <b>Triggered when:</b>
  * <ul>
  *   <li>Route URI is lb:// (DISCOVERY type)</li>
- *   <li>Service namespace or group is specified (different from gateway's default)</li>
+ *   <li>Namespace/group may be specified; otherwise the gateway's defaults apply</li>
  * </ul>
  * <p>
  * <b>Nacos-native attributes supported:</b>
@@ -70,7 +70,6 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         URI url = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR);
-        Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
 
         // Only handle lb:// scheme
         if (url == null || !"lb".equals(url.getScheme())) {
@@ -81,22 +80,10 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
         String namespace = exchange.getAttribute(SERVICE_NAMESPACE_ATTR);
         String group = exchange.getAttribute(SERVICE_GROUP_ATTR);
 
-        // If no namespace/group override, let SCG's native filter handle it
-        if (namespace == null && group == null) {
-            // Still add X-Service-Source header for DISCOVERY type services
-            ServiceBindingType serviceType = exchange.getAttribute(SERVICE_BINDING_TYPE_ATTR);
-            if (serviceType == ServiceBindingType.DISCOVERY) {
-                String targetServiceId = exchange.getAttribute(TARGET_SERVICE_ID_ATTR);
-                String serviceName = targetServiceId != null ? targetServiceId : url.getHost();
-                addServiceSourceHeader(exchange, "discovery", serviceName);
-            }
-            log.debug("No namespace/group override for lb:// service: {}, using native SCG filter", url.getHost());
-            return chain.filter(exchange);
-        }
-
         // Get service binding type from attribute
         ServiceBindingType serviceType = exchange.getAttribute(SERVICE_BINDING_TYPE_ATTR);
-        if (serviceType != ServiceBindingType.DISCOVERY) {
+        if (serviceType == ServiceBindingType.STATIC
+                || exchange.getAttribute(MultiServiceLoadBalancerFilter.ORIGINAL_STATIC_URI_ATTR) != null) {
             // Not DISCOVERY type, let other filters handle
             return chain.filter(exchange);
         }
@@ -156,9 +143,9 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
 
     /**
      * Choose an instance using weighted round-robin.
-     * Filters out disabled and unhealthy instances.
+     * Excludes disabled instances, preferring healthy instances with all-unhealthy fallback.
      * <p>
-     * FIX (EventLoop blocking): {@code nacosDiscoveryService.getHealthyInstances} performs a
+     * FIX (EventLoop blocking): {@code nacosDiscoveryService.getInstances} performs a
      * synchronous Nacos SDK lookup (remote call on cache miss / registry churn). It used to run
      * inline in {@link #filter}, i.e. on the Netty EventLoop thread, stalling every other
      * connection pinned to that loop. The blocking lookup is now deferred onto
@@ -175,10 +162,10 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
      * Returns null when no usable instance is available.
      */
     private org.springframework.cloud.client.ServiceInstance selectInstanceBlocking(String serviceName, String namespace, String group) {
-        List<ServiceInstance> instances = nacosDiscoveryService.getHealthyInstances(serviceName, namespace, group);
+        List<ServiceInstance> instances = nacosDiscoveryService.getInstances(serviceName, namespace, group);
 
         if (instances == null || instances.isEmpty()) {
-            log.warn("No healthy instances found for service: {}, namespace: {}, group: {}",
+            log.warn("No instances found for service: {}, namespace: {}, group: {}",
                     serviceName, namespace, group);
             return null;
         }
@@ -194,8 +181,10 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
             return null;
         }
 
-        // Select instance using weighted round-robin
-        ServiceInstance selected = selectByWeightedRoundRobin(serviceName, enabledInstances);
+        List<ServiceInstance> healthy = enabledInstances.stream().filter(ServiceInstance::isHealthy).toList();
+        List<ServiceInstance> candidates = healthy.isEmpty() ? enabledInstances : healthy;
+        String scope = java.util.Arrays.asList(namespace, group, serviceName).toString();
+        ServiceInstance selected = selectByWeightedRoundRobin(scope, candidates);
 
         // Convert to Spring Cloud ServiceInstance
         return new SimpleServiceInstance(selected);
@@ -228,14 +217,15 @@ public class NacosDiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
         int port = instance.getPort();
 
         // Preserve path and query from original URI
-        String path = originalUri.getPath();
-        String query = originalUri.getQuery();
+        String path = originalUri.getRawPath();
+        String query = originalUri.getRawQuery();
 
-        StringBuilder uriBuilder = new StringBuilder(scheme + "://" + host + ":" + port);
+        String authorityHost = host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host;
+        StringBuilder uriBuilder = new StringBuilder(scheme + "://" + authorityHost + ":" + port);
         if (path != null) {
             uriBuilder.append(path);
         }
-        if (query != null && !query.isEmpty()) {
+        if (query != null) {
             uriBuilder.append("?").append(query);
         }
 

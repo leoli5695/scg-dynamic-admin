@@ -95,4 +95,14 @@ class SmoothWeightedRoundRobinTest {
         assertTrue(snapshot.containsKey("A"));
         assertTrue(snapshot.containsKey("B"));
     }
+
+    @Test
+    void settingWeightToZeroImmediatelyExcludesPreviouslyAccumulatedCandidate() {
+        var rr = new SmoothWeightedRoundRobin<Item>();
+        rr.select(List.of(new Item("A", 80), new Item("B", 20)), Item::key, Item::weight);
+        for (int i = 0; i < 50; i++) {
+            assertEquals("A", rr.select(List.of(new Item("A", 1), new Item("B", 0)),
+                    Item::key, Item::weight).key());
+        }
+    }
 }

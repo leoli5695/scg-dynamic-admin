@@ -193,7 +193,8 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
                                               String routeId, MultiServiceConfig config) {
         if (!config.isMultiService()) {
             log.warn("Route {} marked as MULTI but has no services configured", routeId);
-            return chain.filter(exchange);
+            return Mono.error(new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "No enabled services for route: " + routeId));
         }
 
         log.debug("Route {} MULTI mode with {} services", routeId, config.getServices().size());
@@ -201,20 +202,17 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
         // Step 1: Check gray rules first
         String targetVersion = matchGrayRules(exchange, config);
 
-        // Step 2: If no gray rule matched, use weight-based selection
-        if (targetVersion == null) {
-            targetVersion = selectByWeight(routeId, config);
-        }
-
-        // Step 3: Get the service binding for the selected version
-        MultiServiceConfig.ServiceBinding selectedBinding = getServiceBindingByVersion(config, targetVersion);
+        // Keep the selected binding: version labels need not be unique across services.
+        MultiServiceConfig.ServiceBinding selectedBinding = targetVersion == null
+                ? selectByWeight(routeId, config) : getServiceBindingByVersion(config, targetVersion);
         if (selectedBinding == null) {
             log.warn("No service binding found for version {} in route {}", targetVersion, routeId);
             // Fallback to first enabled service
             selectedBinding = config.getEnabledServices().stream().findFirst().orElse(null);
             if (selectedBinding == null) {
                 log.error("No enabled services found in route {}", routeId);
-                return chain.filter(exchange);
+                return Mono.error(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "No enabled services for route: " + routeId));
             }
         }
 
@@ -227,7 +225,7 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
 
         // Step 5: Store service info for downstream filters
         exchange.getAttributes().put(TARGET_SERVICE_ID_ATTR, targetServiceId);
-        exchange.getAttributes().put(TARGET_VERSION_ATTR, targetVersion);
+        exchange.getAttributes().put(TARGET_VERSION_ATTR, getBindingKey(selectedBinding));
         exchange.getAttributes().put(SERVICE_BINDING_TYPE_ATTR, serviceType);
 
         // Store namespace/group for DISCOVERY type (used by NacosDiscoveryLoadBalancerFilter)
@@ -270,11 +268,11 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
         if (currentUrl != null) {
             // Preserve path and query from current URL
             StringBuilder uriBuilder = new StringBuilder(scheme + "://" + serviceId);
-            if (currentUrl.getPath() != null && !currentUrl.getPath().isEmpty()) {
-                uriBuilder.append(currentUrl.getPath());
+            if (currentUrl.getRawPath() != null && !currentUrl.getRawPath().isEmpty()) {
+                uriBuilder.append(currentUrl.getRawPath());
             }
-            if (currentUrl.getQuery() != null && !currentUrl.getQuery().isEmpty()) {
-                uriBuilder.append("?").append(currentUrl.getQuery());
+            if (currentUrl.getRawQuery() != null) {
+                uriBuilder.append("?").append(currentUrl.getRawQuery());
             }
             newUri = URI.create(uriBuilder.toString());
         } else {
@@ -348,6 +346,9 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
      * Match a single gray rule.
      */
     private String matchSingleRule(ServerWebExchange exchange, MultiServiceConfig.GrayRule rule, MultiServiceConfig config) {
+        if (rule == null || rule.getType() == null || rule.getValue() == null) {
+            return null;
+        }
         String type = rule.getType();
         String name = rule.getName();
         String value = rule.getValue();
@@ -359,7 +360,10 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
             return null;
         }
 
-        switch (type.toUpperCase()) {
+        if (!"WEIGHT".equalsIgnoreCase(type) && (name == null || name.isBlank())) {
+            return null;
+        }
+        switch (type.toUpperCase(java.util.Locale.ROOT)) {
             case "HEADER":
                 String headerValue = exchange.getRequest().getHeaders().getFirst(name);
                 if (value.equals(headerValue)) {
@@ -414,30 +418,27 @@ public class MultiServiceLoadBalancerFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Select service version by weight using smooth weighted round-robin.
-     * Uses serviceId as unique identifier when version is null.
+     * Select a service binding by weight using smooth weighted round-robin.
+     * Include service identity and discovery scope, since version labels can repeat.
      */
-    private String selectByWeight(String routeId, MultiServiceConfig config) {
+    private MultiServiceConfig.ServiceBinding selectByWeight(String routeId, MultiServiceConfig config) {
         List<MultiServiceConfig.ServiceBinding> enabledServices = config.getEnabledServices();
         if (enabledServices.isEmpty()) {
             return null;
         }
 
         if (enabledServices.size() == 1) {
-            // Return version if present, otherwise return serviceId
-            MultiServiceConfig.ServiceBinding binding = enabledServices.get(0);
-            return binding.getVersion() != null ? binding.getVersion() : binding.getServiceId();
+            return enabledServices.get(0);
         }
 
         // Shared smooth weighted round-robin (per-route lock inside the selector).
         SmoothWeightedRoundRobin<MultiServiceConfig.ServiceBinding> selector =
                 weightSelectors.computeIfAbsent(routeId, k -> new SmoothWeightedRoundRobin<>());
         MultiServiceConfig.ServiceBinding selected = selector.select(
-                enabledServices, this::getBindingKey, MultiServiceConfig.ServiceBinding::getWeight);
-        if (selected == null) {
-            return null;
-        }
-        return selected.getVersion() != null ? selected.getVersion() : getBindingKey(selected);
+                enabledServices, binding -> java.util.Arrays.asList(binding.getType(), binding.getServiceId(),
+                        binding.getServiceNamespace(), binding.getServiceGroup(), binding.getVersion()).toString(),
+                MultiServiceConfig.ServiceBinding::getWeight);
+        return selected;
     }
 
     /**

@@ -63,7 +63,7 @@ public final class GatewayResponseHelper {
         body.put("httpStatus", status.value());
         body.put("code", code);
         body.put("error", status.getReasonPhrase());  // For frontend compatibility
-        body.put("message", message != null ? message : status.getReasonPhrase());
+        body.put("message", com.leoli.gateway.exception.GatewayErrorMessages.withDefault(status, message));
         body.put("data", null);
 
         String jsonBody = toJson(body);
@@ -81,7 +81,7 @@ public final class GatewayResponseHelper {
      */
     public static Mono<Void> writeErrorResponse(ServerHttpResponse response, ErrorCode errorCode) {
         return writeErrorResponse(response, errorCode.getStatus(),
-                errorCode.getCode(), errorCode.getMessage());
+                errorCode.getCode(), com.leoli.gateway.exception.GatewayErrorMessages.forCode(errorCode));
     }
 
     /**
@@ -95,9 +95,9 @@ public final class GatewayResponseHelper {
     public static Mono<Void> writeErrorResponse(ServerHttpResponse response,
                                                 ErrorCode errorCode,
                                                 String detail) {
-        String message = detail != null
+        String message = detail != null && !detail.isBlank()
                 ? errorCode.getMessage() + ": " + detail
-                : errorCode.getMessage();
+                : com.leoli.gateway.exception.GatewayErrorMessages.forCode(errorCode);
         return writeErrorResponse(response, errorCode.getStatus(),
                 errorCode.getCode(), message);
     }
@@ -245,7 +245,7 @@ public final class GatewayResponseHelper {
         body.put("httpStatus", HttpStatus.SERVICE_UNAVAILABLE.value());
         body.put("code", ErrorCode.CIRCUIT_BREAKER_OPEN.getCode());
         body.put("error", "Service Unavailable");
-        body.put("message", "Circuit breaker is open, please try again later");
+        body.put("message", com.leoli.gateway.exception.GatewayErrorMessages.forCode(ErrorCode.CIRCUIT_BREAKER_OPEN));
         body.put("data", null);
         body.put("routeId", routeId);
 

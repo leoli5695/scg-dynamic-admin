@@ -165,52 +165,11 @@ public class InstanceFilter {
      */
     public ServiceInstance findAlternative(String serviceId, List<ServiceInstance> allInstances,
                                            java.util.Set<String> triedInstances) {
-        List<ServiceInstance> healthyAlternatives = new ArrayList<>();
-        List<ServiceInstance> pendingAlternatives = new ArrayList<>();
-        List<ServiceInstance> unhealthyAlternatives = new ArrayList<>();
-
-        for (ServiceInstance inst : allInstances) {
-            String key = inst.getHost() + ":" + inst.getPort();
-            if (!triedInstances.contains(key) && isEnabled(inst)) {
-                InstanceHealth health = healthChecker.getHealth(serviceId, inst.getHost(), inst.getPort());
-
-                if (health == null || "INIT".equals(health.getCheckType()) || "REINIT".equals(health.getCheckType())) {
-                    pendingAlternatives.add(inst);
-                } else if (health.isHealthy()) {
-                    healthyAlternatives.add(inst);
-                } else {
-                    unhealthyAlternatives.add(inst);
-                }
-            }
-        }
-
-        // Priority: healthy > pending (check then try) > unhealthy
-        if (!healthyAlternatives.isEmpty()) {
-            return healthyAlternatives.get(0);
-        }
-
-        // Check pending instances
-        for (ServiceInstance inst : pendingAlternatives) {
-            try {
-                activeHealthChecker.probe(serviceId, inst.getHost(), inst.getPort());
-                InstanceHealth newHealth = healthChecker.getHealth(serviceId, inst.getHost(), inst.getPort());
-                if (newHealth != null && newHealth.isHealthy()) {
-                    log.info("Pending alternative {}:{} passed health check", inst.getHost(), inst.getPort());
-                    return inst;
-                }
-            } catch (Exception e) {
-                log.warn("Health check failed for alternative {}:{}: {}", inst.getHost(), inst.getPort(), e.getMessage());
-            }
-        }
-
-        // Last resort: return unhealthy instance (might have recovered)
-        if (!unhealthyAlternatives.isEmpty()) {
-            log.info("No healthy alternatives, trying unhealthy instance {}:{} (may have recovered)",
-                    unhealthyAlternatives.get(0).getHost(), unhealthyAlternatives.get(0).getPort());
-            return unhealthyAlternatives.get(0);
-        }
-
-        return null;
+        List<ServiceInstance> remaining = allInstances.stream()
+                .filter(inst -> !triedInstances.contains(inst.getHost() + ":" + inst.getPort()))
+                .toList();
+        // Use the same policy for first selection and retry, including failed pending probes.
+        return filter(remaining).stream().findFirst().orElse(null);
     }
 
     /**

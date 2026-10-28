@@ -43,9 +43,6 @@ public class InstanceDiscoveryService {
     @Value("${gateway.health.idle-threshold:300000}")
     private long idleThresholdMs;
 
-    // Record known instances (avoid duplicates)
-    private final Set<String> knownInstances = ConcurrentHashMap.newKeySet();
-
     /**
      * Get instances needing regular frequency health check (NOT in degraded or stable mode).
      * Includes: healthy instances (not stable), newly unhealthy instances, idle instances.
@@ -72,7 +69,7 @@ public class InstanceDiscoveryService {
                     String key = buildInstanceKey(serviceId, instance.getHost(), instance.getPort());
 
                     // If new instance, initialize and trigger immediate health check
-                    if (knownInstances.add(key)) {
+                    if (!hybridHealthChecker.hasHealthRecord(serviceId, instance.getHost(), instance.getPort())) {
                         log.info("Discovered new static instance: {}", key);
                         hybridHealthChecker.initializeInstance(
                                 serviceId,
@@ -80,7 +77,7 @@ public class InstanceDiscoveryService {
                                 instance.getPort()
                         );
                         // Trigger immediate health check for new instance
-                        triggerImmediateHealthCheck(serviceId, instance.getHost(), instance.getPort());
+                        // The returned batch performs the probe under the scheduler's concurrency limit.
                     }
 
                     InstanceHealth health = hybridHealthChecker.getHealth(
@@ -384,7 +381,7 @@ public class InstanceDiscoveryService {
                     String key = buildInstanceKey(serviceId, instance.getHost(), instance.getPort());
 
                     // If new instance, initialize and trigger immediate health check
-                    if (knownInstances.add(key)) {
+                    if (!hybridHealthChecker.hasHealthRecord(serviceId, instance.getHost(), instance.getPort())) {
                         log.info("Discovered new static instance: {}", key);
                         hybridHealthChecker.initializeInstance(
                                 serviceId,
@@ -393,7 +390,7 @@ public class InstanceDiscoveryService {
                         );
                         // Trigger immediate health check for new instance
                         // This ensures we don't route to unhealthy instances before scheduled check
-                        triggerImmediateHealthCheck(serviceId, instance.getHost(), instance.getPort());
+                        // The returned batch performs the probe under the scheduler's concurrency limit.
                     }
 
                     // Add to check list
@@ -507,14 +504,13 @@ public class InstanceDiscoveryService {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             InstanceKey that = (InstanceKey) o;
-            return serviceId.equals(that.serviceId) &&
-                    ip.equals(that.ip) &&
+            return ip.equals(that.ip) &&
                     port == that.port;
         }
 
         @Override
         public int hashCode() {
-            return serviceId.hashCode() ^ ip.hashCode() ^ port;
+            return ip.hashCode() ^ port;
         }
     }
 }

@@ -72,9 +72,6 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         ServerHttpResponse response = exchange.getResponse();
 
-        // Log the exception with appropriate level
-        logException(ex);
-
         // Determine HTTP status
         HttpStatus status = determineHttpStatus(ex);
 
@@ -85,6 +82,13 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         // Set response attributes
         response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        String traceId = exchange.getAttribute(com.leoli.gateway.filter.TraceIdGlobalFilter.TRACE_ID_ATTR);
+        if (traceId == null || traceId.isBlank()) {
+            traceId = UUID.randomUUID().toString().replace("-", "");
+            exchange.getAttributes().put(com.leoli.gateway.filter.TraceIdGlobalFilter.TRACE_ID_ATTR, traceId);
+        }
+        response.getHeaders().set("X-Trace-Id", traceId);
+        logException(ex, traceId);
 
         // Capture error trace (delegate to TraceCaptureGlobalFilter's afterRequest logic)
         // This ensures error requests are captured even when filter chain is interrupted
@@ -105,7 +109,9 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             body = objectMapper.writeValueAsString(errorBody);
         } catch (Exception e) {
             log.error("Failed to serialize error response", e);
-            body = "{\"status\":500,\"error\":\"Internal Server Error\"}";
+            body = "{\"httpStatus\":" + status.value() + ",\"code\":" + status.value()
+                    + ",\"error\":\"" + status.getReasonPhrase()
+                    + "\",\"message\":\"The gateway could not format the error response. Contact the administrator.\",\"data\":null}";
         }
 
         // Write response
@@ -116,7 +122,7 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
     /**
      * Log exception with appropriate level based on type.
      */
-    private void logException(Throwable ex) {
+    private void logException(Throwable ex, String traceId) {
         if (ex instanceof GatewayException) {
             GatewayException ge = (GatewayException) ex;
             ErrorCode errorCode = ge.getErrorCode();
@@ -124,28 +130,28 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             // Client errors (4xx) - log at debug level
             if (errorCode.getStatus().is4xxClientError()) {
                 if (log.isDebugEnabled()) {
-                    log.debug("Gateway exception: code={}, message={}",
-                            errorCode.getCode(), ge.getMessage());
+                    log.debug("Gateway exception: traceId={}, code={}, message={}",
+                            traceId, errorCode.getCode(), ge.getMessage());
                 }
                 return;
             }
 
             // Server errors (5xx) - log at warn level
-            log.warn("Gateway error: code={}, message={}",
-                    errorCode.getCode(), ge.getMessage());
+            log.warn("Gateway error: traceId={}, code={}, message={}",
+                    traceId, errorCode.getCode(), ge.getMessage());
             return;
         }
 
         // NoResourceFoundException - 404 route not found, log at debug level
         if (ex instanceof NoResourceFoundException) {
             if (log.isDebugEnabled()) {
-                log.debug("Route not found: {}", ex.getMessage());
+                log.debug("Route not found: traceId={}, message={}", traceId, ex.getMessage());
             }
             return;
         }
 
         // Non-gateway exceptions - log at warn level, message only (no stack trace to avoid verbose output)
-        log.warn("Gateway exception: {}", ex.getMessage());
+        log.warn("Gateway exception: traceId={}, message={}", traceId, ex.getMessage());
     }
 
     /**
@@ -158,18 +164,16 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         }
 
         // 2. ConnectTimeoutException - connection timeout (504)
-        if (ex instanceof ConnectTimeoutException) {
+        if (isTimeoutException(ex)) {
             return HttpStatus.GATEWAY_TIMEOUT;
         }
 
         // 3. ResponseStatusException - directly use its status code
-        if (ex instanceof ResponseStatusException) {
-            return HttpStatus.valueOf(((ResponseStatusException) ex).getStatusCode().value());
-        }
-
-        // 4. NotFoundException - analyze the message
         if (ex instanceof NotFoundException) {
             return determineStatusFromNotFoundException((NotFoundException) ex);
+        }
+        if (ex instanceof ResponseStatusException) {
+            return HttpStatus.valueOf(((ResponseStatusException) ex).getStatusCode().value());
         }
 
         // 5. NoResourceFoundException - no route matched (404)
@@ -177,8 +181,15 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
             return HttpStatus.NOT_FOUND;
         }
 
+        if (ex instanceof java.net.ConnectException) return HttpStatus.SERVICE_UNAVAILABLE;
+        if (ex instanceof reactor.netty.http.client.PrematureCloseException) return HttpStatus.BAD_GATEWAY;
         // 6. Default to 500
         return HttpStatus.INTERNAL_SERVER_ERROR;
+    }
+
+    private boolean isTimeoutException(Throwable ex) {
+        return ex instanceof ConnectTimeoutException || ex instanceof java.net.SocketTimeoutException
+                || ex instanceof java.util.concurrent.TimeoutException || ex instanceof io.netty.handler.timeout.ReadTimeoutException;
     }
 
     /**
@@ -277,7 +288,12 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
 
         // Handle GatewayException with structured error info
         if (ex instanceof GatewayException) {
-            body.putAll(((GatewayException) ex).toErrorMap());
+            GatewayException gatewayException = (GatewayException) ex;
+            body.putAll(gatewayException.toErrorMap());
+            if (status.is5xxServerError() || gatewayException.getDetails() == null || gatewayException.getDetails().isBlank()) {
+                body.put("message", GatewayErrorMessages.forCode(gatewayException.getErrorCode()));
+            }
+            body.put("traceId", exchange.getAttribute(com.leoli.gateway.filter.TraceIdGlobalFilter.TRACE_ID_ATTR));
             // httpStatus already included in toErrorMap()
             return body;
         }
@@ -291,7 +307,16 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         // SECURITY FIX (information leakage): raw 5xx exception messages frequently
         // contain internal details (class names, upstream hosts, connection strings).
         // Return only the generic reason phrase to clients; full detail stays in logs.
-        String message = status.is5xxServerError() ? status.getReasonPhrase() : extractMessage(ex);
+        String message;
+        if (status == HttpStatus.SERVICE_UNAVAILABLE) {
+            String reason = ex instanceof ResponseStatusException ? ((ResponseStatusException) ex).getReason() : null;
+            message = ex instanceof java.net.ConnectException ? GatewayErrorMessages.forCode(ErrorCode.CONNECTION_REFUSED)
+                    : GatewayErrorMessages.forUnavailable(reason);
+        } else if (status.is5xxServerError() || status == HttpStatus.NOT_FOUND || ex instanceof java.net.ConnectException) {
+            message = GatewayErrorMessages.forStatus(status);
+        } else {
+            message = GatewayErrorMessages.withDefault(status, extractMessage(ex));
+        }
         // Gateway 404 means no route matched: make the client-facing message explicit
         if (status == HttpStatus.NOT_FOUND && message != null && message.startsWith("404 NOT_FOUND")) {
             message = "404 ROUTE_NOT_FOUND" + message.substring("404 NOT_FOUND".length());
@@ -299,11 +324,15 @@ public class ScgGlobalExceptionHandler implements ErrorWebExceptionHandler {
         if (message != null && !message.isEmpty()) {
             body.put("message", message);
         }
+        body.put("traceId", exchange.getAttribute(com.leoli.gateway.filter.TraceIdGlobalFilter.TRACE_ID_ATTR));
 
         return body;
     }
 
     private String extractMessage(Throwable ex) {
+        if (ex instanceof ResponseStatusException) {
+            return ((ResponseStatusException) ex).getReason();
+        }
         // NoResourceFoundException - no route matched in gateway
         // Return a meaningful message instead of "No static resource ."
         if (ex instanceof NoResourceFoundException) {

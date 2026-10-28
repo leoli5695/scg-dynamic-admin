@@ -69,12 +69,25 @@ public class HealthCheckScheduler {
      */
     private Semaphore concurrentCheckSemaphore;
 
+    private java.util.concurrent.ExecutorService checkExecutor;
+
     /**
      * Initialize semaphore after bean creation.
      */
     @PostConstruct
     public void init() {
+        if (checkBatchSize <= 0 || maxConcurrentPerBatch <= 0) {
+            throw new IllegalArgumentException("Health check batch size and concurrency must be positive");
+        }
         concurrentCheckSemaphore = new Semaphore(maxConcurrentPerBatch);
+        checkExecutor = new java.util.concurrent.ThreadPoolExecutor(
+                maxConcurrentPerBatch, maxConcurrentPerBatch, 0L, TimeUnit.MILLISECONDS,
+                new java.util.concurrent.ArrayBlockingQueue<>(Math.max(checkBatchSize, maxConcurrentPerBatch)),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "gateway-health-probe");
+                    thread.setDaemon(true);
+                    return thread;
+                });
         log.info("Health check scheduler initialized: batch size={}, max concurrent per batch={}",
                  checkBatchSize, maxConcurrentPerBatch);
     }
@@ -85,6 +98,7 @@ public class HealthCheckScheduler {
      */
     @Scheduled(fixedRateString = "${gateway.health.regular-check-interval:30000}")
     public void performRegularHealthCheck() {
+        if (!healthCheckProperties.isEnabled()) return;
         log.debug("Starting regular frequency health check...");
 
         try {
@@ -114,6 +128,7 @@ public class HealthCheckScheduler {
      */
     @Scheduled(fixedRateString = "${gateway.health.degraded-check-interval:180000}")
     public void performDegradedHealthCheck() {
+        if (!healthCheckProperties.isEnabled()) return;
         log.debug("Starting degraded frequency health check...");
 
         try {
@@ -145,6 +160,7 @@ public class HealthCheckScheduler {
      */
     @Scheduled(fixedRateString = "${gateway.health.stable-check-interval:120000}")
     public void performStableHealthCheck() {
+        if (!healthCheckProperties.isEnabled()) return;
         log.debug("Starting stable frequency health check...");
 
         try {
@@ -235,7 +251,7 @@ public class HealthCheckScheduler {
                     log.error("Failed to check instance {}:{} ({})",
                               instance.getIp(), instance.getPort(), checkType, e);
                 }
-            }))
+            }, checkExecutor))
             .collect(Collectors.toList());
 
         // Wait for batch to complete (max 30 seconds for larger batches)
@@ -247,6 +263,8 @@ public class HealthCheckScheduler {
             log.debug("Batch {}/{} completed: {} instances", batchNum, totalBatches, batch.size());
             return new BatchResult(batch.size(), 0);
         } catch (Exception e) {
+            futures.forEach(future -> future.cancel(true));
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             log.warn("Batch {}/{} timed out or failed: {}", batchNum, totalBatches, e.getMessage());
             return new BatchResult(0, batch.size());
         }
@@ -259,6 +277,11 @@ public class HealthCheckScheduler {
     public void cleanupExpiredHealthRecords() {
         log.debug("Cleaning up expired health records...");
         hybridHealthChecker.cleanupExpired();
+    }
+
+    @jakarta.annotation.PreDestroy
+    public void destroy() {
+        if (checkExecutor != null) checkExecutor.shutdownNow();
     }
 
     /**

@@ -35,7 +35,7 @@ import static com.leoli.gateway.filter.loadbalancer.MultiServiceLoadBalancerFilt
  * <p>
  * <b>Two Load Balancing Strategies:</b>
  * <ul>
- *   <li><b>DISCOVERY (lb://)</b>: Handled by SCG's native ReactiveLoadBalancerClientFilter.
+ *   <li><b>DISCOVERY (lb://)</b>: Handled by NacosDiscoveryLoadBalancerFilter.
  *       For services registered in service registry.</li>
  *   <li><b>STATIC (static://)</b>: Handled by this filter.
  *       For legacy services with static IP:port configuration.</li>
@@ -113,33 +113,30 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
 
     private Mono<Response<ServiceInstance>> chooseInstance(String serviceId, ServerWebExchange exchange) {
         log.debug("Choosing instance for service: {} from StaticDiscoveryService", serviceId);
-        try {
+        return Mono.fromCallable(() -> {
             List<ServiceInstance> instances = staticDiscoveryService.getInstances(serviceId);
             if (CollectionUtils.isEmpty(instances)) {
                 log.warn("No instances found for service: {}", serviceId);
-                return Mono.error(new org.springframework.web.server.ResponseStatusException(
+                throw new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
-                        "No available instances for service: " + serviceId));
+                        "No available instances for service: " + serviceId);
             }
 
             log.debug("Found {} instance(s) for service: {}", instances.size(), serviceId);
             List<ServiceInstance> available = instanceFilter.filter(instances);
             if (available.isEmpty()) {
                 log.warn("No available instances after filtering for service: {}", serviceId);
-                return Mono.error(new org.springframework.web.server.ResponseStatusException(
+                throw new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
-                        "No available instances for service: " + serviceId));
+                        "All service instances are disabled for service: " + serviceId);
             }
 
             String strategy = serviceManager.getLoadBalancerStrategy(serviceId);
             log.debug("Using load balancer strategy: {} for service: {}", strategy, serviceId);
 
             ServiceInstance selected = instanceSelector.select(available, strategy, exchange);
-            return Mono.just(new SimpleResponse<>(selected));
-        } catch (Exception e) {
-            log.error("Error choosing instance for service: {}", serviceId, e);
-            return Mono.error(e);
-        }
+            return (Response<ServiceInstance>) new SimpleResponse<>(selected);
+        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
     private Mono<Void> executeWithRetry(ServerWebExchange exchange, GatewayFilterChain chain,
@@ -147,9 +144,8 @@ public class DiscoveryLoadBalancerFilter implements GlobalFilter, Ordered {
                                         java.util.Set<String> triedInstances) {
         // Get all instances and filter out disabled ones
         // Disabled instances must be excluded (user's explicit choice)
-        List<ServiceInstance> allInstances = staticDiscoveryService.getInstances(serviceId);
-        List<ServiceInstance> enabledInstances = instanceFilter.filterEnabled(allInstances);
-        return retryExecutor.execute(exchange, chain, serviceId, instance, enabledInstances, triedInstances);
+        return retryExecutor.execute(exchange, chain, serviceId, instance,
+                () -> staticDiscoveryService.getInstances(serviceId), triedInstances);
     }
 
     @Override

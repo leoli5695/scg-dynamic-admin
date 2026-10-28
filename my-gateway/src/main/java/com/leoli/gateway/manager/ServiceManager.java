@@ -125,26 +125,21 @@ public class ServiceManager {
             }
         }
 
-        if (newInstances == null || newInstances.isEmpty()) {
+        if (newInstances == null || (newInstances.isEmpty() && serviceNode.get("instances").size() > 0)) {
             // No valid instances parsed: keep the previous cache rather than
             // wiping it, so a transient bad push cannot take the service down.
             log.warn("Service '{}' has no valid instances parsed, keeping previous cache", serviceId);
             return;
         }
 
-        // Parsing succeeded - clear stale health records and swap caches.
-        // CRITICAL: clearServiceInstances() checks instanceCache for shared
-        // instances, so it must run BEFORE the instanceCache entry is replaced.
-        hybridHealthChecker.clearServiceInstances(serviceId);
-
-        endpointCache.remove(serviceId);
-        instanceCache.remove(serviceId);
-        roundRobinCounters.remove(serviceId);
-
+        // Publish the new list without a remove/put gap. An explicit empty list removes traffic.
         loadBalancerStrategyCache.put(serviceId, loadBalancer);
-        endpointCache.put(serviceId, newEndpoint);
-        instanceCache.put(serviceId, newInstances);
+        if (newEndpoint == null) endpointCache.remove(serviceId);
+        else endpointCache.put(serviceId, newEndpoint);
+        instanceCache.put(serviceId, List.copyOf(newInstances));
         roundRobinCounters.put(serviceId, new AtomicInteger(0));
+        // Retain observations for unchanged addresses; prune only unreferenced nodes.
+        hybridHealthChecker.clearServiceInstances(serviceId);
 
         log.info("Loaded service '{}' with {} instances, loadBalancer: {}",
                 serviceId, newInstances.size(), loadBalancer);

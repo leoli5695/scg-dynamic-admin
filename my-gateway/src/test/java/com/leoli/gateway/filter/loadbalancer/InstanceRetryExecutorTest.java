@@ -20,6 +20,21 @@ class InstanceRetryExecutorTest {
     private final InstanceRetryExecutor executor = new InstanceRetryExecutor(mock(InstanceFilter.class), mock(HybridHealthChecker.class));
 
     @Test
+    void staticResolutionHonorsInstanceSchemeAndTheAlreadyRewrittenUrl() {
+        for (boolean secure : List.of(false, true)) {
+            ServiceInstance instance = new DefaultServiceInstance("one", "svc", "localhost", 12345, secure);
+            var exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/original").build());
+            exchange.getAttributes().put(org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR,
+                    java.net.URI.create("static://svc/rewritten/a%2Fb?q=a%26b"));
+            executor.execute(exchange, forwarded -> {
+                assertEquals((secure ? "https" : "http") + "://localhost:12345/rewritten/a%2Fb?q=a%26b",
+                        forwarded.getAttribute(org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_REQUEST_URL_ATTR).toString());
+                return Mono.empty();
+            }, "svc", instance, List.of(instance), new HashSet<>()).block();
+        }
+    }
+
+    @Test
     void singleBackendAndLargeBodiesAreForwardedChunkByChunkWithoutReplayCache() {
         for (var instances : List.of(List.of(one), List.of(one, two))) {
             byte[] chunk = new byte[8192];
@@ -73,5 +88,19 @@ class InstanceRetryExecutorTest {
         var pending = executor.execute(exchange, forwarded -> Mono.never(), "svc", one, List.of(one, two), new HashSet<>()).subscribe();
         var budget = (java.util.concurrent.atomic.AtomicLong) org.springframework.test.util.ReflectionTestUtils.getField(executor, "inflightRetryBytes");
         assertTrue(budget.get() > 0); pending.dispose(); assertEquals(0, budget.get());
+    }
+
+    @Test
+    void oversizedRetryBodyReturnsAnExplanationWithoutForwardingToTheBackend() throws Exception {
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/upload")
+                .header("Content-Length", "1").body("x".repeat(65537)));
+        executor.execute(exchange, forwarded -> {
+            fail("An oversized retry buffer must not reach the backend"); return Mono.empty();
+        }, "svc", one, List.of(one, two), new HashSet<>()).block();
+        assertEquals(413, exchange.getResponse().getStatusCode().value());
+        var body = new com.fasterxml.jackson.databind.ObjectMapper().readTree(exchange.getResponse().getBodyAsString().block());
+        assertEquals(413, body.get("httpStatus").asInt());
+        assertTrue(body.get("message").asText().contains("65536-byte"));
+        assertTrue(body.get("message").asText().contains("Content-Length"));
     }
 }

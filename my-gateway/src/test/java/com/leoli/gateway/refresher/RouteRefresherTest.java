@@ -66,12 +66,51 @@ class RouteRefresherTest {
     @BeforeEach
     void setUp() {
         refresher = new RouteRefresher(routeManager, configService, routeLocator,
-                new ObjectMapper(), shadowQuotaManager);
+                new ObjectMapper().configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
+                shadowQuotaManager);
     }
 
     @AfterEach
     void tearDown() {
         refresher.destroy();
+    }
+
+    @Test
+    void singleDiscoveryWithNullServicesRetainsNamespaceAndGroup() {
+        RouteDefinition route = ReflectionTestUtils.invokeMethod(refresher, "parseRoute", """
+                {"id":"single","uri":"lb://orders","mode":"SINGLE","serviceId":"orders",
+                 "services":null,"serviceNamespace":"staging","serviceGroup":"BLUE"}
+                """);
+        var config = (com.leoli.gateway.model.MultiServiceConfig) route.getMetadata().get("multiServiceConfig");
+        org.junit.jupiter.api.Assertions.assertNotNull(config);
+        assertEquals(com.leoli.gateway.model.ServiceBindingType.DISCOVERY, config.getServiceType());
+        assertEquals("staging", config.getServiceNamespace());
+        assertEquals("BLUE", config.getServiceGroup());
+    }
+
+    @Test
+    void registryTypeAliasesAndGrayRulesSurvivePublishedJson() {
+        for (String type : List.of("NACOS", "CONSUL", "DISCOVERY", "lb")) {
+            String json = """
+                    {"id":"multi","uri":"static://stable","mode":"MULTI",
+                     "services":[{"serviceId":"orders","serviceType":"%s","version":"v2",
+                                  "serviceNamespace":"staging","serviceGroup":"BLUE","weight":20}],
+                     "grayRules":{"enabled":true,"rules":[{"type":"WEIGHT","value":"100","targetVersion":"v2"}]}}
+                    """.formatted(type);
+            RouteDefinition route = ReflectionTestUtils.invokeMethod(refresher, "parseRoute", json);
+            var config = (com.leoli.gateway.model.MultiServiceConfig) route.getMetadata().get("multiServiceConfig");
+            assertEquals(com.leoli.gateway.model.ServiceBindingType.DISCOVERY, config.getServices().get(0).getType());
+            assertEquals("BLUE", config.getServices().get(0).getServiceGroup());
+            assertEquals("v2", config.getGrayRules().getRules().get(0).getTargetVersion());
+        }
+    }
+
+    @Test
+    void malformedMultiServiceConfigIsRejectedInsteadOfPublishingFallbackRoute() {
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ReflectionTestUtils.invokeMethod(refresher, "parseRoute", """
+                        {"id":"bad","uri":"static://stable","mode":"MULTI","services":"invalid"}
+                        """));
     }
 
     private static String routeJson(String id, int port) {

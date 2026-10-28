@@ -59,7 +59,13 @@ public final class SmoothWeightedRoundRobin<T> {
         double maxCurrentWeight = Double.NEGATIVE_INFINITY;
         for (T item : items) {
             String key = keyFn.apply(item);
-            double updated = currentWeights.getOrDefault(key, 0.0) + clamp(weightFn.applyAsDouble(item));
+            double weight = clamp(weightFn.applyAsDouble(item));
+            if (weight == 0) {
+                // A live weight change to zero must immediately stop weighted traffic.
+                currentWeights.remove(key);
+                continue;
+            }
+            double updated = currentWeights.getOrDefault(key, 0.0) + weight;
             currentWeights.put(key, updated);
             if (updated > maxCurrentWeight) {
                 maxCurrentWeight = updated;

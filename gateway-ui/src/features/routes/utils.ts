@@ -344,7 +344,7 @@ export const toBackendBinding = (
   return {
     serviceId,
     serviceName,
-    weight: formBinding.weight || 100,
+    weight: formBinding.weight ?? 100,
     version: formBinding.version,
     enabled: formBinding.enabled !== false,
     type: bindingType,
@@ -364,8 +364,10 @@ export const toFormBinding = (
 
   if (pureServiceId.includes('://')) {
     [protocol, pureServiceId] = splitServiceUri(pureServiceId);
+  } else if (binding.type) {
+    protocol = binding.type === 'STATIC' ? 'static' : 'lb';
   } else {
-    // Infer protocol from the Nacos registry; stored type may be stale.
+    // Legacy bindings without a type can be inferred from the current registry.
     const isNacosService = nacosServices.some((ns) => ns.serviceName === pureServiceId);
     protocol = isNacosService ? 'lb' : 'static';
   }
