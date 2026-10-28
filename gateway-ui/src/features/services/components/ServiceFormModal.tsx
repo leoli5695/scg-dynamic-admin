@@ -3,7 +3,7 @@
  * Mounted only while open, so initial values come straight from props.
  * Body aligns with model/ServiceDefinition.java.
  */
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import EditorNavigation from '../../instance-detail/EditorNavigation';
 import EditorCategorySwitch from '../../instance-detail/EditorCategorySwitch';
 import { useEditorStep } from '../../instance-detail/useEditorStep';
@@ -54,19 +54,19 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
   );
   const [submitting, setSubmitting] = useState(false);
 
-  const [activeStep, setActiveStep, stepDirection] = useEditorStep();
+  const [activeStep, setActiveStep, stepDirection, visitedSteps] = useEditorStep();
   const isEdit = mode === 'edit';
 
   const category = (Form.useWatch('category', form) ?? (isEdit ? service?.category : 'NORMAL')) as ServiceCategory;
   const isAi = category === 'AI';
 
-  const handleInstanceChange = (index: number, patch: Partial<ServiceInstanceItem>) => {
+  const handleInstanceChange = useCallback((index: number, patch: Partial<ServiceInstanceItem>) => {
     setInstances((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
-  };
+  }, []);
 
-  const handleRemoveInstance = (index: number) => {
+  const handleRemoveInstance = useCallback((index: number) => {
     setInstances((prev) => prev.filter((_, i) => i !== index));
-  };
+  }, []);
 
   const stepLabels = [t('services.basic_config'), t(isAi ? 'services.ai_config' : 'services.service_instances')];
   const nextStep = async () => {
@@ -236,7 +236,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           </div>
         )}
 
-        {!isAi && (
+        {!isAi && visitedSteps.includes(1) && (
         <div className="form-section-modern" hidden={activeStep !== 1}>
           <div className="section-header">
             <ApiOutlined className="section-icon" />

@@ -201,6 +201,7 @@ public class RouteValidator {
             Map<String, String> args = predicate.getArgs();
             if (args == null || args.isEmpty()) {
                 errors.add("Predicate '" + name + "' has no arguments");
+                continue;
             }
 
             // Track if we have a Path predicate
@@ -316,6 +317,10 @@ public class RouteValidator {
     }
 
     private static void validateStripPrefixFilter(Map<String, String> args, List<String> errors) {
+        if (args == null) {
+            errors.add("StripPrefix requires arguments");
+            return;
+        }
         String parts = args.get("parts");
         if (parts != null) {
             try {
@@ -330,6 +335,10 @@ public class RouteValidator {
     }
 
     private static void validateSetStatusFilter(Map<String, String> args, List<String> errors) {
+        if (args == null) {
+            errors.add("SetStatus requires arguments");
+            return;
+        }
         String status = args.get("status");
         if (status != null) {
             try {

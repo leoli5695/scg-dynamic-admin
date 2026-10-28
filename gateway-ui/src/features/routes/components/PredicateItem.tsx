@@ -47,7 +47,7 @@ const PredicateItem: React.FC<PredicateItemProps> = ({
             border: '1px solid rgba(148, 163, 184, 0.15)',
           }}
           onChange={(value) => {
-            form.setFieldValue(['predicates', name, 'args'], value === 'Method' ? {} : '');
+            form.setFieldValue(['predicates', name, 'args'], value === 'Method' ? [] : '');
           }}
           suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
         >

@@ -39,14 +39,15 @@ export const parsePredicateArgs = (type: string, args: unknown): Record<string, 
     }
   }
 
+  if (type === 'Method' && Array.isArray(args)) {
+    return buildMethodArgs(args.map(String));
+  }
+
   if (typeof args === 'object' && args !== null && !Array.isArray(args)) {
-    // Method multi-select stores string[]; convert to indexed keys below.
+    // Accept legacy object values as well as the multi-select array.
     const obj = args as Record<string, unknown>;
     if (type === 'Method' && Array.isArray(obj.methods)) {
       return buildMethodArgs((obj.methods as unknown[]).map(String));
-    }
-    if (Array.isArray(obj)) {
-      return buildMethodArgs((obj as unknown[]).map(String));
     }
     return obj as Record<string, string>;
   }

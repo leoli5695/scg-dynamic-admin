@@ -97,6 +97,8 @@ public class RouteController extends BaseController {
             response.setUri(route.getUri());
             response.setMode(route.getMode());
             response.setServiceId(route.getServiceId());
+            response.setServiceNamespace(route.getServiceNamespace());
+            response.setServiceGroup(route.getServiceGroup());
             response.setServices(route.getServices());
             response.setGrayRules(route.getGrayRules());
             response.setOrder(route.getOrder());
@@ -139,6 +141,9 @@ public class RouteController extends BaseController {
 
             // Get old value before update
             RouteEntity oldEntity = routeService.getRouteEntityByRouteId(id);
+            if (oldEntity == null) {
+                return ResponseEntity.status(404).body(ApiResponse.notFound("Route not found: " + id));
+            }
             String oldValue = oldEntity != null ? oldEntity.getMetadata() : null;
             String instanceId = oldEntity != null ? oldEntity.getInstanceId() : null;
 
@@ -152,7 +157,7 @@ public class RouteController extends BaseController {
             return ResponseEntity.ok(ApiResponse.success(route, "Route updated successfully"));
         } catch (IllegalArgumentException e) {
             log.warn("Failed to update route: {}", e.getMessage());
-            return ResponseEntity.status(404).body(ApiResponse.notFound(e.getMessage()));
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to update route", e);
             return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to update route: " + e.getMessage()));

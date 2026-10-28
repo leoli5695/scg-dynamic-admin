@@ -145,6 +145,8 @@ jobs:
       # surfacing as an opaque vite failure.
       - run: npx tsc --noEmit
 
+      - run: npm run test:routes
+
       - run: npm run build
 
   # gateway-ui-2 is frozen and not deployed (see gateway-ui-2/STATUS.md), so it is

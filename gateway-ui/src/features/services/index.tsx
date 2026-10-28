@@ -2,7 +2,7 @@
  * Services page (rewritten as a feature).
  * Fields aligned with ServiceController + model/ServiceDefinition.java.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button, Card, Empty, Input, Spin, Tabs, Typography  } from 'antd';
 import { message, modal } from '../../utils/antdStatic';
@@ -165,7 +165,8 @@ const ServicesPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (service: ServiceDefinition) => {
+  const refreshServices = servicesRequest.run;
+  const handleDelete = useCallback(async (service: ServiceDefinition) => {
     try {
       const usage = await checkServiceUsage(service.name);
       if ((usage ?? []).length > 0) {
@@ -184,20 +185,18 @@ const ServicesPage: React.FC = () => {
       }
       await deleteService(service.name, instanceId);
       message.success(t('message.delete_success'));
-      servicesRequest.run();
-      if (selectedService?.name === service.name) {
-        setSelectedService(null);
-      }
+      refreshServices();
+      setSelectedService((current) => current?.name === service.name ? null : current);
     } catch (error) {
       message.error(errorMessage(error, 'message.delete_failed', t));
     }
-  };
+  }, [instanceId, refreshServices, t]);
 
-  const openEditModal = (service: ServiceDefinition) => {
+  const openEditModal = useCallback((service: ServiceDefinition) => {
     // Close the drawer first, then open the edit modal
     setSelectedService(null);
     setEditingService(service);
-  };
+  }, []);
 
   const statsItems: Array<{ filter: HealthFilter; value: number; labelKey: string; className?: string }> = [
     { filter: 'all', value: totalServices, labelKey: 'services.stats_services' },

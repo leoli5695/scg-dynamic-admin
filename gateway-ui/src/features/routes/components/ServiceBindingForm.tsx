@@ -2,11 +2,12 @@
  * Service binding configuration form — shared between create and edit.
  * Handles both SINGLE and MULTI routing modes.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Button, Form, Input, InputNumber, Select, Switch, Tag
 } from 'antd';
 import type { FormInstance } from 'antd';
+import type { DefaultOptionType } from 'antd/es/select';
 import {
   CloudOutlined, DeleteOutlined, GlobalOutlined, PlusOutlined,
 } from '@ant-design/icons';
@@ -23,6 +24,11 @@ interface ServiceBindingFormProps {
   onRoutingModeChange: (mode: RoutingMode) => void;
   services: ServiceDefinition[];
   nacosServices: NacosDiscoveryServiceInfo[];
+}
+
+interface ServiceOption extends DefaultOptionType {
+  kind?: 'static' | 'nacos';
+  options?: ServiceOption[];
 }
 
 const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
@@ -52,43 +58,26 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
     form.setFieldsValue({ services: currentServices });
   };
 
-  const renderServiceOptions = () => (
-    <>
-      <Select.OptGroup label={(
-        <>
-          <CloudOutlined style={{ marginRight: 6 }} />
-          {' '}
-          {t('routes.static_services')}
-        </>
-      )}
-      >
-        {services.map((s) => (
-          <Select.Option key={`static-${s.serviceId}`} value={`static://${s.serviceId}`}>
-            <span>{s.name || s.serviceId}</span>
-            <span className="service-option-tag static">Static</span>
-          </Select.Option>
-        ))}
-      </Select.OptGroup>
-      <Select.OptGroup label={(
-        <>
-          <GlobalOutlined style={{ marginRight: 6 }} />
-          {' '}
-          {t('routes.nacos_services')}
-        </>
-      )}
-      >
-        {nacosServices.map((s) => (
-          <Select.Option
-            key={`lb-${s.serviceName}-${s.namespace || 'public'}-${s.group || 'DEFAULT_GROUP'}`}
-            value={lbOptionValue(s.serviceName, s.namespace, s.group)}
-          >
-            <span>{s.displayName || `${s.serviceName} (${s.namespace || 'public'}/${s.group || 'DEFAULT_GROUP'})`}</span>
-            <span className="service-option-tag nacos">Nacos</span>
-          </Select.Option>
-        ))}
-      </Select.OptGroup>
-    </>
-  );
+  // Share one option tree across every binding row. JSX Select.Option children
+  // forced each Select to rebuild and parse the entire registry on every render.
+  const serviceOptions = useMemo<ServiceOption[]>(() => [
+    {
+      label: <><CloudOutlined /> {t('routes.static_services')}</>,
+      options: services.map((s) => ({
+        value: `static://${s.serviceId}`,
+        label: s.name || s.serviceId,
+        kind: 'static',
+      })),
+    },
+    {
+      label: <><GlobalOutlined /> {t('routes.nacos_services')}</>,
+      options: nacosServices.map((s) => ({
+        value: lbOptionValue(s.serviceName, s.namespace, s.group),
+        label: s.displayName || `${s.serviceName} (${s.namespace || 'public'}/${s.group || 'DEFAULT_GROUP'})`,
+        kind: 'nacos',
+      })),
+    },
+  ], [services, nacosServices, t]);
 
   return (
     <>
@@ -117,9 +106,10 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
       {routingMode === 'SINGLE' && (
         <>
           <Form.Item name="serviceId" label={t('routes.target_service')} rules={[{ required: true }]}>
-            <Select placeholder={t('routes.select_service')} size="large" onChange={handleServiceIdChange} showSearch>
-              {renderServiceOptions()}
-            </Select>
+            <Select<string, ServiceOption> placeholder={t('routes.select_service')} size="large" onChange={handleServiceIdChange}
+              showSearch={{ optionFilterProp: 'label' }} options={serviceOptions}
+              optionRender={(option) => <><span>{option.label}</span><span className={`service-option-tag ${option.data.kind}`}>{option.data.kind === 'static' ? 'Static' : 'Nacos'}</span></>}
+            />
           </Form.Item>
         </>
       )}
@@ -128,7 +118,7 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
       {routingMode === 'MULTI' && (
         <>
           {/* Real-time weight total indicator */}
-          <Form.Item shouldUpdate noStyle>
+          <Form.Item shouldUpdate={(previous, current) => previous.services !== current.services} noStyle>
             {({ getFieldValue }) => {
               const totalWeight = sumWeights(getFieldValue('services'));
               const isValid = totalWeight === 100;
@@ -185,17 +175,17 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
                   >
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>
                       <Form.Item {...restField} name={[name, 'serviceId']} noStyle rules={[{ required: true }]}>
-                        <Select
+                        <Select<string, ServiceOption>
                           placeholder={t('routes.select_service')}
                           style={{ width: 220, flexShrink: 0 }}
                           size="middle"
-                          showSearch
+                          showSearch={{ optionFilterProp: 'label' }}
+                          options={serviceOptions}
+                          optionRender={(option) => <><span>{option.label}</span><span className={`service-option-tag ${option.data.kind}`}>{option.data.kind === 'static' ? 'Static' : 'Nacos'}</span></>}
                           onChange={(value) => handleMultiServiceIdChange(value, name)}
-                        >
-                          {renderServiceOptions()}
-                        </Select>
+                        />
                       </Form.Item>
-                      <Form.Item {...restField} name={[name, 'weight']} noStyle initialValue={100}>
+                      <Form.Item {...restField} name={[name, 'weight']} noStyle>
                         <InputNumber
                           min={1}
                           max={100}
@@ -205,7 +195,7 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
                           addonAfter="%"
                         />
                       </Form.Item>
-                      <Form.Item {...restField} name={[name, 'enabled']} noStyle valuePropName="checked" initialValue>
+                      <Form.Item {...restField} name={[name, 'enabled']} noStyle valuePropName="checked">
                         <Switch size="small" checkedChildren="ON" unCheckedChildren="OFF" />
                       </Form.Item>
                       {fields.length > 1 && (

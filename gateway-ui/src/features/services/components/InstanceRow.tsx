@@ -93,4 +93,4 @@ const InstanceRow: React.FC<InstanceRowProps> = ({
   );
 };
 
-export default InstanceRow;
+export default React.memo(InstanceRow);

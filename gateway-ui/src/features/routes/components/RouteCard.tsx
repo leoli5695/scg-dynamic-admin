@@ -218,4 +218,4 @@ const RouteCard: React.FC<RouteCardProps> = ({
   );
 };
 
-export default RouteCard;
+export default React.memo(RouteCard);

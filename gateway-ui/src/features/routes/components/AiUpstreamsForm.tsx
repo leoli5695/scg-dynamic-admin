@@ -5,7 +5,7 @@
  * Field shape mirrors backend model/AiUpstream.java + model/AiModelPredicate.java
  * (themselves aligned with Higress AiUpstream / AiModelPredicate).
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Button, Form, Input, InputNumber, Select,
 } from 'antd';
@@ -23,10 +23,10 @@ interface AiUpstreamsFormProps {
 const AiUpstreamsForm: React.FC<AiUpstreamsFormProps> = ({ aiServices }) => {
   const { t } = useTranslation();
 
-  const serviceOptions = aiServices.map((s) => ({
+  const serviceOptions = useMemo(() => aiServices.map((s) => ({
     label: s.providerType ? `${s.name} (${s.providerType})` : s.name,
     value: s.name,
-  }));
+  })), [aiServices]);
 
   return (
     <>

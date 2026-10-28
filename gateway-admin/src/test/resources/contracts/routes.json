@@ -1,0 +1,262 @@
+{
+  "discovery": {
+    "routeName": "contract-route",
+    "order": 12,
+    "description": "路由契约测试",
+    "predicates": [
+      {
+        "name": "Path",
+        "args": {
+          "pattern": "/contract/**"
+        }
+      },
+      {
+        "name": "Host",
+        "args": {
+          "patterns": "*.example.com"
+        }
+      },
+      {
+        "name": "Method",
+        "args": {
+          "methods.0": "GET",
+          "methods.1": "POST"
+        }
+      },
+      {
+        "name": "Header",
+        "args": {
+          "header": "X-Tenant",
+          "regexp": "team:.*"
+        }
+      }
+    ],
+    "filters": [
+      {
+        "name": "StripPrefix",
+        "args": {
+          "parts": "1"
+        }
+      }
+    ],
+    "metadata": {
+      "response-timeout": 3000,
+      "custom": {
+        "owner": "team"
+      }
+    },
+    "mode": "SINGLE",
+    "category": "NORMAL",
+    "uri": "lb://orders",
+    "serviceId": "orders",
+    "serviceNamespace": "staging",
+    "serviceGroup": "BLUE"
+  },
+  "publicDiscovery": {
+    "routeName": "contract-route",
+    "order": 12,
+    "description": "路由契约测试",
+    "predicates": [
+      {
+        "name": "Path",
+        "args": {
+          "pattern": "/contract/**"
+        }
+      },
+      {
+        "name": "Host",
+        "args": {
+          "patterns": "*.example.com"
+        }
+      },
+      {
+        "name": "Method",
+        "args": {
+          "methods.0": "GET",
+          "methods.1": "POST"
+        }
+      },
+      {
+        "name": "Header",
+        "args": {
+          "header": "X-Tenant",
+          "regexp": "team:.*"
+        }
+      }
+    ],
+    "filters": [],
+    "mode": "SINGLE",
+    "category": "NORMAL",
+    "uri": "lb://orders",
+    "serviceId": "orders",
+    "serviceNamespace": "",
+    "serviceGroup": "DEFAULT_GROUP"
+  },
+  "static": {
+    "routeName": "contract-route",
+    "order": 12,
+    "description": "路由契约测试",
+    "predicates": [
+      {
+        "name": "Path",
+        "args": {
+          "pattern": "/contract/**"
+        }
+      },
+      {
+        "name": "Host",
+        "args": {
+          "patterns": "*.example.com"
+        }
+      },
+      {
+        "name": "Method",
+        "args": {
+          "methods.0": "GET",
+          "methods.1": "POST"
+        }
+      },
+      {
+        "name": "Header",
+        "args": {
+          "header": "X-Tenant",
+          "regexp": "team:.*"
+        }
+      }
+    ],
+    "filters": [],
+    "mode": "SINGLE",
+    "category": "NORMAL",
+    "uri": "static://abcd1234-1234-1234-1234-abcd12345678",
+    "serviceId": "abcd1234-1234-1234-1234-abcd12345678"
+  },
+  "multi": {
+    "routeName": "contract-route",
+    "order": 12,
+    "description": "路由契约测试",
+    "predicates": [
+      {
+        "name": "Path",
+        "args": {
+          "pattern": "/contract/**"
+        }
+      },
+      {
+        "name": "Host",
+        "args": {
+          "patterns": "*.example.com"
+        }
+      },
+      {
+        "name": "Method",
+        "args": {
+          "methods.0": "GET",
+          "methods.1": "POST"
+        }
+      },
+      {
+        "name": "Header",
+        "args": {
+          "header": "X-Tenant",
+          "regexp": "team:.*"
+        }
+      }
+    ],
+    "filters": [],
+    "mode": "MULTI",
+    "category": "NORMAL",
+    "services": [
+      {
+        "serviceId": "abcd1234-1234-1234-1234-abcd12345678",
+        "serviceName": "abcd1234-1234-1234-1234-abcd12345678",
+        "weight": 100,
+        "enabled": true,
+        "type": "STATIC"
+      },
+      {
+        "serviceId": "orders",
+        "serviceName": "orders",
+        "weight": 0,
+        "version": "canary",
+        "enabled": true,
+        "type": "DISCOVERY",
+        "serviceNamespace": "staging",
+        "serviceGroup": "BLUE"
+      }
+    ],
+    "grayRules": {
+      "enabled": true,
+      "rules": [
+        {
+          "type": "HEADER",
+          "name": "X-Canary",
+          "value": "yes",
+          "targetVersion": "orders"
+        }
+      ]
+    },
+    "uri": "static://abcd1234-1234-1234-1234-abcd12345678"
+  },
+  "ai": {
+    "routeName": "contract-route",
+    "order": 12,
+    "description": "路由契约测试",
+    "predicates": [
+      {
+        "name": "Path",
+        "args": {
+          "pattern": "/contract/**"
+        }
+      },
+      {
+        "name": "Host",
+        "args": {
+          "patterns": "*.example.com"
+        }
+      },
+      {
+        "name": "Method",
+        "args": {
+          "methods.0": "GET",
+          "methods.1": "POST"
+        }
+      },
+      {
+        "name": "Header",
+        "args": {
+          "header": "X-Tenant",
+          "regexp": "team:.*"
+        }
+      }
+    ],
+    "filters": [],
+    "mode": "SINGLE",
+    "category": "AI",
+    "uri": "https://ai-gateway.invalid",
+    "aiUpstreams": [
+      {
+        "provider": "test-ai-service",
+        "weight": 100,
+        "modelMapping": {
+          "chat": "upstream-chat"
+        }
+      }
+    ],
+    "modelPredicates": [
+      {
+        "matchType": "PREFIX",
+        "value": "chat"
+      }
+    ],
+    "aiFallback": {
+      "enabled": true,
+      "fallbackStrategy": "SEQ",
+      "upstreams": [
+        {
+          "provider": "backup-ai-service",
+          "weight": 100
+        }
+      ]
+    }
+  }
+}

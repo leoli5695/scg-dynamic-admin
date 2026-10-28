@@ -411,22 +411,22 @@ public class RouteService {
         // Get Nacos namespace from instance
         String nacosNamespace = getNacosNamespace(entity.getInstanceId());
 
-        // Fallback: preserve serviceNamespace/serviceGroup if frontend sends null/empty
-        // This is a defensive measure - the frontend should send correct values
-        // TODO: TECH_DEBT - Frontend should properly handle null fields instead of clearing them
-        //       This backend workaround adds overhead and should be removed once frontend is fixed.
-        //       Consider: 1) Frontend validation to prevent null for required fields
-        //                 2) Backend DTO to separate API model from domain model
+        // Legacy clients may omit qualifiers for an unchanged discovery target.
+        // Empty namespace is an explicit selection of Nacos public, so never replace it.
+        // A different target must not inherit the previous service's registry location.
         RouteDefinition originalRoute = routeConverter.toDefinition(entity);
-        if ((route.getServiceNamespace() == null || route.getServiceNamespace().isEmpty())
+        boolean sameDiscoveryTarget = route.getMode() == RouteDefinition.RoutingMode.SINGLE
+                && route.getUri() != null && route.getUri().startsWith("lb://")
+                && route.getUri().equals(originalRoute.getUri());
+        if (sameDiscoveryTarget && route.getServiceNamespace() == null
                 && originalRoute.getServiceNamespace() != null && !originalRoute.getServiceNamespace().isEmpty()) {
             route.setServiceNamespace(originalRoute.getServiceNamespace());
-            log.warn("Preserving original serviceNamespace for route {} (frontend sent null/empty)", routeId);
+            log.debug("Preserving omitted serviceNamespace for route {}", routeId);
         }
-        if ((route.getServiceGroup() == null || route.getServiceGroup().isEmpty())
+        if (sameDiscoveryTarget && route.getServiceGroup() == null
                 && originalRoute.getServiceGroup() != null && !originalRoute.getServiceGroup().isEmpty()) {
             route.setServiceGroup(originalRoute.getServiceGroup());
-            log.warn("Preserving original serviceGroup for route {} (frontend sent null/empty)", routeId);
+            log.debug("Preserving omitted serviceGroup for route {}", routeId);
         }
 
         // Persist only operator-authored filters; the plugin-binding ones in the payload are echoes

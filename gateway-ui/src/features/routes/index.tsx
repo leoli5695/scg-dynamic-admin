@@ -2,7 +2,7 @@
  * Routes page (rewritten as a feature).
  * Fields aligned with RouteController + model/RouteDefinition.java.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button, Card, Empty, Pagination, Spin, Tabs  } from 'antd';
 import { message, modal } from '../../utils/antdStatic';
@@ -144,7 +144,8 @@ const RoutesPage: React.FC = () => {
     }
   };
 
-  const handleDelete = (record: RouteResponse) => {
+  const refreshRoutes = routesRequest.run;
+  const handleDelete = useCallback((record: RouteResponse) => {
     modal.confirm({
       title: t('common.confirm'),
       content: t('message.confirm_delete_route', {
@@ -162,18 +163,16 @@ const RoutesPage: React.FC = () => {
         try {
           await deleteRoute(record.id);
           message.success(t('message.delete_success'));
-          routesRequest.run();
-          if (selectedRoute?.id === record.id) {
-            setSelectedRoute(null);
-          }
+          refreshRoutes();
+          setSelectedRoute((current) => current?.id === record.id ? null : current);
         } catch (error) {
           message.error(`${t('routes.delete_failed')}: ${errorMessage(error, 'message.delete_failed', t)}`);
         }
       },
     });
-  };
+  }, [refreshRoutes, t]);
 
-  const handleToggle = async (record: RouteResponse) => {
+  const handleToggle = useCallback(async (record: RouteResponse) => {
     if (!record.id) {
       message.error(t('routes.id_not_found'));
       return;
@@ -186,18 +185,18 @@ const RoutesPage: React.FC = () => {
         await enableRoute(record.id);
         message.success(t('routes.enabled_success'));
       }
-      routesRequest.run();
+      refreshRoutes();
     } catch (error) {
       const key = record.enabled ? 'routes.disable_failed' : 'routes.enable_failed';
       message.error(`${t(key)}: ${errorMessage(error, key, t)}`);
     }
-  };
+  }, [refreshRoutes, t]);
 
-  const openEditModal = (record: RouteResponse) => {
+  const openEditModal = useCallback((record: RouteResponse) => {
     // Close the drawer first, then open the edit modal.
     setSelectedRoute(null);
     setEditingRoute(record);
-  };
+  }, []);
 
   return (
     <div className="routes-page console-resource-page">

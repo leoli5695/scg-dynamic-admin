@@ -4,7 +4,7 @@
  * Payload follows model/RouteDefinition.java; enable/disable is NOT part
  * of the body (backend uses dedicated /enable and /disable endpoints).
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import EditorNavigation from '../../instance-detail/EditorNavigation';
 import EditorCategorySwitch from '../../instance-detail/EditorCategorySwitch';
 import { useEditorStep } from '../../instance-detail/useEditorStep';
@@ -22,7 +22,7 @@ import type {
 } from '../../../types/route';
 import type { NacosDiscoveryServiceInfo, ServiceDefinition } from '../../../types/service';
 import {
-  buildRoutePayload, modelMappingToPairs, splitServiceUri, stringifyPredicateArgs, sumWeights,
+  buildRoutePayload, extractMethods, modelMappingToPairs, splitServiceUri, stringifyPredicateArgs, sumWeights,
   toFormBinding, toFormServiceId,
 } from '../utils';
 import type { RouteFormValues } from '../utils';
@@ -53,14 +53,14 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
   const { instanceId } = useParams<{ instanceId: string }>();
   const [form] = Form.useForm<RouteFormValues>();
 
-  const [activeStep, setActiveStep, stepDirection] = useEditorStep();
+  const [activeStep, setActiveStep, stepDirection, visitedSteps] = useEditorStep();
   const isEdit = mode === 'edit';
 
   // Route category drives the target-config section: AI routes bind AI services only.
   const category = (Form.useWatch('category', form)
     ?? (isEdit ? route?.category : 'NORMAL')) as RouteCategory;
   const isAi = category === 'AI';
-  const aiServices = services.filter((s) => s.category === 'AI');
+  const aiServices = useMemo(() => services.filter((s) => s.category === 'AI'), [services]);
 
   // Edit-time bindings with protocol-prefixed serviceIds for the Select.
   const [initialBindings] = useState(() => (
@@ -94,7 +94,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
     services: initialBindings,
     predicates: (route?.predicates ?? []).map((p) => ({
       name: p.name,
-      args: stringifyPredicateArgs(p.name, p.args as Record<string, unknown>),
+      args: p.name === 'Method' ? extractMethods(p.args) : stringifyPredicateArgs(p.name, p.args),
     })),
     grayRules: route?.grayRules?.rules ?? [],
     aiUpstreams: (route?.aiUpstreams ?? []).map((u) => ({
@@ -113,7 +113,10 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
     } catch { /* Ant Design shows the field errors in the current section. */ }
   };
 
-  const handleFinish = async (values: RouteFormValues) => {
+  const handleFinish = async (submitted: RouteFormValues) => {
+    // Include initial/preserved values for steps that have not been mounted yet.
+    // The target section stays mounted after its first visit, preserving validation.
+    const values: RouteFormValues = { ...form.getFieldsValue(true), ...submitted };
     const predicateList = values.predicates ?? [];
     if (predicateList.length === 0) {
       setActiveStep(2);
@@ -134,6 +137,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
       }
     } else {
       if (routingMode === 'SINGLE' && !values.serviceId && !values.uri) {
+        setActiveStep(1);
         message.error(t('routes.uri_required'));
         return;
       }
@@ -262,6 +266,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         </div>
 
         {/* Target configuration */}
+        {visitedSteps.includes(1) && (
         <div className="form-section-modern" hidden={activeStep !== 1}>
           <div className="section-header">
             {isAi ? <RobotOutlined className="section-icon" /> : <ApiOutlined className="section-icon" />}
@@ -294,6 +299,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
             )}
           </div>
         </div>
+        )}
 
         {/* Predicates */}
         <div className="form-section-modern" hidden={activeStep !== 2}>
