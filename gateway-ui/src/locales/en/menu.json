@@ -32,5 +32,12 @@
   "app.title": "API Gateway",
   "app.subtitle": "Unified Management Platform",
   "app.console_title": "API Gateway Console",
-  "menu.token_usage": "Token Metering"
+  "menu.token_usage": "Token Metering",
+  "instance_nav.label": "Instance navigation",
+  "instance_nav.traffic": "Traffic",
+  "instance_nav.security": "Security",
+  "instance_nav.observability": "Observability",
+  "instance_nav.diagnostics": "Diagnostics",
+  "instance_nav.tools": "Tools",
+  "instance_nav.search": "Find a page"
 }

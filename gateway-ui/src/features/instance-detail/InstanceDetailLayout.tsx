@@ -1,11 +1,9 @@
 /**
- * Instance detail console layout (rewritten).
- * Header with lifecycle actions, URL-driven tabs, Outlet for tab content.
- * Tab state lives in the URL (/instances/:instanceId/:tab) so refresh keeps it.
+ * Instance console with grouped navigation and URL-driven page selection.
  */
 import React, { useMemo, useState } from 'react';
 import {
-  Button, Result, Spin, Tabs, Tag, Tooltip, Typography  } from 'antd';
+  Button, Dropdown, Result, Select, Spin, Tag, Tooltip, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
   AlertOutlined, ApartmentOutlined, AppstoreOutlined, ArrowLeftOutlined,
@@ -14,7 +12,7 @@ import {
   HistoryOutlined, HomeOutlined, KeyOutlined, LineChartOutlined, LinkOutlined,
   LockOutlined, MedicineBoxOutlined, PauseCircleOutlined, PlayCircleOutlined,
   PlusSquareOutlined, ReloadOutlined, RobotOutlined, RocketOutlined,
-  SafetyOutlined, StopOutlined, ThunderboltOutlined,
+  SafetyOutlined, StopOutlined, ThunderboltOutlined, DownOutlined, SearchOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +26,8 @@ import LanguageSwitcher from '../layout/components/LanguageSwitcher';
 import UserMenu from '../layout/UserMenu';
 import { InstanceDetailProvider } from './InstanceDetailContext';
 import ScaleModal from './ScaleModal';
+import { getInstanceNavigation } from './instanceNavigation';
+import './instance-navigation.css';
 import './instance-detail.css';
 import './console-ui.css';
 import './operations-ui.css';
@@ -37,7 +37,7 @@ const { Title } = Typography;
 /** Outlet indirection kept tiny so Suspense wraps only tab content. */
 const OutletGuard: React.FC = () => <Outlet />;
 
-/** Tab key → icon mapping (order defines tab order). */
+/** Route key → icon mapping. */
 const TAB_ICONS = {
   overview: CloudServerOutlined,
   services: AppstoreOutlined,
@@ -67,9 +67,6 @@ const TAB_ICONS = {
 export type TabKey = keyof typeof TAB_ICONS;
 
 const TAB_ORDER = Object.keys(TAB_ICONS) as TabKey[];
-
-/** Tabs whose content is read straight out of the Kubernetes API - empty for an external instance. */
-const KUBERNETES_ONLY_TABS: TabKey[] = ['events', 'resources'];
 
 const tabI18nKey = (key: TabKey): string => {
   if (key === 'overview') return 'instance.overview';
@@ -174,20 +171,13 @@ const InstanceDetailLayout: React.FC = () => {
    */
   const isExternal = instance.clusterId == null;
 
-  const tabItems = TAB_ORDER
-    .filter((key) => !isExternal || !KUBERNETES_ONLY_TABS.includes(key))
-    .map((key) => {
-      const Icon = TAB_ICONS[key];
-      return {
-        key,
-        label: (
-          <span>
-            <Icon />
-            {t(tabI18nKey(key))}
-          </span>
-        ),
-      };
-    });
+  const navigation = getInstanceNavigation(isExternal);
+  const activeGroup = navigation.find((group) => group.pages.some((page) => page === activeTab));
+  const groupIcons = {
+    overview: CloudServerOutlined, traffic: DeploymentUnitOutlined,
+    security: SafetyOutlined, observability: DashboardOutlined,
+    diagnostics: MedicineBoxOutlined, tools: ThunderboltOutlined,
+  };
 
   return (
     <InstanceDetailProvider value={{ instance, globalNacosAddr, refresh: instanceRequest.run }}>
@@ -256,13 +246,62 @@ const InstanceDetailLayout: React.FC = () => {
           </div>
         </div>
 
-        {/* Tabs (URL-driven) */}
-        <Tabs
-          activeKey={activeTab}
-          onChange={handleTabChange}
-          items={tabItems}
-          className="instance-detail-tabs"
-        />
+        <nav className="instance-navigation" aria-label={t('instance_nav.label')}>
+          <div className="instance-navigation-groups">
+            {navigation.map((group) => {
+              const Icon = groupIcons[group.key];
+              const selected = activeGroup?.key === group.key;
+              const label = group.key === 'overview'
+                ? t('instance.overview') : t(`instance_nav.${group.key}`);
+              const button = (
+                <button
+                  type="button"
+                  className={`instance-navigation-group${selected ? ' is-active' : ''}`}
+                  aria-current={selected ? 'true' : undefined}
+                  onClick={group.key === 'overview' ? () => handleTabChange('overview') : undefined}
+                >
+                  <Icon /><span>{label}</span>
+                  {group.pages.length > 1 && <DownOutlined className="instance-navigation-chevron" />}
+                </button>
+              );
+              return group.key === 'overview' ? <React.Fragment key={group.key}>{button}</React.Fragment> : (
+                <Dropdown
+                  key={group.key}
+                  trigger={['click']}
+                  overlayClassName="instance-navigation-dropdown"
+                  menu={{
+                    selectedKeys: [activeTab],
+                    onClick: ({ key }) => handleTabChange(key),
+                    items: group.pages.map((page) => {
+                      const PageIcon = TAB_ICONS[page];
+                      return { key: page, icon: <PageIcon />, label: t(tabI18nKey(page)) };
+                    }),
+                  }}
+                >{button}</Dropdown>
+              );
+            })}
+          </div>
+          <Select<string, { value: string; label: string; searchText: string }>
+            className="instance-navigation-search"
+            showSearch={{
+              filterOption: (input, option) => String(option?.searchText ?? '').toLocaleLowerCase().includes(input.trim().toLocaleLowerCase()),
+            }}
+            value={null}
+            placeholder={<><SearchOutlined /> {t('instance_nav.search')}</>}
+            aria-label={t('instance_nav.search')}
+            onChange={handleTabChange}
+            popupMatchSelectWidth={280}
+            options={navigation.flatMap((group) => group.pages.map((page) => ({
+              value: page,
+              label: t(tabI18nKey(page)),
+              searchText: `${t(tabI18nKey(page))} ${page} ${group.key === 'overview' ? '' : t(`instance_nav.${group.key}`)}`,
+            })))}
+          />
+          <div className="instance-navigation-location" aria-live="polite">
+            {activeGroup && activeGroup.key !== 'overview' && <><span>{t(`instance_nav.${activeGroup.key}`)}</span><span>/</span></>}
+            <strong>{t(tabI18nKey(activeTab))}</strong>
+          </div>
+        </nav>
 
         {/* Tab content via router Outlet */}
         <div className="instance-detail-content">

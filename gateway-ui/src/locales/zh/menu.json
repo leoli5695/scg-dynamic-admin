@@ -32,5 +32,12 @@
   "app.title": "API 网关",
   "app.subtitle": "统一管理平台",
   "app.console_title": "API 网关控制台",
-  "menu.token_usage": "Token 计量"
+  "menu.token_usage": "Token 计量",
+  "instance_nav.label": "实例功能导航",
+  "instance_nav.traffic": "流量配置",
+  "instance_nav.security": "安全认证",
+  "instance_nav.observability": "监控日志",
+  "instance_nav.diagnostics": "排障分析",
+  "instance_nav.tools": "测试工具",
+  "instance_nav.search": "搜索页面"
 }
