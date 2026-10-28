@@ -114,8 +114,8 @@ public class TraceWebInterceptor implements HandlerInterceptor {
         // inherit upstream X-Trace-Sampled; otherwise sample locally. Independent
         // per-service sampling would fragment traces.
         boolean sampled;
-        if (traceparent != null && (Integer.parseInt(traceparent[3], 16) & 0x01) == 1) {
-            sampled = true;
+        if (traceparent != null) {
+            sampled = (Integer.parseInt(traceparent[3], 16) & 0x01) == 1;
         } else {
             String sampledHeader = request.getHeader(SAMPLED_HEADER);
             if ("true".equalsIgnoreCase(sampledHeader)) {

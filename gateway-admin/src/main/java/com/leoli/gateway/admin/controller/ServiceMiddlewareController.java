@@ -116,44 +116,17 @@ public class ServiceMiddlewareController {
      * FIX (H5): 适配 OfferResult 返回类型
      */
     @PostMapping("/traces/batch")
-    public ResponseEntity<Void> receiveBatchTraces(@RequestBody List<Map<String, Object>> traces) {
+    public ResponseEntity<Map<String, Object>> receiveBatchTraces(@RequestBody List<Map<String, Object>> traces) {
+        if (traces.isEmpty() || traces.size() > 100) return ResponseEntity.badRequest().build();
         try {
-            log.debug("Received batch traces: count={}", traces.size());
-
-            List<DistributedTraceEntity> entities = traces.stream()
-                .map(this::convertToEntity)
-                .toList();
-
-            List<DistributedTraceBufferService.OfferResult> results = traceBufferService.offerBatch(entities);
-
-            // Count successes and check for backpressure warnings
-            int successCount = 0;
-            int slowDownWarningCount = 0;
-            for (DistributedTraceBufferService.OfferResult result : results) {
-                if (result.isSuccess()) {
-                    successCount++;
-                    if (result.shouldSlowDown()) {
-                        slowDownWarningCount++;
-                    }
-                }
-            }
-
-            log.debug("Batch received: success={}, fail={}, slowDownWarnings={}",
-                    successCount, traces.size() - successCount, slowDownWarningCount);
-
-            // Log backpressure warning if many items trigger slow-down threshold
-            if (slowDownWarningCount > results.size() / 2) {
-                log.warn("Batch received with high backpressure: {} items at slow-down threshold. Starter should reduce frequency.",
-                        slowDownWarningCount);
-            }
-
-            // 立刻返回 202 Accepted，不阻塞 Starter
-            return ResponseEntity.accepted().build();
-
-        } catch (Exception e) {
-            log.error("Failed to parse batch traces: {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().build();
-        }
+            // Validate all records before offering any; malformed batches cannot be partially accepted.
+            var entities = traces.stream().map(this::convertToEntity).toList();
+            var results = traceBufferService.offerBatch(entities);
+            var rejected = new java.util.ArrayList<Integer>();
+            for (int i = 0; i < results.size(); i++) if (!results.get(i).isSuccess()) rejected.add(i);
+            return ResponseEntity.status(rejected.size() == traces.size() ? 503 : 202).body(Map.of("stage", "ENQUEUED", "accepted", traces.size() - rejected.size(),
+                    "rejectedIndexes", rejected, "retryAfterMs", rejected.isEmpty() ? 0 : 1000));
+        } catch (Exception error) { return ResponseEntity.badRequest().build(); }
     }
 
     /**
@@ -337,10 +310,29 @@ public class ServiceMiddlewareController {
     private DistributedTraceEntity convertToEntity(Map<String, Object> data) {
         DistributedTraceEntity entity = new DistributedTraceEntity();
         
-        entity.setTraceId((String) data.get("traceId"));
+        String traceId = (String) data.get("traceId");
+        String serviceName = (String) data.get("serviceName");
+        if (traceId == null || traceId.isBlank() || traceId.length() > 36 || serviceName == null || serviceName.isBlank() || serviceName.length() > 255)
+            throw new IllegalArgumentException("traceId and serviceName required");
+        try {
+            byte[] encoded = objectMapper.writeValueAsBytes(data);
+            if (encoded.length > 256 * 1024) throw new IllegalArgumentException("Trace too large");
+            String reportId = data.get("reportId") instanceof String id ? java.util.UUID.fromString(id).toString()
+                    : java.util.UUID.nameUUIDFromBytes(encoded).toString();
+            entity.setReportId(reportId);
+        } catch (java.io.IOException error) { throw new IllegalArgumentException(error); }
+        entity.setCaptureMode("SAMPLED".equals(data.get("captureMode")) ? "SAMPLED"
+                : "SUMMARY_ONLY".equals(data.get("captureMode")) ? "SUMMARY_ONLY" : "UNKNOWN");
+        entity.setDroppedSpanCount(data.get("droppedSpanCount") instanceof Number n ? Math.max(0, n.intValue()) : null);
+        entity.setOpenSpanCount(data.get("openSpanCount") instanceof Number n ? Math.max(0, n.intValue()) : null);
+        entity.setStartTimeMs(data.get("startTime") instanceof Number n ? n.longValue() : null);
+        entity.setUpstreamService(clip((String) data.get("upstreamService"), 255));
+        try { if (data.get("downstreamServices") != null) entity.setDownstreamServices(objectMapper.writeValueAsString(data.get("downstreamServices"))); }
+        catch (java.io.IOException error) { throw new IllegalArgumentException(error); }
+        entity.setTraceId(traceId);
         entity.setServiceName((String) data.get("serviceName"));
-        entity.setPath((String) data.get("path"));
-        entity.setMethod((String) data.get("method"));
+        entity.setPath(clip((String) data.get("path"), 500));
+        entity.setMethod(clip((String) data.get("method"), 10));
         
         Object duration = data.get("totalDurationMs");
         if (duration != null) {
@@ -353,12 +345,13 @@ public class ServiceMiddlewareController {
         }
         
         entity.setSuccess((Boolean) data.get("success"));
-        entity.setErrorMessage((String) data.get("errorMessage"));
-        entity.setClientIp((String) data.get("clientIp"));
+        entity.setErrorMessage(clip((String) data.get("errorMessage"), 500));
+        entity.setClientIp(clip((String) data.get("clientIp"), 50));
         
         // 转换Spans为JSON字符串
         Object spans = data.get("spans");
         if (spans != null) {
+            if (!(spans instanceof List<?> list) || list.size() > 500) throw new IllegalArgumentException("spans must be an array of at most 500 entries");
             try {
                 entity.setSpans(objectMapper.writeValueAsString(spans));
             } catch (Exception e) {
@@ -366,8 +359,15 @@ public class ServiceMiddlewareController {
             }
         }
         
-        entity.setTraceTime(LocalDateTime.now());
+        entity.setTraceTime(entity.getStartTimeMs() != null && entity.getStartTimeMs() > 0
+                ? LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(entity.getStartTimeMs()), java.time.ZoneId.systemDefault())
+                : LocalDateTime.now());
         
         return entity;
+    }
+    private String clip(String value, int limit) {
+        if (value == null || value.length() <= limit) return value;
+        int end = Character.isHighSurrogate(value.charAt(limit - 1)) ? limit - 1 : limit;
+        return value.substring(0, end);
     }
 }

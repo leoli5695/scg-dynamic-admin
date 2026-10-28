@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { normalizeSpanTimeline } from '../timeline';
 import { Tooltip, Tag, Badge, Typography } from 'antd';
 import {
   CheckCircleOutlined, WarningOutlined, FilterOutlined,
@@ -55,6 +56,7 @@ interface FullChainWaterfallChartProps {
   gatewayTotalDurationMs?: number;
   /** 服务名 (用于分组展示) */
   serviceName?: string;
+  traceStartTimeMs?: number;
   /** 点击 Span 事件的回调 */
   onSpanClick?: (span: SpanNode | FilterExecutionBar, type: 'filter' | 'span') => void;
   /** 慢 Span 阈值 (毫秒) */
@@ -82,6 +84,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
   serviceSpans = [],
   gatewayTotalDurationMs = 0,
   serviceName,
+  traceStartTimeMs,
   onSpanClick,
   slowThreshold = 50,
   showHierarchy = true
@@ -118,13 +121,14 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
 
   // 计算 Span 层级深度 (基于 parentSpanId)
   const processedSpans = useMemo(() => {
+    const normalized = normalizeSpanTimeline(serviceSpans, traceStartTimeMs);
     if (!showHierarchy || !serviceSpans.length) {
-      return serviceSpans.map(s => ({ ...s, depth: 0 }));
+      return normalized.map(s => ({ ...s, depth: 0 }));
     }
 
     // 构建 spanId -> span 的映射
     const spanMap = new Map<string, SpanNode>();
-    serviceSpans.forEach(s => {
+    normalized.forEach(s => {
       if (s.spanId) spanMap.set(s.spanId, s);
     });
 
@@ -142,11 +146,11 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
       return calculateDepth(parent, visited) + 1;
     };
 
-    return serviceSpans.map(s => ({
+    return normalized.map(s => ({
       ...s,
       depth: calculateDepth(s, new Set())
     }));
-  }, [serviceSpans, showHierarchy]);
+  }, [serviceSpans, showHierarchy, traceStartTimeMs]);
 
   // 计算总时间范围 (用于对齐展示)
   const timeRange = useMemo(() => {

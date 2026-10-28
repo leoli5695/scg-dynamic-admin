@@ -117,6 +117,8 @@ public class TraceReportInterceptor implements HandlerInterceptor {
             // FIX: Always report if trace exists, even with no spans
             // Error cases (JSON parse, validation errors) should be captured
             if (trace != null) {
+                trace.setCaptureMode(TraceContextHolder.isSampled() ? "SAMPLED" : "SUMMARY_ONLY");
+                trace.setOpenSpanCount(trace.getSpanRegistry().size());
                 // Add a fallback span if no spans exist (request failed before Controller)
                 if (trace.getSpans().isEmpty()) {
                     if (statusCode >= 400) {

@@ -17,6 +17,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 @Data
 public class DistributedTrace {
+    /** Stable across retries, distinct for separate invocations sharing a trace id. */
+    private String reportId = java.util.UUID.randomUUID().toString();
+    private String captureMode = "SAMPLED";
+    private int openSpanCount;
 
     /**
      * TraceId (corresponds to gateway-generated X-Trace-Id)

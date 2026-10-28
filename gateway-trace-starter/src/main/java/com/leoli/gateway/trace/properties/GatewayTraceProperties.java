@@ -87,6 +87,10 @@ public class GatewayTraceProperties {
      * Default: 1000
      */
     private int asyncQueueSize = 1000;
+    /** Shared by pending, active, delayed retry and fallback snapshots. */
+    private long maxRetainedBytes = 8L * 1024 * 1024;
+    private int maxRecordBytes = 256 * 1024;
+    private String fallbackDirectory = "./trace-fallback";
 
     /**
      * Batch reporting size

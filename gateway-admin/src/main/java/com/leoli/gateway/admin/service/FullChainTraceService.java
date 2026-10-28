@@ -78,7 +78,12 @@ public class FullChainTraceService {
         boolean hasGateway = gatewayTraceOpt.isPresent();
         boolean hasService = !serviceTraces.isEmpty();
         if (hasGateway && hasService) {
-            result.put("chainStatus", "COMPLETE");
+            var integrity = TraceGraphAnalysis.analyze(gatewayTraceOpt.get(), serviceTraces, objectMapper);
+            result.put("integrity", integrity);
+            boolean failed = gatewayTraceOpt.get().getStatusCode() != null && gatewayTraceOpt.get().getStatusCode() >= 400
+                    || serviceTraces.stream().anyMatch(service -> Boolean.FALSE.equals(service.getSuccess()));
+            result.put("chainStatus", Boolean.TRUE.equals(integrity.get("observedGraphValid"))
+                    ? failed ? "OBSERVED_WITH_ERRORS" : "OBSERVED" : "PARTIAL");
         } else if (hasGateway) {
             result.put("chainStatus", "GATEWAY_ONLY");
         } else if (hasService) {
@@ -101,6 +106,7 @@ public class FullChainTraceService {
      * 以网关 RequestTrace 为主表，关联 DistributedTraceEntity
      */
     public Map<String, Object> getRecentFullChains(int page, int size) {
+        page = Math.max(0, page); size = Math.max(1, Math.min(100, size));
         // 1. 查询最近的网关追踪
         Page<RequestTrace> gatewayPage = requestTraceRepository.findAll(
                 PageRequest.of(page, size, Sort.by("traceTime").descending())
@@ -141,13 +147,13 @@ public class FullChainTraceService {
             
             // FIX: 优先使用 Filter 链总耗时，确保与详情页一致
             // 如果没有 Filter 链数据，fallback 到数据库 latencyMs
-            Long totalDurationMs = filterChainDurationMap.get(gateway.getTraceId());
+            Long totalDurationMs = gateway.getLatencyMs();
             if (totalDurationMs != null) {
                 chain.put("latencyMs", totalDurationMs);
-                chain.put("latencyMsSource", "FILTER_CHAIN");
+                chain.put("latencyMsSource", "PERSISTED_REQUEST");
             } else {
-                chain.put("latencyMs", gateway.getLatencyMs());
-                chain.put("latencyMsSource", "DATABASE");
+                chain.put("latencyMs", filterChainDurationMap.get(gateway.getTraceId()));
+                chain.put("latencyMsSource", "PERSISTED_FILTER");
             }
             chain.put("routeId", gateway.getRouteId());
             chain.put("targetInstance", gateway.getTargetInstance());
@@ -177,7 +183,11 @@ public class FullChainTraceService {
                 // 判断链路状态
                 boolean allSuccess = services.stream()
                         .allMatch(s -> Boolean.TRUE.equals(s.getSuccess()));
-                chain.put("chainStatus", allSuccess ? "COMPLETE" : "COMPLETE_WITH_ERRORS");
+                boolean incomplete = services.stream().anyMatch(service -> !"SAMPLED".equals(service.getCaptureMode())
+                        || service.getDroppedSpanCount() != null && service.getDroppedSpanCount() > 0
+                        || service.getOpenSpanCount() != null && service.getOpenSpanCount() > 0);
+                chain.put("chainStatus", incomplete ? "PARTIAL" : allSuccess ? "OBSERVED" : "OBSERVED_WITH_ERRORS");
+                chain.put("completenessVerified", false);
             } else {
                 chain.put("services", Collections.emptyList());
                 chain.put("chainStatus", "GATEWAY_ONLY");
@@ -231,6 +241,9 @@ public class FullChainTraceService {
     private Map<String, Object> buildServiceNode(DistributedTraceEntity trace) {
         Map<String, Object> node = new LinkedHashMap<>();
         node.put("nodeType", "SERVICE");
+        node.put("reportId", trace.getReportId()); node.put("captureMode", trace.getCaptureMode());
+        node.put("droppedSpanCount", trace.getDroppedSpanCount()); node.put("openSpanCount", trace.getOpenSpanCount());
+        node.put("startTimeMs", trace.getStartTimeMs());
         node.put("serviceName", trace.getServiceName());
         node.put("path", trace.getPath());
         node.put("method", trace.getMethod());
@@ -277,196 +290,45 @@ public class FullChainTraceService {
      * 1. 网关实时 API（最准确，包含完整 filter 数据）
      * 2. 数据库 filter_chain_execution 表（fallback）
      */
-    private void buildDurationBreakdown(Map<String, Object> result,
-                                        RequestTrace gateway,
-                                        List<DistributedTraceEntity> serviceTraces) {
+    private void buildDurationBreakdown(Map<String, Object> result, RequestTrace gateway,
+                                        List<DistributedTraceEntity> services) {
+        Map<String, Object> summary = filterChainExecutionService.getTraceExecutionSummary(gateway.getTraceId());
         Map<String, Object> breakdown = new LinkedHashMap<>();
-
-        // 下游服务总耗时（取最大值，因为可能并行调用）
-        long maxServiceDurationMs = serviceTraces.stream()
-                .mapToLong(s -> s.getTotalDurationMs() != null ? s.getTotalDurationMs() : 0)
-                .max()
-                .orElse(0);
-        breakdown.put("serviceMaxDurationMs", maxServiceDurationMs);
-
-        // FIX: 网关总耗时和开销都从 Filter 链数据计算
-        long gatewayTotalDurationMs = 0;
-        long gatewayOverheadMs = 0;
-        long gatewayOverheadMicros = 0;
-        boolean gotGatewayData = false;
-        String dataSource = "NO_DATA";
-
-        // 尝试从网关实时 API 获取数据
-        try {
-            String accessUrl = gatewayInstanceService.getAccessUrl(gateway.getInstanceId());
-            if (accessUrl == null) {
-                accessUrl = "http://127.0.0.1:81";
-                log.debug("instanceId '{}' not found in database, using fallback URL: {}", 
-                        gateway.getInstanceId(), accessUrl);
-            }
-            
-            String filterChainUrl = accessUrl + "/internal/filter-chain/trace/" + gateway.getTraceId();
-            @SuppressWarnings("unchecked")
-            Map<String, Object> gatewayFilterData = restTemplate.getForObject(filterChainUrl, Map.class);
-            
-            if (gatewayFilterData != null && gatewayFilterData.containsKey("executions")) {
-                List<Map<String, Object>> executions = (List<Map<String, Object>>) gatewayFilterData.get("executions");
-                
-                // FIX: 网关总耗时 = 第一个 filter 的 durationMs（累积时间，包含整个请求周期）
-                Optional<Map<String, Object>> firstFilter = executions.stream()
-                        .min(Comparator.comparingInt(e -> ((Number) e.get("order")).intValue()));
-                if (firstFilter.isPresent()) {
-                    Object durationObj = firstFilter.get().get("totalDurationMs");
-                    if (durationObj instanceof Number) {
-                        gatewayTotalDurationMs = ((Number) durationObj).longValue();
-                    }
-                }
-                
-                // FIX: 网关开销 = Σ selfTimeMicros，但排除 NettyWriteResponse
-                // NettyWriteResponse 的 selfTime 是"响应写入网络的时间"，不是网关处理开销
-                // 它应该被归类为网络传输时间
-                gatewayOverheadMicros = executions.stream()
-                        .filter(e -> {
-                            // 排除 NettyWriteResponse，它的 selfTime 是网络写入时间
-                            String filterName = (String) e.get("filter");
-                            return !"NettyWriteResponse".equals(filterName);
-                        })
-                        .mapToLong(e -> {
-                            Object micros = e.get("selfTimeMicros");
-                            if (micros instanceof Number) {
-                                return ((Number) micros).longValue();
-                            }
-                            return 0L;
-                        })
-                        .sum();
-                gatewayOverheadMs = gatewayOverheadMicros / 1000;
-                
-                // 获取 NettyWriteResponse 的时间（网络传输）
-                long nettyWriteTimeMicros = executions.stream()
-                        .filter(e -> "NettyWriteResponse".equals((String) e.get("filter")))
-                        .mapToLong(e -> {
-                            Object micros = e.get("selfTimeMicros");
-                            if (micros instanceof Number) {
-                                return ((Number) micros).longValue();
-                            }
-                            return 0L;
-                        })
-                        .findFirst()
-                        .orElse(0L);
-                long nettyWriteTimeMs = nettyWriteTimeMicros / 1000;
-                
-                // 存储网络传输时间
-                breakdown.put("networkTransferMs", nettyWriteTimeMs);
-                breakdown.put("networkTransferSource", "GATEWAY_API");
-                
-                gotGatewayData = true;
-                dataSource = "GATEWAY_API";
-                
-                log.info("Got gateway data: traceId={}, total={}ms, overhead={}ms (exclude NettyWrite), network={}ms", 
-                        gateway.getTraceId(), gatewayTotalDurationMs, gatewayOverheadMs, nettyWriteTimeMs);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to get filter chain from gateway real-time API for traceId={}, using database fallback: {}", 
-                    gateway.getTraceId(), e.getMessage());
+        Long total = gateway.getLatencyMs();
+        breakdown.put("gatewayTotalMs", total);
+        breakdown.put("gatewayTotalMsSource", total != null ? "PERSISTED_REQUEST" : "NO_DATA");
+        Long self = Boolean.TRUE.equals(summary.get("hasFilterData")) && summary.get("gatewayOverheadMs") instanceof Number n ? n.longValue() : null;
+        if (self != null && (self < 0 || total != null && self > total)) self = null;
+        breakdown.put("gatewayOverheadMs", self);
+        breakdown.put("gatewayOverheadDataSource", self == null ? "NO_DATA" : "PERSISTED_FILTER_SELF_TIME");
+        breakdown.put("gatewayOverheadPercent", self != null && total != null && total > 0 ? self * 100.0 / total : null);
+        breakdown.put("responseWriteMs", summary.get("networkTransferMs"));
+        // Response-write wall time includes backpressure; it is not measured network RTT.
+        breakdown.put("networkTransferMs", null); breakdown.put("networkTransferSource", "NOT_MEASURED");
+        breakdown.put("networkTransferPercent", null); breakdown.put("otherMs", null); breakdown.put("otherPercent", null);
+        List<long[]> intervals = new ArrayList<>(); boolean comparable = true;
+        long start = gateway.getTraceTime() == null ? -1 : gateway.getTraceTime().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+        for (var service : services) {
+            if (service.getStartTimeMs() == null || service.getTotalDurationMs() == null || service.getTotalDurationMs() < 0) { comparable = false; continue; }
+            long from = service.getStartTimeMs(), to;
+            try { to = Math.addExact(from, service.getTotalDurationMs()); } catch (ArithmeticException error) { comparable = false; continue; }
+            if (start < 0 || total == null || from < start || to > start + total) comparable = false;
+            intervals.add(new long[]{from, to});
         }
-
-        // Fallback: 从数据库获取数据
-        if (!gotGatewayData) {
-            Map<String, Object> filterSummary = filterChainExecutionService.getTraceExecutionSummary(gateway.getTraceId());
-            if (Boolean.TRUE.equals(filterSummary.get("hasFilterData"))) {
-                gatewayTotalDurationMs = ((Number) filterSummary.getOrDefault("totalFilterDurationMs", 0)).longValue();
-                gatewayOverheadMs = ((Number) filterSummary.getOrDefault("gatewayOverheadMs", 0)).longValue();
-                gatewayOverheadMicros = ((Number) filterSummary.getOrDefault("gatewayOverheadMicros", 0)).longValue();
-                // FIX: 从数据库获取网络传输时间
-                long nettyWriteTimeMs = ((Number) filterSummary.getOrDefault("networkTransferMs", 0)).longValue();
-                breakdown.put("networkTransferMs", nettyWriteTimeMs);
-                breakdown.put("networkTransferSource", "DATABASE");
-                gotGatewayData = true;
-                dataSource = "DATABASE";
-                log.debug("Got gateway data from database: traceId={}, total={}ms, overhead={}ms, network={}ms", 
-                        gateway.getTraceId(), gatewayTotalDurationMs, gatewayOverheadMs, nettyWriteTimeMs);
-            }
+        intervals.sort(Comparator.comparingLong(interval -> interval[0]));
+        long union = 0, left = -1, right = -1;
+        for (long[] interval : intervals) {
+            if (left < 0) { left = interval[0]; right = interval[1]; }
+            else if (interval[0] <= right) right = Math.max(right, interval[1]);
+            else { union += right - left; left = interval[0]; right = interval[1]; }
         }
-
-        // 如果仍然没有数据，使用数据库的 latencyMs 作为兜底
-        if (gatewayTotalDurationMs == 0 && gateway.getLatencyMs() != null) {
-            gatewayTotalDurationMs = gateway.getLatencyMs();
-            dataSource = "DATABASE_LATENCY";
-            log.debug("Using database latencyMs as fallback: traceId={}, latencyMs={}ms", 
-                    gateway.getTraceId(), gatewayTotalDurationMs);
-        }
-
-        // 设置网关总耗时
-        breakdown.put("gatewayTotalMs", gatewayTotalDurationMs);
-        breakdown.put("gatewayTotalMsSource", dataSource);
-
-        // 验证数据合理性：开销不应超过总耗时
-        if (gotGatewayData && gatewayOverheadMs > 0 && gatewayTotalDurationMs > 0) {
-            if (gatewayOverheadMs > gatewayTotalDurationMs) {
-                log.warn("Invalid gateway overhead data: {}ms > total duration {}ms for traceId={}",
-                        gatewayOverheadMs, gatewayTotalDurationMs, gateway.getTraceId());
-                // 数据不合理时，重置开销为0，但保留总耗时（总耗时来源可靠）
-                gatewayOverheadMs = 0;
-                gatewayOverheadMicros = 0;
-                gotGatewayData = false;
-            }
-        }
-
-        // 服务耗时 = 后端服务处理时间
-        breakdown.put("serviceDurationMs", maxServiceDurationMs);
-        breakdown.put("servicePercent",
-                gatewayTotalDurationMs > 0 ?
-                Math.round(maxServiceDurationMs * 100.0 / gatewayTotalDurationMs) : 0);
-
-        // 网关开销（仅在数据合理时显示）
-        if (gotGatewayData && gatewayOverheadMs > 0) {
-            breakdown.put("gatewayOverheadMs", gatewayOverheadMs);
-            breakdown.put("gatewayOverheadMicros", gatewayOverheadMicros);
-            breakdown.put("gatewayOverheadPercent",
-                    gatewayTotalDurationMs > 0 ?
-                    Math.round(gatewayOverheadMs * 100.0 / gatewayTotalDurationMs) : 0);
-            breakdown.put("gatewayOverheadDataSource", dataSource);
-        } else {
-            breakdown.put("gatewayOverheadMs", 0);
-            breakdown.put("gatewayOverheadPercent", 0);
-            breakdown.put("gatewayOverheadDataSource", "NO_DATA");
-        }
-
-        // FIX: 网络传输时间百分比（如果没有设置则默认0）
-        if (!breakdown.containsKey("networkTransferMs")) {
-            breakdown.put("networkTransferMs", 0);
-            breakdown.put("networkTransferSource", "NO_DATA");
-        }
-        long networkTransferMs = ((Number) breakdown.get("networkTransferMs")).longValue();
-        breakdown.put("networkTransferPercent",
-                gatewayTotalDurationMs > 0 ?
-                Math.round(networkTransferMs * 100.0 / gatewayTotalDurationMs) : 0);
-
-        // FIX: 计算其他时间 = 总耗时 - 网关开销 - 服务耗时 - 网络传输
-        // 用于解释数据差额（线程调度、异步等待、精度损失等）
-        long otherMs = gatewayTotalDurationMs - gatewayOverheadMs - maxServiceDurationMs - networkTransferMs;
-        if (otherMs < 0) {
-            otherMs = 0; // 防止负数（数据不准时）
-        }
-        breakdown.put("otherMs", otherMs);
-        breakdown.put("otherPercent",
-                gatewayTotalDurationMs > 0 ?
-                Math.round(otherMs * 100.0 / gatewayTotalDurationMs) : 0);
-
-        // 添加说明
-        breakdown.put("timeModelNote", "总耗时 = 网关开销 + 服务耗时 + 网络传输 + 其他(线程调度/异步等待)");
-
-        // 每个服务的耗时明细
-        List<Map<String, Object>> serviceBreakdowns = serviceTraces.stream()
-                .map(s -> {
-                    Map<String, Object> sb = new LinkedHashMap<>();
-                    sb.put("serviceName", s.getServiceName());
-                    sb.put("durationMs", s.getTotalDurationMs());
-                    return sb;
-                })
-                .toList();
-        breakdown.put("services", serviceBreakdowns);
-
+        if (left >= 0) union += right - left;
+        breakdown.put("serviceDurationMs", comparable && !intervals.isEmpty() ? union : null);
+        breakdown.put("servicePercent", comparable && total != null && total > 0 ? union * 100.0 / total : null);
+        breakdown.put("timingComparable", comparable);
+        breakdown.put("serviceDurationSource", "OBSERVED_INTERVAL_UNION");
+        breakdown.put("criticalPathVerified", false);
+        breakdown.put("timeModelNote", "服务时间为已观测区间并集，依赖服务时钟同步；嵌套/并行区间不重复相加。过滤器自身时间包含等待，不能等同 CPU 开销；网络和差额未测量。当前数据不能证明完整关键路径。");
         result.put("durationBreakdown", breakdown);
     }
 }

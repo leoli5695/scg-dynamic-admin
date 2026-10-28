@@ -36,38 +36,56 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
      */
     public static final String TRACE_ID_ATTR = "traceId";
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.micrometer.tracing.Tracer tracer;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private io.micrometer.tracing.propagation.Propagator propagator;
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        // Get or generate trace ID (normalized to W3C-compatible 32-char lowercase hex)
-        String traceId = getOrGenerateTraceId(exchange);
-        String traceparent = buildTraceparent(exchange, traceId);
-
-        // Store in exchange attributes for other filters to use
-        exchange.getAttributes().put(TRACE_ID_ATTR, traceId);
-
-        // NOTE: no MDC here. Gateway runs on Reactor Netty event-loop threads that are
-        // shared by many concurrent requests — MDC.put would leak this traceId into
-        // other requests' logs and doFinally's clear would wipe theirs. Use the
-        // exchange attribute (and the X-Trace-Id header) for correlation instead.
-
-        // Add trace ID to request headers (for downstream services)
-        ServerWebExchange mutatedExchange = exchange.mutate()
-                .request(exchange.getRequest().mutate()
-                        .header(TRACE_ID_HEADER, traceId)
-                        .header(TRACEPARENT_HEADER, traceparent)
-                        .build())
-                .build();
-
-        log.debug("Trace ID: {} for route: {}", traceId, RouteUtils.getRouteId(exchange));
-
-        // Continue the filter chain with the mutated exchange
-        return chain.filter(mutatedExchange)
-                .doOnSuccess(aVoid -> {
-                    // Add trace ID to response headers before response is committed
-                    if (!exchange.getResponse().isCommitted()) {
-                        exchange.getResponse().getHeaders().add(TRACE_ID_HEADER, traceId);
-                    }
-                });
+        return Mono.deferContextual(context -> {
+            io.micrometer.tracing.Span span = null;
+            io.micrometer.observation.Observation observation = context.getOrDefault(
+                    io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor.KEY, null);
+            if (observation != null) {
+                io.micrometer.tracing.handler.TracingObservationHandler.TracingContext tracing =
+                        observation.getContextView().get(io.micrometer.tracing.handler.TracingObservationHandler.TracingContext.class);
+                if (tracing != null) span = tracing.getSpan();
+            }
+            if (span == null && tracer != null) span = tracer.currentSpan();
+            if (span != null && (normalizeToHex32(span.context().traceId()) == null
+                    || !isHex(span.context().spanId(), 16))) span = null;
+            boolean owned = false;
+            if (span == null && propagator != null && tracer != null) {
+                span = propagator.extract(exchange.getRequest(),
+                        (org.springframework.http.server.reactive.ServerHttpRequest request, String key) -> request.getHeaders().getFirst(key))
+                        .name("gateway.proxy").kind(io.micrometer.tracing.Span.Kind.SERVER).start();
+                owned = true;
+            }
+            if (span != null && (normalizeToHex32(span.context().traceId()) == null
+                    || !isHex(span.context().spanId(), 16))) {
+                if (owned) span.end();
+                span = null; owned = false;
+            }
+            String traceId = span != null ? span.context().traceId() : getOrGenerateTraceId(exchange);
+            String spanId = span != null ? span.context().spanId() : null;
+            String[] inbound = parseTraceparent(exchange.getRequest().getHeaders().getFirst(TRACEPARENT_HEADER));
+            // Without an SDK, pass through a real upstream context; never fabricate an unexported parent.
+            String parent = span != null ? "00-" + traceId + "-" + spanId + "-" + (Boolean.TRUE.equals(span.context().sampled()) ? "01" : "00")
+                    : inbound != null ? String.join("-", inbound) : null;
+            exchange.getAttributes().put(TRACE_ID_ATTR, traceId);
+            if (spanId != null) exchange.getAttributes().put("gatewaySpanId", spanId);
+            var request = exchange.getRequest().mutate().header(TRACE_ID_HEADER, traceId);
+            if (parent != null) request.header(TRACEPARENT_HEADER, parent);
+            else request.headers(headers -> headers.remove(TRACEPARENT_HEADER));
+            exchange.getResponse().getHeaders().set(TRACE_ID_HEADER, traceId);
+            if (spanId != null) exchange.getResponse().getHeaders().set("X-Gateway-Span-Id", spanId);
+            var mutated = exchange.mutate().request(request.build()).build();
+            final var active = span;
+            Mono<Void> result = Mono.defer(() -> chain.filter(mutated));
+            if (owned) return result.doOnError(active::error).doFinally(signal -> active.end());
+            return result;
+        });
     }
 
     /**
@@ -90,19 +108,6 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
         }
         log.debug("Using existing trace ID: {}", candidate);
         return candidate;
-    }
-
-    /**
-     * Build the outbound traceparent. Trace-id and sampled flags are preserved from
-     * an inbound traceparent (pass-through); parent-id is always freshly generated —
-     * the gateway is its own hop, so the caller's span id must not be reused.
-     * Flags default to "00" (no sampling decision) so downstream services fall back
-     * to their own sampling configuration.
-     */
-    private String buildTraceparent(ServerWebExchange exchange, String traceId) {
-        String[] inbound = parseTraceparent(exchange.getRequest().getHeaders().getFirst(TRACEPARENT_HEADER));
-        String flags = inbound != null ? inbound[3] : "00";
-        return "00-" + traceId + "-" + generateHex(16) + "-" + flags;
     }
 
     /**

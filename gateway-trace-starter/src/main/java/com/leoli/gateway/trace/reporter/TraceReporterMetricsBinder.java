@@ -23,8 +23,14 @@ public class TraceReporterMetricsBinder {
                 .description("Pending traces in the async report queue")
                 .register(registry);
         Gauge.builder("gateway.trace.reporter.reported", reporter, r -> (double) r.getReportedCount())
-                .description("Total traces successfully reported")
+                .description("Total trace records acknowledged as enqueued by admin; not durable storage")
                 .register(registry);
+        Gauge.builder("gateway.trace.reporter.retained.bytes", reporter, AsyncTraceReporter::getRetainedBytes).register(registry);
+        Gauge.builder("gateway.trace.reporter.unconfirmed", reporter, AsyncTraceReporter::getUnconfirmedCount).register(registry);
+        Gauge.builder("gateway.trace.reporter.sent", reporter, AsyncTraceReporter::getSentCount).register(registry);
+        Gauge.builder("gateway.trace.reporter.rejected", reporter, AsyncTraceReporter::getRejectedCount).register(registry);
+        Gauge.builder("gateway.trace.reporter.failed.attempts", reporter, AsyncTraceReporter::getFailedAttemptCount).register(registry);
+        Gauge.builder("gateway.trace.reporter.fallback.dropped", reporter, AsyncTraceReporter::getFallbackDroppedCount).register(registry);
         Gauge.builder("gateway.trace.reporter.dropped", reporter, r -> (double) r.getDroppedCount())
                 .description("Total traces dropped due to queue overflow")
                 .register(registry);

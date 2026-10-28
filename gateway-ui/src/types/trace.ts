@@ -232,6 +232,11 @@ export interface ServiceSpan {
 
 /** Service node inside GET /full-chain/{traceId}. */
 export interface FullChainServiceNode {
+  startTimeMs?: number;
+  reportId?: string;
+  captureMode?: string;
+  droppedSpanCount?: number;
+  openSpanCount?: number;
   nodeType: string;
   serviceName: string;
   path?: string;
@@ -249,25 +254,28 @@ export interface FullChainServiceNode {
 
 /** durationBreakdown inside GET /full-chain/{traceId}. */
 export interface FullChainDurationBreakdown {
-  serviceMaxDurationMs?: number;
-  networkTransferMs?: number;
-  networkTransferSource?: string;
-  gatewayTotalMs: number;
+  gatewayTotalMs: number | null;
   gatewayTotalMsSource?: string;
-  serviceDurationMs?: number;
-  servicePercent?: number;
-  gatewayOverheadMs: number;
-  gatewayOverheadPercent?: number;
+  gatewayOverheadMs: number | null;
+  gatewayOverheadPercent?: number | null;
   gatewayOverheadDataSource?: string;
-  networkTransferPercent?: number;
-  otherMs?: number;
-  otherPercent?: number;
+  serviceDurationMs?: number | null;
+  servicePercent?: number | null;
+  serviceMaxDurationMs?: number | null;
+  networkTransferMs?: number | null;
+  networkTransferPercent?: number | null;
+  networkTransferSource?: string;
+  responseWriteMs?: number | null;
+  otherMs?: number | null;
+  otherPercent?: number | null;
+  timingComparable?: boolean;
+  criticalPathVerified?: boolean;
   timeModelNote?: string;
-  services?: Array<{ serviceName: string; durationMs: number }>;
 }
 
 /** GET /full-chain/{traceId} result. */
 export interface FullChainDetail {
+  integrity?: { completenessVerified: boolean; observedGraphValid: boolean; missingParentSpanIds: string[]; duplicateSpanIds: string[]; openSpanCount: number; droppedSpanCount: number; summaryServiceCount: number; reasons: string[] };
   traceId: string;
   gateway?: FullChainGatewayNode;
   hasGatewayTrace: boolean;

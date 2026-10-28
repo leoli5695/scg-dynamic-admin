@@ -27,7 +27,8 @@ interface FullChainDetailDrawerProps {
 }
 
 const chainStatusColor = (status: string): string => {
-  if (status === 'COMPLETE') return 'success';
+  if (status === 'OBSERVED') return 'processing';
+  if (status === 'PARTIAL' || status === 'OBSERVED_WITH_ERRORS' || status === 'COMPLETE') return 'warning';
   if (status === 'COMPLETE_WITH_ERRORS') return 'warning';
   if (status === 'GATEWAY_ONLY') return 'default';
   return 'error';
@@ -44,7 +45,9 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
   };
 
   const chainStatusLabel = (status: string): string => {
-    if (status === 'COMPLETE') return t('trace.chain_complete');
+    if (status === 'COMPLETE' || status === 'OBSERVED') return t('trace.chain_observed');
+    if (status === 'PARTIAL') return t('trace.chain_partial');
+    if (status === 'OBSERVED_WITH_ERRORS') return t('trace.chain_observed_errors');
     if (status === 'GATEWAY_ONLY') return t('trace.gateway_only');
     return status;
   };
@@ -85,57 +88,16 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
           {chain.durationBreakdown && (
             <Card size="small" title={t('trace.duration_breakdown')} className="mb-4">
               <Row gutter={12}>
-                <Col span={5}>
-                  <Statistic
-                    title={t('trace.total_latency')}
-                    value={chain.durationBreakdown.gatewayTotalMs}
-                    suffix="ms"
-                  />
-                  <Text type="secondary" className="text-xs-tiny">首个Filter累积时间</Text>
-                </Col>
-                <Col span={5}>
-                  <Statistic
-                    title={t('trace.gateway_overhead')}
-                    value={chain.durationBreakdown.gatewayOverheadMs || '-'}
-                    suffix={chain.durationBreakdown.gatewayOverheadMs > 0
-                      ? `ms (${chain.durationBreakdown.gatewayOverheadPercent}%)` : ''}
-                    valueStyle={{ color: '#1890ff' }}
-                  />
-                  <Text type="secondary" className="text-xs-tiny">Σ各Filter自身时间</Text>
-                  {chain.durationBreakdown.gatewayOverheadDataSource === 'NO_DATA' && (
-                    <Text type="secondary" className="text-xs-tiny">暂无数据</Text>
-                  )}
-                </Col>
-                <Col span={5}>
-                  <Statistic
-                    title={t('trace.service_duration')}
-                    value={chain.durationBreakdown.serviceDurationMs || chain.durationBreakdown.serviceMaxDurationMs || '-'}
-                    suffix={(chain.durationBreakdown.serviceDurationMs ?? 0) > 0
-                      ? `ms (${chain.durationBreakdown.servicePercent}%)` : ''}
-                    valueStyle={{ color: '#52c41a' }}
-                  />
-                  <Text type="secondary" className="text-xs-tiny">后端服务处理时间</Text>
-                </Col>
-                <Col span={5}>
-                  <Statistic
-                    title={t('trace.network_transfer')}
-                    value={chain.durationBreakdown.networkTransferMs || '-'}
-                    suffix={(chain.durationBreakdown.networkTransferMs ?? 0) > 0
-                      ? `ms (${chain.durationBreakdown.networkTransferPercent || 0}%)` : ''}
-                    valueStyle={{ color: '#faad14' }}
-                  />
-                  <Text type="secondary" className="text-xs-tiny">NettyWrite响应写入</Text>
-                </Col>
-                <Col span={4}>
-                  <Statistic
-                    title={t('trace.other_time')}
-                    value={chain.durationBreakdown.otherMs || 0}
-                    suffix={`ms (${chain.durationBreakdown.otherPercent || 0}%)`}
-                    valueStyle={{ color: '#8c8c8c' }}
-                  />
-                  <Text type="secondary" className="text-xs-tiny">精度损失+未追踪</Text>
-                </Col>
+                <Col span={5}><Statistic title={t('trace.total_latency')} value={chain.durationBreakdown.gatewayTotalMs ?? t('trace.unknown')} suffix={chain.durationBreakdown.gatewayTotalMs == null ? '' : 'ms'} /></Col>
+                <Col span={5}><Statistic title={t('trace.filter_self_time')} value={chain.durationBreakdown.gatewayOverheadMs ?? t('trace.unknown')} suffix={chain.durationBreakdown.gatewayOverheadMs == null ? '' : 'ms'} /></Col>
+                <Col span={5}><Statistic title={t('trace.observed_service_wall')} value={chain.durationBreakdown.serviceDurationMs ?? t('trace.unknown')} suffix={chain.durationBreakdown.serviceDurationMs == null ? '' : 'ms'} /></Col>
+                <Col span={5}><Statistic title={t('trace.network_transfer')} value={chain.durationBreakdown.networkTransferMs ?? t('trace.unknown')} suffix={chain.durationBreakdown.networkTransferMs == null ? '' : 'ms'} /></Col>
+                <Col span={4}><Statistic title={t('trace.other_time')} value={chain.durationBreakdown.otherMs ?? t('trace.unknown')} suffix={chain.durationBreakdown.otherMs == null ? '' : 'ms'} /></Col>
               </Row>
+              <Alert className="mt-2" type="info" showIcon title={t('trace.time_model_note')} />
+              {chain.integrity && <Alert className="mt-2" type={chain.integrity.observedGraphValid ? 'info' : 'warning'} showIcon
+                title={t('trace.integrity_unverified')}
+                description={chain.integrity.reasons.map(reason => t('trace.integrity_' + reason)).join(' / ') || t('trace.graph_valid_note')} />}
             </Card>
           )}
 
@@ -166,8 +128,8 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                 </Descriptions.Item>
                 <Descriptions.Item label={t('trace.gateway_overhead')}>
                   {chain.durationBreakdown ? (
-                    <Text style={{ color: chain.durationBreakdown.gatewayOverheadMs > 200 ? '#cf1322' : undefined }}>
-                      {chain.durationBreakdown.gatewayOverheadMs}ms ({chain.durationBreakdown.gatewayOverheadPercent}%)
+                    <Text style={{ color: (chain.durationBreakdown.gatewayOverheadMs ?? 0) > 200 ? '#cf1322' : undefined }}>
+                      {chain.durationBreakdown.gatewayOverheadMs == null ? t('trace.unknown') : chain.durationBreakdown.gatewayOverheadMs + 'ms'}
                     </Text>
                   ) : (
                     <Text>{chain.gateway.latencyMs}ms</Text>
@@ -325,6 +287,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                       children: (
                         <FullChainWaterfallChart
                           serviceSpans={service.spans}
+                          traceStartTimeMs={service.startTimeMs}
                           serviceName={service.serviceName}
                           gatewayTotalDurationMs={service.totalDurationMs}
                           slowThreshold={50}

@@ -1,595 +1,169 @@
 package com.leoli.gateway.trace.reporter;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.trace.model.DistributedTrace;
 import com.leoli.gateway.trace.properties.GatewayTraceProperties;
 import jakarta.annotation.PreDestroy;
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.time.Duration;
-import java.time.LocalDateTime;
+import java.io.*;
+import java.nio.file.*;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.*;
 
-/**
- * Async Trace reporter (production-grade enhanced version)
- * <p>
- * Features:
- * 1. Async reporting, doesn't block business threads
- * 2. Batch sending, improves performance
- * 3. Queue buffering, prevents data loss
- * 4. Retry count limit, prevents retry storms
- * 5. Writes to local disk log when exceeding retry count
- * 6. High-performance WebClient connection pool
- * 7. Graceful shutdown @PreDestroy
- *
- * @author leoli
- */
-@Slf4j
+/** One sender; immutable bounded snapshots. Queued, sending, retries and disk fallback share admission. */
 public class AsyncTraceReporter {
-
-    private final WebClient webClient;
-    private final ExecutorService executor;
-    private final ObjectMapper objectMapper;
-    private final ExecutorService fallbackExecutor;  // 【新增】独立的磁盘 IO 线程池
     private final GatewayTraceProperties properties;
-    private final BlockingQueue<DistributedTrace> queue;
-    private final ScheduledExecutorService retryScheduler;  // 【新增】延迟重试调度器（指数退避）
-    private final ConnectionProvider connectionProvider;  // FIX #3: 保持引用以便 shutdown 时 dispose
-
-    /**
-     * FIX #1: Shutdown idempotency guard - prevents double-invocation of doShutdown()
-     */
-    private final AtomicBoolean shutdownComplete = new AtomicBoolean(false);
-
-    /**
-     * Local disk log directory
-     */
-    private static final String FALLBACK_LOG_DIR = "./trace-fallback";
-
-    /**
-     * Fallback 单文件大小上限：超过后滚动为 .old（覆盖旧 .old），防止只增不减撑爆磁盘
-     */
-    private static final long FALLBACK_FILE_MAX_BYTES = 50L * 1024 * 1024;
-
-    /**
-     * Fallback 文件保留天数：init 时清理更早的文件
-     */
-    private static final long FALLBACK_RETENTION_DAYS = 7;
-
-    /**
-     * FIX (unbounded fallback queue → OOM): the disk-IO executor used to be
-     * {@code Executors.newSingleThreadExecutor()}, whose internal queue is unbounded.
-     * writeToFallbackLog submits one task per trace on every degraded path (admin down,
-     * queue full, retries exhausted); when disk IO is slower than trace production the
-     * pending writes piled up without limit and could OOM the very process the fallback
-     * is meant to protect. The queue is now bounded; when it saturates the write is
-     * dropped and counted (see fallbackDroppedCount) instead of buffering forever.
-     */
-    private static final int FALLBACK_QUEUE_CAPACITY = 10_000;
-
-    /**
-     * Retry backoff configuration
-     * Base delay: 1 second, max delay: 60 seconds
-     * Formula: delay = min(baseDelay * 2^retryCount, maxDelay)
-     */
-    private static final long RETRY_BASE_DELAY_MS = 1000;
-    private static final long RETRY_MAX_DELAY_MS = 60000;
-
-    /**
-     * Statistics: dropped Trace count
-     */
-    private final AtomicLong droppedCount = new AtomicLong(0);
-
-    /**
-     * Statistics: local disk written Trace count
-     */
-    private final AtomicLong fallbackCount = new AtomicLong(0);
-
-    /**
-     * Statistics: fallback writes dropped because the bounded disk-IO queue was saturated.
-     */
-    private final AtomicLong fallbackDroppedCount = new AtomicLong(0);
-
-    /**
-     * Statistics: successfully reported Trace count
-     */
-    private final AtomicLong reportedCount = new AtomicLong(0);
-
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final DelayQueue<Report> queue = new DelayQueue<>();
+    private final Semaphore slots;
+    private final AtomicLong retainedBytes = new AtomicLong();
+    private final AtomicBoolean closed = new AtomicBoolean();
+    private String cleanedDay;
+    private final AtomicLong reported = new AtomicLong(), dropped = new AtomicLong(), fallback = new AtomicLong(), fallbackDropped = new AtomicLong(), unconfirmed = new AtomicLong();
+    private final AtomicLong sent = new AtomicLong(), rejected = new AtomicLong(), failedAttempts = new AtomicLong();
+    private final ConnectionProvider pool = ConnectionProvider.builder("trace-reporter-pool")
+            .maxConnections(1).pendingAcquireMaxCount(1).pendingAcquireTimeout(Duration.ofMillis(200)).build();
+    private final WebClient client;
+    private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "trace-reporter"); thread.setDaemon(true); return thread;
+    });
+    private final class Report implements Delayed {
+        final byte[] bytes; int attempts; long ready;
+        Report(byte[] bytes) { this.bytes = bytes; this.ready = System.nanoTime(); }
+        public long getDelay(TimeUnit unit) { return unit.convert(ready - System.nanoTime(), TimeUnit.NANOSECONDS); }
+        public int compareTo(Delayed other) { return Long.compare(ready, ((Report) other).ready); }
+    }
     public AsyncTraceReporter(GatewayTraceProperties properties) {
         this.properties = properties;
-        this.connectionProvider = createConnectionProvider();
-        this.webClient = createHighPerformanceWebClient(this.connectionProvider);
-        this.queue = new LinkedBlockingQueue<>(properties.getAsyncQueueSize());
-
-        // 主上报线程池
-        this.executor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "trace-reporter");
-            t.setDaemon(false);
-            return t;
-        });
-
-        // 【新增】独立的磁盘 IO 线程池 - 防止磁盘写入阻塞上报线程
-        // FIX: bounded queue + drop-and-count rejection policy (was an unbounded
-        // single-thread executor whose queue could grow without limit under a slow/full
-        // disk and OOM the process). See FALLBACK_QUEUE_CAPACITY.
-        this.fallbackExecutor = new ThreadPoolExecutor(
-                1, 1, 0L, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<>(FALLBACK_QUEUE_CAPACITY),
-                r -> {
-                    Thread t = new Thread(r, "trace-fallback-writer");
-                    t.setDaemon(true);  // daemon thread，不阻塞关闭
-                    return t;
-                },
-                (task, exec) -> {
-                    long n = fallbackDroppedCount.incrementAndGet();
-                    if (n == 1 || n % 1000 == 0) {
-                        log.warn("Trace fallback writer saturated (queue={}) - dropped {} fallback writes so far",
-                                FALLBACK_QUEUE_CAPACITY, n);
-                    }
-                });
-
-        // 【新增】延迟重试调度器 - 指数退避防止重试风暴
-        this.retryScheduler = Executors.newScheduledThreadPool(1, r -> {
-            Thread t = new Thread(r, "trace-retry-scheduler");
-            t.setDaemon(true);
-            return t;
-        });
-
-        this.objectMapper = new ObjectMapper();
-
-        if (properties.getInternalToken() == null || properties.getInternalToken().isEmpty()) {
-            log.warn("gateway.trace.internal-token is empty: trace uploads are unauthenticated. " +
-                    "If the admin side enforces X-Internal-Token, reports will be rejected; " +
-                    "otherwise anyone can inject fake traces into the admin store.");
-        }
-
-        // Initialize local log directory
-        initFallbackLogDir();
-
-        // Start async reporting thread
-        executor.submit(this::reportLoop);
-
-        log.info("AsyncTraceReporter initialized: queueSize={}, batchSize={}, interval={}ms, maxRetry={}",
-                properties.getAsyncQueueSize(),
-                properties.getReportBatchSize(),
-                properties.getReportIntervalMs(),
-                DistributedTrace.MAX_RETRY_COUNT);
+        slots = new Semaphore(Math.max(1, properties.getAsyncQueueSize()));
+        client = WebClient.builder().clientConnector(new ReactorClientHttpConnector(HttpClient.create(pool)
+                .option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 500)
+                .responseTimeout(Duration.ofMillis(Math.max(100, properties.getReportTimeoutMs()))))).build();
+        worker.execute(this::loop);
     }
-
-    /**
-     * Create high-performance connection pool
-     */
-    private ConnectionProvider createConnectionProvider() {
-        return ConnectionProvider.builder("trace-reporter-pool")
-                .maxConnections(50)
-                .pendingAcquireTimeout(Duration.ofSeconds(5))
-                .pendingAcquireMaxCount(100)
-                .maxIdleTime(Duration.ofSeconds(60))
-                .build();
+    private boolean reserve(long bytes) {
+        long current;
+        do { current = retainedBytes.get(); if (bytes > properties.getMaxRetainedBytes() - current) return false; }
+        while (!retainedBytes.compareAndSet(current, current + bytes));
+        return true;
     }
-
-    /**
-     * Create high-performance WebClient (with connection pool configuration)
-     * <p>
-     * Resolves potential blocking issues with default connection pool under high concurrency
-     */
-    private WebClient createHighPerformanceWebClient(ConnectionProvider connectionProvider) {
-        HttpClient httpClient = HttpClient.create(connectionProvider)
-                .responseTimeout(Duration.ofMillis(properties.getReportTimeoutMs()))
-                .compress(true);  // Enable compression
-
-        return WebClient.builder()
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .build();
-    }
-
-    /**
-     * Initialize local log directory
-     */
-    private void initFallbackLogDir() {
-        try {
-            Path logDir = Paths.get(FALLBACK_LOG_DIR);
-            if (!Files.exists(logDir)) {
-                Files.createDirectories(logDir);
-                log.info("Created trace fallback log directory: {}", FALLBACK_LOG_DIR);
-            }
-            cleanupExpiredFallbackFiles(logDir);
-        } catch (IOException e) {
-            log.warn("Failed to create fallback log directory: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * 清理超过保留期的 fallback 文件（fallback 日志此前只增不减，无回灌/清理机制）
-     */
-    private void cleanupExpiredFallbackFiles(Path logDir) {
-        try (var files = Files.list(logDir)) {
-            long cutoff = System.currentTimeMillis() - FALLBACK_RETENTION_DAYS * 24 * 3600 * 1000;
-            files.filter(p -> p.getFileName().toString().startsWith("trace-fallback-"))
-                    .forEach(p -> {
-                        try {
-                            if (Files.getLastModifiedTime(p).toMillis() < cutoff) {
-                                Files.deleteIfExists(p);
-                                log.info("Deleted expired trace fallback file: {}", p.getFileName());
-                            }
-                        } catch (IOException e) {
-                            log.warn("Failed to delete expired fallback file {}: {}", p.getFileName(), e.getMessage());
-                        }
-                    });
-        } catch (IOException e) {
-            log.warn("Failed to clean up fallback log directory: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Business thread call: just put in queue
-     *
-     * @param trace Trace data
-     */
     public void report(DistributedTrace trace) {
-        if (!queue.offer(trace)) {
-            // Queue full, record drop
-            long dropped = droppedCount.incrementAndGet();
-            // Rate-limit the warning: at high drop rates per-event logs flood the disk
-            if (dropped == 1 || dropped % 100 == 0) {
-                log.warn("Trace queue full, dropping trace: {}, totalDropped={}",
-                        trace.getTraceId(), dropped);
-            }
-
-            // Try writing to local disk (degraded handling)
-            writeToFallbackLog(trace, "queue_full");
-        } else {
-            log.debug("Trace queued: {}", trace.getTraceId());
-        }
-    }
-
-    /**
-     * Reporting thread: batch sending
-     * <p>
-     * 吞吐修复：原实现每轮固定 drain 一批后 sleep(interval)，吞吐上限被卡在
-     * batchSize/interval（默认 ~1000 条/秒），高 QPS 下队列必然打满。
-     * 现改为 poll(interval) 等待首条 + 连续 drain：只要还能凑满整批就不休眠，
-     * 空闲时才按 interval 让出 CPU。
-     */
-    private void reportLoop() {
-        while (!Thread.currentThread().isInterrupted()) {
-            try {
-                // Wait for the first trace (also serves as the idle interval)
-                DistributedTrace first = queue.poll(properties.getReportIntervalMs(), TimeUnit.MILLISECONDS);
-                if (first == null) {
-                    continue;
-                }
-
-                List<DistributedTrace> traces = new ArrayList<>(properties.getReportBatchSize());
-                traces.add(first);
-                queue.drainTo(traces, properties.getReportBatchSize() - 1);
-                doBatchReport(traces);
-
-                // Keep draining full batches without sleeping while backlog remains
-                while (true) {
-                    traces = new ArrayList<>(properties.getReportBatchSize());
-                    queue.drainTo(traces, properties.getReportBatchSize());
-                    if (traces.isEmpty()) {
-                        break;
-                    }
-                    doBatchReport(traces);
-                    if (traces.size() < properties.getReportBatchSize()) {
-                        break;
-                    }
-                }
-
-            } catch (InterruptedException e) {
-                log.info("Trace reporter thread interrupted, shutting down");
-                break;
-
-            } catch (Exception e) {
-                log.error("Error in trace reporter loop: {}", e.getMessage());
-                try {
-                    Thread.sleep(1000); // Wait 1 second after error
-                } catch (InterruptedException ie) {
-                    break;
-                }
-            }
-        }
-
-        // FIX #1: Do NOT call doShutdown() here.
-        // The @PreDestroy shutdown() method is the sole owner of shutdown logic.
-        log.debug("Trace reporter loop exited");
-    }
-
-    /**
-     * Execute batch reporting (with retry count limit)
-     */
-    private void doBatchReport(List<DistributedTrace> traces) {
-        if (properties.getAdminUrl() == null || properties.getAdminUrl().isEmpty()) {
-            log.warn("adminUrl not configured, cannot report traces, writing to fallback log");
-            traces.forEach(t -> writeToFallbackLog(t, "no_admin_url"));
-            return;
-        }
-
-        String url = properties.getAdminUrl() + "/api/services/traces/batch";
-
-        webClient.post()
-                .uri(url)
-                .headers(h -> { if (properties.getInternalToken() != null && !properties.getInternalToken().isEmpty()) h.set(GatewayTraceProperties.INTERNAL_TOKEN_HEADER, properties.getInternalToken()); })
-                .bodyValue(traces)
-                .retrieve()
-                .bodyToMono(Void.class)
-                .timeout(java.time.Duration.ofMillis(properties.getReportTimeoutMs()))
-                .subscribe(
-                        v -> {
-                            reportedCount.addAndGet(traces.size());
-                            log.debug("Batch reported: {} traces, totalReported={}", traces.size(), reportedCount.get());
-                        },
-                        e -> {
-                            log.warn("Failed to report batch: {}, error: {}", traces.size(), e.getMessage());
-                            // Handle retry logic on failure (with retry count limit)
-                            handleFailedTraces(traces, e);
-                        }
-                );
-    }
-
-    /**
-     * Handle failed Traces (with exponential backoff retry)
-     * <p>
-     * FIX: Uses exponential backoff to prevent retry storms
-     * - retry count < MAX_RETRY_COUNT: schedule delayed retry with exponential backoff
-     * - retry count >= MAX_RETRY_COUNT: write to local disk log
-     * <p>
-     * Backoff formula: delay = min(baseDelay * 2^retryCount, maxDelay)
-     * Example: retry 1 -> 1s, retry 2 -> 2s, retry 3 -> 4s, ... max 60s
-     */
-    private void handleFailedTraces(List<DistributedTrace> traces, Throwable error) {
-        for (DistributedTrace trace : traces) {
-            trace.incrementRetry();
-
-            if (trace.isMaxRetryExceeded()) {
-                // Exceeded max retry count, write to local disk
-                writeToFallbackLog(trace, "max_retry_exceeded");
-                log.warn("Trace max retry exceeded, written to fallback: traceId={}, retryCount={}",
-                        trace.getTraceId(), trace.getRetryCount());
-            } else {
-                // FIX: Use exponential backoff instead of immediate requeue
-                long delayMs = calculateExponentialBackoff(trace.getRetryCount());
-                scheduleDelayedRetry(trace, delayMs);
-                log.debug("Scheduled trace retry with backoff: traceId={}, retryCount={}, delayMs={}",
-                        trace.getTraceId(), trace.getRetryCount(), delayMs);
-            }
-        }
-    }
-
-    /**
-     * Calculate exponential backoff delay.
-     * Formula: min(baseDelay * 2^retryCount, maxDelay)
-     */
-    private long calculateExponentialBackoff(int retryCount) {
-        long delay = RETRY_BASE_DELAY_MS * (1L << retryCount);  // 2^retryCount
-        return Math.min(delay, RETRY_MAX_DELAY_MS);
-    }
-
-    /**
-     * Schedule delayed retry using retryScheduler.
-     * Prevents retry storms during network failures.
-     */
-    private void scheduleDelayedRetry(DistributedTrace trace, long delayMs) {
-        retryScheduler.schedule(() -> {
-            if (!queue.offer(trace)) {
-                // Queue full after waiting, degrade to disk write
-                droppedCount.incrementAndGet();
-                writeToFallbackLog(trace, "queue_full_after_backoff");
-                log.warn("Cannot requeue trace after backoff (queue full): traceId={}", trace.getTraceId());
-            } else {
-                log.debug("Requeued trace after backoff: traceId={}, retryCount={}",
-                        trace.getTraceId(), trace.getRetryCount());
-            }
-        }, delayMs, TimeUnit.MILLISECONDS);
-    }
-
-    /**
-     * Write to local disk log (degraded handling)
-     * <p>
-     * 【背压修复】：使用独立的异步 IO 线程池写入磁盘
-     * - 防止磁盘 IO 阻塞上报线程
-     * - 磁盘抖动时 Trace 队列不会积压
-     */
-    private void writeToFallbackLog(DistributedTrace trace, String reason) {
-        // 提交到独立的磁盘 IO 线程池，不阻塞上报线程
-        fallbackExecutor.submit(() -> writeToFallbackLogSync(trace, reason));
-    }
-
-    /**
-     * Synchronous fallback log write (used during shutdown when executor may be unavailable)
-     */
-    private void writeToFallbackLogSync(DistributedTrace trace, String reason) {
+        int limit = Math.max(1024, Math.min(properties.getMaxRecordBytes(), 256 * 1024));
+        if (closed.get() || !slots.tryAcquire()) { dropped.incrementAndGet(); return; }
+        long reservation = 2L * limit;
+        if (!reserve(reservation)) { slots.release(); dropped.incrementAndGet(); return; }
         try {
-            fallbackCount.incrementAndGet();
-
-            String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-            String fileName = "trace-fallback-" + date + ".log";
-            Path logFile = Paths.get(FALLBACK_LOG_DIR, fileName);
-
-            String json = objectMapper.writeValueAsString(trace);
-            String logLine = String.format("%s|%s|%s%n",
-                    LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-                    reason,
-                    json);
-
-            Files.writeString(logFile, logLine,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.APPEND);
-
-            rotateFallbackFileIfOversized(logFile);
-
-            log.debug("Trace written to fallback log: traceId={}, reason={}, file={}",
-                    trace.getTraceId(), reason, fileName);
-
-        } catch (IOException e) {
-            log.error("Failed to write trace to fallback log: traceId={}, error={}",
-                    trace.getTraceId(), e.getMessage());
-        }
-    }
-
-    /**
-     * 单文件超过上限时滚动为 .old（覆盖上一个 .old），保证磁盘占用有界
-     */
-    private void rotateFallbackFileIfOversized(Path logFile) {
-        try {
-            if (Files.size(logFile) > FALLBACK_FILE_MAX_BYTES) {
-                Path old = logFile.resolveSibling(logFile.getFileName() + ".old");
-                Files.deleteIfExists(old);
-                Files.move(logFile, old);
-                log.info("Rotated oversized trace fallback file to {}", old.getFileName());
+            byte[] bytes = BoundedTraceJson.encode(mapper, trace, limit);
+            retainedBytes.addAndGet(2L * bytes.length - reservation); reservation = 2L * bytes.length;
+            synchronized (queue) {
+                if (!closed.get()) { queue.offer(new Report(bytes)); return; }
             }
-        } catch (IOException e) {
-            log.warn("Failed to rotate fallback file {}: {}", logFile.getFileName(), e.getMessage());
-        }
+        } catch (Exception error) { /* best effort; never fail the application request */ }
+        retainedBytes.addAndGet(-reservation); slots.release(); dropped.incrementAndGet();
     }
-
-    /**
-     * Graceful shutdown (@PreDestroy registered)
-     * <p>
-     * Ensures remaining data is reported on service shutdown
-     */
-    @PreDestroy
-    public void shutdown() {
-        log.info("AsyncTraceReporter shutting down...");
-        doShutdown();
-    }
-
-    /**
-     * Execute shutdown logic
-     * <p>
-     * FIX #1: Uses AtomicBoolean CAS guard to ensure this method executes only once,
-     * preventing race condition between reportLoop exit and @PreDestroy.
-     */
-    private void doShutdown() {
-        // FIX #1: Idempotency guard - only the first caller executes shutdown
-        if (!shutdownComplete.compareAndSet(false, true)) {
-            log.debug("doShutdown() already executed, skipping");
-            return;
-        }
-
-        // Report remaining data
-        List<DistributedTrace> remaining = new ArrayList<>();
-        queue.drainTo(remaining);
-
-        if (!remaining.isEmpty()) {
-            log.info("Shutdown: attempting to report {} remaining traces", remaining.size());
-
-            // FIX #2: Check adminUrl before attempting HTTP report
-            String adminUrl = properties.getAdminUrl();
-            if (adminUrl == null || adminUrl.isEmpty()) {
-                log.warn("Shutdown: adminUrl not configured, writing {} traces to fallback log", remaining.size());
-                for (DistributedTrace t : remaining) {
-                    writeToFallbackLogSync(t, "shutdown_no_admin_url");
+    private void release(Report report) { retainedBytes.addAndGet(-2L * report.bytes.length); slots.release(); }
+    private void loop() {
+        try {
+            while (!closed.get()) {
+                Report first = queue.poll(Math.max(1, properties.getReportIntervalMs()), TimeUnit.MILLISECONDS);
+                if (first == null) continue;
+                List<Report> batch = new ArrayList<>(); batch.add(first); int bytes = first.bytes.length;
+                while (batch.size() < Math.max(1, Math.min(100, properties.getReportBatchSize()))) {
+                    Report next = queue.poll(); if (next == null) break;
+                    if (bytes + next.bytes.length > 1024 * 1024) { queue.offer(next); break; }
+                    batch.add(next); bytes += next.bytes.length;
                 }
-            } else {
-                try {
-                    String url = adminUrl + "/api/services/traces/batch";
-                    webClient.post()
-                            .uri(url)
-                            .headers(h -> { if (properties.getInternalToken() != null && !properties.getInternalToken().isEmpty()) h.set(GatewayTraceProperties.INTERNAL_TOKEN_HEADER, properties.getInternalToken()); })
-                            .bodyValue(remaining)
-                            .retrieve()
-                            .bodyToMono(Void.class)
-                            .timeout(Duration.ofSeconds(5))
-                            .block();  // Synchronous block on shutdown
-
-                    reportedCount.addAndGet(remaining.size());
-                    log.info("Shutdown: reported {} remaining traces successfully", remaining.size());
-                } catch (Exception e) {
-                    log.error("Failed to report remaining traces on shutdown: {}", e.getMessage());
-                    for (DistributedTrace t : remaining) {
-                        writeToFallbackLogSync(t, "shutdown_failed");
-                    }
+                send(batch);
+            }
+        } catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+        finally {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+            // DelayQueue.poll() cannot drain future retries. Remove them explicitly.
+            for (Report report : queue.toArray(Report[]::new)) if (queue.remove(report)) {
+                if (System.nanoTime() < deadline) disk(report, "shutdown");
+                else { dropped.incrementAndGet(); release(report); }
+            }
+        }
+    }
+    private void send(List<Report> batch) {
+        if (properties.getAdminUrl() == null || properties.getAdminUrl().isBlank()) { batch.forEach(r -> disk(r, "no_admin_url")); return; }
+        try {
+            ByteArrayOutputStream output = new ByteArrayOutputStream(); output.write('[');
+            for (int i = 0; i < batch.size(); i++) { if (i > 0) output.write(','); output.write(batch.get(i).bytes); }
+            output.write(']');
+            var response = client.post().uri(properties.getAdminUrl().replaceAll("/+$", "") + "/api/services/traces/batch")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .headers(headers -> { if (properties.getInternalToken() != null) headers.set(GatewayTraceProperties.INTERNAL_TOKEN_HEADER, properties.getInternalToken()); })
+                    .bodyValue(output.toByteArray()).retrieve().toEntity(String.class)
+                    .timeout(Duration.ofMillis(Math.max(100, properties.getReportTimeoutMs()))).block();
+            sent.addAndGet(batch.size());
+            JsonNode ack = response == null || response.getBody() == null ? null : mapper.readTree(response.getBody());
+            if (ack == null || !"ENQUEUED".equals(ack.path("stage").asText()) || !ack.path("rejectedIndexes").isArray()) {
+                unconfirmed.addAndGet(batch.size()); batch.forEach(r -> disk(r, "unconfirmed_ack")); return;
+            }
+            Set<Integer> rejected = new HashSet<>();
+            for (JsonNode index : ack.path("rejectedIndexes")) {
+                if (!index.isIntegralNumber() || index.asInt() < 0 || index.asInt() >= batch.size() || !rejected.add(index.asInt())) throw new IOException("Invalid acknowledgement");
+            }
+            if (ack.path("accepted").asInt(-1) != batch.size() - rejected.size()) throw new IOException("Inconsistent acknowledgement");
+            this.rejected.addAndGet(rejected.size());
+            for (int i = 0; i < batch.size(); i++) {
+                if (rejected.contains(i)) retry(batch.get(i));
+                else { reported.incrementAndGet(); release(batch.get(i)); }
+            }
+        } catch (Exception error) { failedAttempts.addAndGet(batch.size()); batch.forEach(this::retry); }
+    }
+    private void retry(Report report) {
+        if (++report.attempts >= DistributedTrace.MAX_RETRY_COUNT || closed.get()) { disk(report, "send_failed"); return; }
+        report.ready = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.min(60000, (1000L << report.attempts)) + ThreadLocalRandom.current().nextLong(250));
+        queue.offer(report); // Keeps its original count/byte reservation throughout the delay.
+    }
+    private void disk(Report report, String reason) {
+        try {
+            Path directory = Paths.get(properties.getFallbackDirectory()); Files.createDirectories(directory);
+            String date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
+            if (!date.equals(cleanedDay)) {
+                long cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7);
+                try (var files = Files.list(directory)) {
+                    for (Path old : files.filter(path -> path.getFileName().toString().matches("trace-fallback-[0-9]{8}\\.log(\\.old)?")).toList())
+                        if (Files.getLastModifiedTime(old).toMillis() < cutoff) Files.deleteIfExists(old);
                 }
+                cleanedDay = date;
             }
-        }
-
-        // Shutdown thread pools
-        executor.shutdown();
-        fallbackExecutor.shutdown();
-        retryScheduler.shutdown();
-
-        try {
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
+            Path file = directory.resolve("trace-fallback-" + date + ".log");
+            if (Files.exists(file) && Files.size(file) + report.bytes.length > 50L * 1024 * 1024)
+                Files.move(file, file.resolveSibling(file.getFileName() + ".old"), StandardCopyOption.REPLACE_EXISTING);
+            try (var stream = Files.newOutputStream(file, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+                stream.write((Instant.now() + "|" + reason + "|").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                stream.write(report.bytes); stream.write('\n');
             }
-            if (!fallbackExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
-                fallbackExecutor.shutdownNow();
-            }
-            if (!retryScheduler.awaitTermination(2, TimeUnit.SECONDS)) {
-                retryScheduler.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            log.warn("Shutdown interrupted, forcing termination");
-            executor.shutdownNow();
-            fallbackExecutor.shutdownNow();
-            retryScheduler.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-
-        // FIX #3: Dispose connection provider to release native resources
-        try {
-            connectionProvider.dispose();
-            log.debug("ConnectionProvider disposed");
-        } catch (Exception e) {
-            log.warn("Error disposing ConnectionProvider: {}", e.getMessage());
-        }
-
-        // Output statistics
-        log.info("AsyncTraceReporter shutdown complete. Stats: reported={}, dropped={}, fallback={}, fallbackDropped={}",
-                reportedCount.get(), droppedCount.get(), fallbackCount.get(), fallbackDroppedCount.get());
+            fallback.incrementAndGet();
+        } catch (Exception error) { fallbackDropped.incrementAndGet(); dropped.incrementAndGet(); }
+        finally { release(report); }
     }
-
-    // ==================== Statistics Interface ====================
-
-    /**
-     * Get queue size
-     */
-    public int getQueueSize() {
-        return queue.size();
+    @PreDestroy public void shutdown() {
+        synchronized (queue) { if (!closed.compareAndSet(false, true)) return; }
+        worker.shutdownNow();
+        try { worker.awaitTermination(3, TimeUnit.SECONDS); } catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+        pool.dispose();
     }
-
-    /**
-     * Get dropped count
-     */
-    public long getDroppedCount() {
-        return droppedCount.get();
-    }
-
-    /**
-     * Get local disk write count
-     */
-    public long getFallbackCount() {
-        return fallbackCount.get();
-    }
-
-    /**
-     * Get count of fallback writes dropped due to a saturated disk-IO queue.
-     */
-    public long getFallbackDroppedCount() {
-        return fallbackDroppedCount.get();
-    }
-
-    /**
-     * Get successfully reported count
-     */
-    public long getReportedCount() {
-        return reportedCount.get();
-    }
+    public int getQueueSize() { return queue.size(); }
+    public long getRetainedBytes() { return retainedBytes.get(); }
+    public long getDroppedCount() { return dropped.get(); }
+    public long getFallbackCount() { return fallback.get(); }
+    public long getFallbackDroppedCount() { return fallbackDropped.get(); }
+    /** Admin acknowledged enqueue, not durable storage. */
+    public long getReportedCount() { return reported.get(); }
+    public long getUnconfirmedCount() { return unconfirmed.get(); }
+    public long getSentCount() { return sent.get(); }
+    public long getRejectedCount() { return rejected.get(); }
+    public long getFailedAttemptCount() { return failedAttempts.get(); }
 }

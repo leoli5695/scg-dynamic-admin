@@ -19,6 +19,30 @@ import java.util.List;
 public class DiagnosticBatchWriter {
     private final JdbcTemplate jdbc;
 
+    public int writeDistributedTraces(List<com.leoli.gateway.admin.model.DistributedTraceEntity> batch) {
+        if (batch.isEmpty()) return 0;
+        LocalDateTime now = LocalDateTime.now();
+        jdbc.batchUpdate("""
+                INSERT INTO distributed_trace (report_id,trace_id,service_name,path,method,total_duration_ms,status_code,
+                success,error_message,client_ip,spans,trace_time,created_at,is_slow,gateway_instance_id,
+                upstream_service,downstream_services,capture_mode,dropped_span_count,open_span_count,start_time_ms)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE report_id=VALUES(report_id)
+                """, batch, batch.size(), (ps, trace) -> {
+            ps.setString(1, trace.getReportId()); ps.setString(2, trace.getTraceId()); ps.setString(3, trace.getServiceName());
+            ps.setString(4, trace.getPath()); ps.setString(5, trace.getMethod()); ps.setObject(6, trace.getTotalDurationMs(), Types.BIGINT);
+            ps.setObject(7, trace.getStatusCode(), Types.INTEGER); ps.setObject(8, trace.getSuccess(), Types.BOOLEAN);
+            ps.setString(9, trace.getErrorMessage()); ps.setString(10, trace.getClientIp()); ps.setString(11, trace.getSpans());
+            ps.setTimestamp(12, Timestamp.valueOf(trace.getTraceTime() != null ? trace.getTraceTime() : now));
+            ps.setTimestamp(13, Timestamp.valueOf(now)); ps.setObject(14, trace.getIsSlow(), Types.BOOLEAN);
+            ps.setString(15, trace.getGatewayInstanceId()); ps.setString(16, trace.getUpstreamService());
+            ps.setString(17, trace.getDownstreamServices()); ps.setString(18, trace.getCaptureMode());
+            ps.setObject(19, trace.getDroppedSpanCount(), Types.INTEGER); ps.setObject(20, trace.getOpenSpanCount(), Types.INTEGER);
+            ps.setObject(21, trace.getStartTimeMs(), Types.BIGINT);
+        });
+        return batch.size();
+    }
+
     public int writeTraces(List<RequestTrace> batch) {
         if (batch.isEmpty()) return 0;
         LocalDateTime now = LocalDateTime.now();

@@ -52,11 +52,13 @@ public class TraceTaskDecorator implements TaskDecorator {
     public static Runnable wrap(Runnable runnable) {
         TraceContextHolder.TraceContextSnapshot snapshot = TraceContextHolder.captureContext();
         return () -> {
+            var previous = TraceContextHolder.captureContext();
             try {
                 TraceContextHolder.restoreContext(snapshot);
                 runnable.run();
             } finally {
                 TraceContextHolder.clear();
+                TraceContextHolder.restoreContext(previous);
             }
         };
     }
@@ -70,11 +72,13 @@ public class TraceTaskDecorator implements TaskDecorator {
     public static <T> java.util.concurrent.Callable<T> wrap(java.util.concurrent.Callable<T> callable) {
         TraceContextHolder.TraceContextSnapshot snapshot = TraceContextHolder.captureContext();
         return () -> {
+            var previous = TraceContextHolder.captureContext();
             try {
                 TraceContextHolder.restoreContext(snapshot);
                 return callable.call();
             } finally {
                 TraceContextHolder.clear();
+                TraceContextHolder.restoreContext(previous);
             }
         };
     }
@@ -90,11 +94,13 @@ public class TraceTaskDecorator implements TaskDecorator {
     public static <T> Supplier<T> wrapSupplier(Supplier<T> supplier) {
         TraceContextHolder.TraceContextSnapshot snapshot = TraceContextHolder.captureContext();
         return () -> {
+            var previous = TraceContextHolder.captureContext();
             try {
                 TraceContextHolder.restoreContext(snapshot);
                 return supplier.get();
             } finally {
                 TraceContextHolder.clear();
+                TraceContextHolder.restoreContext(previous);
             }
         };
     }

@@ -106,12 +106,12 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
       key: 'chainStatus',
       width: 130,
       render: (status: string, record) => {
-        if (status === 'COMPLETE' || status === 'COMPLETE_WITH_ERRORS') {
+        if (status === 'COMPLETE' || status === 'COMPLETE_WITH_ERRORS' || status === 'OBSERVED' || status === 'OBSERVED_WITH_ERRORS' || status === 'PARTIAL') {
           return (
             <Space size={4}>
               <CheckCircleOutlined style={{ color: status === 'COMPLETE' ? '#52c41a' : '#faad14' }} />
               <Text className="text-xs-sm">
-                {record.serviceCount || 0} {t('trace.service_count_label')}
+                {t(status === 'PARTIAL' ? 'trace.chain_partial' : 'trace.chain_observed')} · {record.serviceCount || 0} {t('trace.service_count_label')}
               </Text>
             </Space>
           );

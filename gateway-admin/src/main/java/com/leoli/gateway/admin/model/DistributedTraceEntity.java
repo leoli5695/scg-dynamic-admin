@@ -23,6 +23,16 @@ import java.time.LocalDateTime;
     @Index(name = "idx_service_time", columnList = "service_name, trace_time")
 })
 public class DistributedTraceEntity {
+    @Column(name = "report_id", length = 36, unique = true)
+    private String reportId;
+    @Column(name = "capture_mode", length = 20)
+    private String captureMode;
+    @Column(name = "dropped_span_count")
+    private Integer droppedSpanCount;
+    @Column(name = "open_span_count")
+    private Integer openSpanCount;
+    @Column(name = "start_time_ms")
+    private Long startTimeMs;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -86,7 +96,7 @@ public class DistributedTraceEntity {
      * Span列表（JSON格式）
      * 包含每个操作的名称、耗时、状态
      */
-    @Column(name = "spans", columnDefinition = "TEXT")
+    @Column(name = "spans", columnDefinition = "MEDIUMTEXT")
     private String spans;
 
     /**
@@ -126,6 +136,6 @@ public class DistributedTraceEntity {
      * 从 Span metadata 的 SERVICE_TARGET 标签提取
      * 用于拓扑图生成，示例: ["order-service", "inventory-service"]
      */
-    @Column(name = "downstream_services", length = 1000)
+    @Column(name = "downstream_services", columnDefinition = "MEDIUMTEXT")
     private String downstreamServices;
 }

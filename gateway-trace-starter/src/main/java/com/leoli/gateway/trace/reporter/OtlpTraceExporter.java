@@ -46,8 +46,14 @@ public class OtlpTraceExporter {
 
     private final GatewayTraceProperties.OtlpConfig config;
     private final WebClient webClient;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final BlockingQueue<DistributedTrace> queue;
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    private final BlockingQueue<byte[]> queue;
+    private final AtomicLong retainedBytes = new AtomicLong();
+    private final java.util.concurrent.Semaphore slots;
+    private final reactor.netty.resources.ConnectionProvider pool = reactor.netty.resources.ConnectionProvider.builder("gateway-otlp-export")
+            .maxConnections(1).pendingAcquireMaxCount(1).pendingAcquireTimeout(Duration.ofMillis(200)).build();
+    private static final long MAX_BYTES = 8L * 1024 * 1024;
     private final ExecutorService executor;
 
     private final AtomicLong exportedCount = new AtomicLong(0);
@@ -57,9 +63,10 @@ public class OtlpTraceExporter {
 
     public OtlpTraceExporter(GatewayTraceProperties.OtlpConfig config) {
         this.config = config;
-        this.queue = new LinkedBlockingQueue<>(config.getQueueSize());
+        this.queue = new LinkedBlockingQueue<>(Math.max(1, config.getQueueSize()));
+        this.slots = new java.util.concurrent.Semaphore(Math.max(1, config.getQueueSize()));
 
-        HttpClient httpClient = HttpClient.create()
+        HttpClient httpClient = HttpClient.create(pool)
                 .responseTimeout(Duration.ofMillis(config.getTimeoutMs()));
         this.webClient = WebClient.builder()
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
@@ -81,79 +88,60 @@ public class OtlpTraceExporter {
     /**
      * 业务线程调用：只入队，队满丢弃并计数
      */
+    private boolean reserve(long value) {
+        long current;
+        do { current = retainedBytes.get(); if (value > MAX_BYTES - current) return false; }
+        while (!retainedBytes.compareAndSet(current, current + value));
+        return true;
+    }
+    private void release(byte[] bytes) { retainedBytes.addAndGet(-2L * bytes.length); slots.release(); }
     public void export(DistributedTrace trace) {
-        if (trace == null) {
-            return;
-        }
-        if (!queue.offer(trace)) {
-            long dropped = droppedCount.incrementAndGet();
-            if (dropped == 1 || dropped % 100 == 0) {
-                log.warn("OTLP export queue full, dropping trace: {}, totalDropped={}",
-                        trace.getTraceId(), dropped);
-            }
-        }
-    }
-
-    private void exportLoop() {
-        while (!Thread.currentThread().isInterrupted()) {
-            try {
-                DistributedTrace first = queue.poll(config.getFlushIntervalMs(), TimeUnit.MILLISECONDS);
-                if (first == null) {
-                    continue;
-                }
-                List<DistributedTrace> batch = new ArrayList<>(config.getBatchSize());
-                batch.add(first);
-                queue.drainTo(batch, config.getBatchSize() - 1);
-                sendBatch(batch);
-            } catch (InterruptedException e) {
-                break;
-            } catch (Exception e) {
-                log.error("Error in OTLP export loop: {}", e.getMessage());
-            }
-        }
-        log.debug("OTLP export loop exited");
-    }
-
-    private void sendBatch(List<DistributedTrace> batch) {
-        List<Map<String, Object>> resourceSpans = new ArrayList<>();
-        for (DistributedTrace trace : batch) {
-            Map<String, Object> rs = convertTrace(trace);
-            if (rs != null) {
-                resourceSpans.add(rs);
-            }
-        }
-        if (resourceSpans.isEmpty()) {
-            return;
-        }
-
-        Map<String, Object> payload = Map.of("resourceSpans", resourceSpans);
+        if (trace == null) return;
+        if (shutdownComplete.get() || !slots.tryAcquire()) { droppedCount.incrementAndGet(); return; }
+        long reserved = 512 * 1024;
+        if (!reserve(reserved)) { slots.release(); droppedCount.incrementAndGet(); return; }
         try {
-            webClient.post()
-                    .uri(config.getEndpoint())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .headers(h -> config.getHeaders().forEach(h::set))
-                    .bodyValue(objectMapper.writeValueAsString(payload))
-                    .retrieve()
-                    .bodyToMono(Void.class)
-                    .timeout(Duration.ofMillis(config.getTimeoutMs()))
-                    .subscribe(
-                            v -> {
-                                exportedCount.addAndGet(batch.size());
-                                log.debug("OTLP batch exported: {} traces, totalExported={}",
-                                        batch.size(), exportedCount.get());
-                            },
-                            e -> {
-                                long failed = failedCount.addAndGet(batch.size());
-                                if (failed == batch.size() || failed % 500 < batch.size()) {
-                                    log.warn("Failed to export OTLP batch ({} traces): {}, totalFailed={}",
-                                            batch.size(), e.getMessage(), failed);
-                                }
-                            }
-                    );
-        } catch (Exception e) {
-            failedCount.addAndGet(batch.size());
-            log.warn("Failed to serialize/send OTLP batch: {}", e.getMessage());
-        }
+            byte[] bytes = BoundedTraceJson.encode(objectMapper, trace, 256 * 1024);
+            retainedBytes.addAndGet(2L * bytes.length - reserved); reserved = 2L * bytes.length;
+            synchronized (queue) { if (!shutdownComplete.get() && queue.offer(bytes)) return; }
+        } catch (Exception error) { /* counted below */ }
+        retainedBytes.addAndGet(-reserved); slots.release(); droppedCount.incrementAndGet();
+    }
+    private void exportLoop() {
+        try {
+            while (!shutdownComplete.get()) {
+                byte[] first = queue.poll(Math.max(1, config.getFlushIntervalMs()), TimeUnit.MILLISECONDS);
+                if (first == null) continue;
+                List<byte[]> batch = new ArrayList<>(); batch.add(first); int bytes = first.length;
+                while (batch.size() < Math.max(1, Math.min(100, config.getBatchSize()))) {
+                    byte[] next = queue.peek(); if (next == null || bytes + next.length > 1024 * 1024) break;
+                    next = queue.poll(); if (next == null) break; batch.add(next); bytes += next.length;
+                }
+                sendBatch(batch);
+            }
+        } catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+    }
+    private void sendBatch(List<byte[]> batch) {
+        int converted = 0;
+        try {
+            List<Map<String, Object>> resourceSpans = new ArrayList<>();
+            for (byte[] bytes : batch) {
+                Map<String, Object> rs = convertTrace(objectMapper.readValue(bytes, DistributedTrace.class));
+                if (rs != null) { resourceSpans.add(rs); converted++; }
+                else droppedCount.incrementAndGet();
+            }
+            if (converted == 0) return;
+            var response = webClient.post().uri(config.getEndpoint()).contentType(MediaType.APPLICATION_JSON)
+                    .headers(headers -> config.getHeaders().forEach(headers::set))
+                    .bodyValue(objectMapper.writeValueAsString(Map.of("resourceSpans", resourceSpans)))
+                    .retrieve().toEntity(String.class).timeout(Duration.ofMillis(Math.max(100, config.getTimeoutMs()))).block();
+            if (response != null && response.getBody() != null && !response.getBody().isBlank()
+                    && objectMapper.readTree(response.getBody()).path("partialSuccess").path("rejectedSpans").asLong() > 0) {
+                failedCount.addAndGet(converted); return;
+            }
+            exportedCount.addAndGet(converted);
+        } catch (Exception error) { failedCount.addAndGet(batch.size()); }
+        finally { batch.forEach(this::release); }
     }
 
     // ==================== OTLP 转换 ====================
@@ -321,52 +309,13 @@ public class OtlpTraceExporter {
 
     @PreDestroy
     public void shutdown() {
-        if (!shutdownComplete.compareAndSet(false, true)) {
-            return;
-        }
-        // 尽力冲刷队列中剩余数据（trace 可容忍丢失，只给一次同步机会）
-        List<DistributedTrace> remaining = new ArrayList<>();
-        queue.drainTo(remaining);
-        if (!remaining.isEmpty()) {
-            try {
-                List<Map<String, Object>> resourceSpans = new ArrayList<>();
-                for (DistributedTrace trace : remaining) {
-                    Map<String, Object> rs = convertTrace(trace);
-                    if (rs != null) {
-                        resourceSpans.add(rs);
-                    }
-                }
-                if (!resourceSpans.isEmpty()) {
-                    webClient.post()
-                            .uri(config.getEndpoint())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .headers(h -> config.getHeaders().forEach(h::set))
-                            .bodyValue(objectMapper.writeValueAsString(Map.of("resourceSpans", resourceSpans)))
-                            .retrieve()
-                            .bodyToMono(Void.class)
-                            .timeout(Duration.ofSeconds(3))
-                            .block();
-                    exportedCount.addAndGet(remaining.size());
-                }
-            } catch (Exception e) {
-                failedCount.addAndGet(remaining.size());
-                log.warn("Failed to flush {} traces on OTLP exporter shutdown: {}",
-                        remaining.size(), e.getMessage());
-            }
-        }
-
-        executor.shutdown();
-        try {
-            if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-        log.info("OtlpTraceExporter shutdown complete. Stats: exported={}, dropped={}, failed={}",
-                exportedCount.get(), droppedCount.get(), failedCount.get());
+        synchronized (queue) { if (!shutdownComplete.compareAndSet(false, true)) return; }
+        executor.shutdownNow();
+        try { executor.awaitTermination(3, TimeUnit.SECONDS); } catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+        byte[] bytes; while ((bytes = queue.poll()) != null) { release(bytes); droppedCount.incrementAndGet(); }
+        pool.dispose();
     }
+    public long getRetainedBytes() { return retainedBytes.get(); }
 
     public long getExportedCount() {
         return exportedCount.get();
