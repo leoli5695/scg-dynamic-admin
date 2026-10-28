@@ -214,7 +214,8 @@ public class RateLimitResetRefresher {
             }
 
             // Reset local caches based on strategy type
-            resetLocalCaches(strategyId, strategyType, scope, routeId);
+            String keyPrefix = command.get("keyPrefix") instanceof String prefix ? prefix : null;
+            resetLocalCaches(strategyId, strategyType, scope, routeId, keyPrefix);
 
             log.info("Rate limit counters reset completed for strategy: {}", strategyId);
 
@@ -227,10 +228,14 @@ public class RateLimitResetRefresher {
      * Reset local rate limiter caches.
      * Clears cache entries matching the strategy's key pattern.
      */
-    private void resetLocalCaches(String strategyId, String strategyType, String scope, String routeId) {
+    private void resetLocalCaches(String strategyId, String strategyType, String scope, String routeId, String keyPrefix) {
         // Reset HybridRateLimiterFilter cache (for RATE_LIMITER type)
         if (hybridRateLimiterFilter != null && !"MULTI_DIM_RATE_LIMITER".equals(strategyType)) {
             Set<String> keysToReset = buildHybridCacheKeyPattern(strategyId, scope, routeId);
+            if (keyPrefix != null) {
+                keysToReset = keysToReset.stream().map(pattern -> keyPrefix + pattern.substring("rate_limit:".length()))
+                        .collect(java.util.stream.Collectors.toSet());
+            }
             hybridRateLimiterFilter.invalidateCache(keysToReset);
             log.info("HybridRateLimiter cache reset for strategy: {}, keys cleared: {}", strategyId, keysToReset.size());
         }
@@ -238,6 +243,11 @@ public class RateLimitResetRefresher {
         // Reset MultiDimRateLimiterFilter cache (for MULTI_DIM_RATE_LIMITER type)
         if (multiDimRateLimiterFilter != null && "MULTI_DIM_RATE_LIMITER".equals(strategyType)) {
             Set<String> keysToReset = buildMultiDimCacheKeyPattern(scope, routeId);
+            if (keyPrefix != null) {
+                keysToReset = keysToReset.stream().map(pattern -> keyPrefix + pattern.substring("multi_rate:".length()))
+                        .collect(java.util.stream.Collectors.toSet());
+            }
+            keysToReset.add((keyPrefix != null ? keyPrefix : "multi_rate:") + strategyId + ":*");
             multiDimRateLimiterFilter.invalidateCache(keysToReset);
             log.info("MultiDimRateLimiter cache reset for strategy: {}, keys cleared: {}", strategyId, keysToReset.size());
         }
@@ -282,8 +292,9 @@ public class RateLimitResetRefresher {
         Set<String> patterns = new java.util.HashSet<>();
 
         if ("GLOBAL".equals(scope)) {
-            // Global strategy: clear all multi_rate keys
-            patterns.add("multi_rate:*");
+            for (String dimension : java.util.List.of("global", "tenant", "user", "ip")) {
+                patterns.add("multi_rate:" + dimension + ":*");
+            }
             log.info("Global multi-dim strategy cache reset pattern: {}", patterns);
         } else if (routeId != null && !routeId.isEmpty()) {
             // Route-specific: clear keys for specific route

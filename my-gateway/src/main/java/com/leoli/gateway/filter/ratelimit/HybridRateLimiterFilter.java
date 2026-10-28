@@ -140,23 +140,27 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
                         if (!result.isShouldFallback()) {
                             // Rate limit exceeded (Redis working correctly)
                             log.warn("Redis rate limit exceeded for key: {}, QPS: {}, burstCapacity: {}", rateLimitKey, config.qps, config.burstCapacity);
-                            return GatewayResponseHelper.writeRateLimited(exchange.getResponse(), config.burstCapacity, config.windowSizeMs);
+                            return GatewayResponseHelper.writeRateLimited(exchange.getResponse(), totalCapacity(config.qps, config.burstCapacity), config.windowSizeMs);
                         }
                         // Redis unavailable, fall through to local limiter
                         log.info("Redis unavailable for key: {}, falling back to local limiter", rateLimitKey);
-                        return applyLocalRateLimiting(exchange, chain, routeId, rateLimitKey, config);
+                        return applyLocalRateLimiting(exchange, chain, routeId, rateLimitKey, config, true);
                     });
         }
 
         // 3. Fallback to local rate limiting with shadow quota
-        return applyLocalRateLimiting(exchange, chain, routeId, rateLimitKey, config);
+        return applyLocalRateLimiting(exchange, chain, routeId, rateLimitKey, config,
+                redisLimitEnabled && hasDistributedRateLimitLicense
+                        && (!shadowQuotaManager.isRedisHealthy() || shadowQuotaManager.getRecoveryProgress() < 100
+                        || redisHealthChecker == null || !redisHealthChecker.isRedisAvailableForRateLimiting()));
     }
 
     /**
      * Local rate limiting with shadow-quota degradation.
      */
     private Mono<Void> applyLocalRateLimiting(ServerWebExchange exchange, GatewayFilterChain chain,
-                                              String routeId, String rateLimitKey, RateLimitConfig config) {
+                                              String routeId, String rateLimitKey, RateLimitConfig config,
+                                              boolean distributedDegraded) {
         if (log.isDebugEnabled()) {
             log.debug("Using local rate limiting for key: {}", rateLimitKey);
         }
@@ -164,7 +168,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
         // Get shadow quota for graceful degradation
         long localQuota = config.qps;
         String localKey = rateLimitKey;
-        if (shadowQuotaEnabled && !shadowQuotaManager.isRedisHealthy()) {
+        if (shadowQuotaEnabled && distributedDegraded) {
             localQuota = shadowQuotaManager.getShadowQuota(routeId, config.qps);
             // FIX (node quota treated as per-client quota): the shadow quota is the budget
             // for THIS NODE across ALL clients of the route. It was previously applied to
@@ -172,7 +176,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
             // Share one window per route+strategy instead.
             localKey = config.keyPrefix
                     + (config.strategyId != null && !config.strategyId.isEmpty() ? config.strategyId + ":" : "")
-                    + "shadow:" + routeId;
+                    + "shadow:" + ("GLOBAL".equalsIgnoreCase(config.scope) ? "global" : routeId);
             if (log.isDebugEnabled()) {
                 log.debug("Using shadow quota for route {}: {} (configured: {})", routeId, localQuota, config.qps);
             }
@@ -187,7 +191,7 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         } else {
             log.warn("Local rate limit exceeded for key: {}, quota: {}", localKey, localQuota);
-            return GatewayResponseHelper.writeRateLimited(exchange.getResponse(), config.qps, config.windowSizeMs, 1);
+            return GatewayResponseHelper.writeRateLimited(exchange.getResponse(), window.getTotalCapacity(), config.windowSizeMs);
         }
     }
 
@@ -258,28 +262,25 @@ public class HybridRateLimiterFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * Get or create rate limiter window
-     */
-    private com.leoli.gateway.util.RateLimiterWindow getOrCreateWindow(String key, RateLimitConfig config) {
-        return rateLimiterCache.get(key, k ->
-                new com.leoli.gateway.util.RateLimiterWindow(config.qps, config.burstCapacity, config.windowSizeMs));
-    }
-
-    /**
      * Get or create rate limiter window with custom quota (for shadow quota support)
      */
     private com.leoli.gateway.util.RateLimiterWindow getOrCreateWindowWithQuota(String key, int quota, RateLimitConfig config) {
         // Use shadow quota for the window, but keep original burst capacity ratio
-        int burstCapacity = (int) (quota * ((double) config.burstCapacity / config.qps));
-        // FIX (shadow quota ignored for existing windows): Caffeine get() only builds on
-        // miss, so a window created with the full QPS kept the stale quota forever after
-        // Redis failed. Recreate the window whenever the effective quota changes.
-        com.leoli.gateway.util.RateLimiterWindow window = rateLimiterCache.getIfPresent(key);
-        if (window == null || window.getMaxRequests() != quota) {
-            window = new com.leoli.gateway.util.RateLimiterWindow(quota, Math.max(quota, burstCapacity), config.windowSizeMs);
-            rateLimiterCache.put(key, window);
-        }
-        return window;
+        int burstCapacity = config.qps > 0
+                ? (int) Math.min(Integer.MAX_VALUE, Math.max(0L, (long) quota * config.burstCapacity / config.qps)) : 0;
+        // Serialize first creation and updates per key; cold-cache concurrent requests
+        // must acquire from the same window. All capacity settings participate in updates.
+        return rateLimiterCache.asMap().compute(key, (k, window) -> {
+            if (window == null || window.getMaxRequests() != quota
+                    || window.getBurstCapacity() != burstCapacity || window.getWindowSizeMs() != config.windowSizeMs) {
+                return new RateLimiterWindow(quota, burstCapacity, config.windowSizeMs);
+            }
+            return window;
+        });
+    }
+
+    private static int totalCapacity(int qps, int burst) {
+        return (int) Math.min(Integer.MAX_VALUE, (long) qps + Math.max(0, burst));
     }
 
     /**

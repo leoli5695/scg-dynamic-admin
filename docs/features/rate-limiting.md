@@ -6,6 +6,26 @@
 
 ## Overview
 
+Capacity within a window is `qps + burstCapacity`; `burstCapacity` is extra
+capacity, and zero means no extra requests. Redis uses a sliding window. Local
+fallback uses an atomic fixed window, so its window boundaries differ from Redis.
+
+- A GLOBAL hybrid strategy with `keyType=route` shares one counter across routes.
+  With `combined`, clients share their own counter across routes instead.
+- Multi-dimensional strategies namespace counters by strategy ID. GLOBAL scope
+  shares each dimension across routes; ROUTE scope keeps route counters separate.
+- Enabled tenant/user dimensions count missing identities in a shared anonymous
+  bucket. Combined identity resolution accepts verified authentication attributes;
+  custom header identities require an explicit header configuration.
+- Local windows update atomically when quota, burst, or duration changes. Redis
+  outage and recovery use local budgets; global hybrid shadow budgets remain shared
+  across routes. Multi-dimensional fallback divides quotas among known gateway nodes.
+- Local fallback is approximate across a cluster, including window boundaries,
+  recovery traffic splitting, and minimum per-node quotas. Strict cluster-wide
+  coordination requires Redis availability.
+- Counter resets include strategy IDs and custom prefixes. GLOBAL multi-dimensional
+  resets preserve other strategies' namespaced counters.
+
 Gateway uses a hybrid rate limiting architecture:
 - **Redis Rate Limiting**: Distributed scenarios, multi-instance shared counters
 - **Local Rate Limiting**: Automatic fallback when Redis fails

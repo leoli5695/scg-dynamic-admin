@@ -346,10 +346,10 @@ class MultiDimRateLimiterFilterTest {
                     .expectComplete()
                     .verify();
 
-            // No verified tenant -> the tenant dimension is skipped rather than keyed on a
-            // value the caller chose, which would let it mint unlimited fresh buckets.
-            verify(distributedRateLimiter, never())
-                    .tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong());
+            // No verified tenant -> charge the shared anonymous bucket, never the
+            // client-selected tenant and never skip the configured dimension.
+            verify(distributedRateLimiter)
+                    .tryAcquireReactive(endsWith(":anonymous"), eq(50), anyInt(), anyLong());
         }
     }
 

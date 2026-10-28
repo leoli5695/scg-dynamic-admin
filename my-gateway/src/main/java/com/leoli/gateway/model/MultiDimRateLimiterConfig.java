@@ -17,6 +17,9 @@ public class MultiDimRateLimiterConfig {
 
     private boolean enabled = false;
 
+    private String strategyId;
+    private String scope = "ROUTE";
+
     // ============== Global Quota ==============
     private QuotaConfig globalQuota = new QuotaConfig();
 

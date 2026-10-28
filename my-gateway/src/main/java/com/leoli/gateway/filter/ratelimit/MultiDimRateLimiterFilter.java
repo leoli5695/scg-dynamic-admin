@@ -28,6 +28,7 @@ import reactor.core.publisher.Mono;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -113,7 +114,9 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
                 .flatMap(result -> {
                     if (result.isAllowed()) {
                         // Add rate limit headers
-                        GatewayResponseHelper.addRateLimitHeaders(exchange.getResponse(), result.getMinRemaining(), result.getMinRemaining());
+                        if (result.getMinLimit() != Integer.MAX_VALUE) {
+                            GatewayResponseHelper.addRateLimitHeaders(exchange.getResponse(), result.getMinLimit(), result.getMinRemaining());
+                        }
                         return chain.filter(exchange);
                     }
                     log.warn("Multi-dim rate limit exceeded - routeId: {}, level: {}, key: {}",
@@ -150,16 +153,20 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
     private List<DimensionKey> buildDimensionKeys(String routeId, String tenantId, String userId, String clientIp, MultiDimRateLimiterConfig config) {
         List<DimensionKey> keys = new ArrayList<>();
         String prefix = config.getKeyPrefix();
+        if (config.getStrategyId() != null && !config.getStrategyId().isBlank()) {
+            prefix += config.getStrategyId() + ":";
+        }
+        String scopeKey = "GLOBAL".equalsIgnoreCase(config.getScope()) ? "global" : routeId;
 
         // Global dimension
         if (config.getGlobalQuota().isEnabled()) {
-            String key = prefix + "global:" + routeId;
+            String key = prefix + "global:" + scopeKey;
             keys.add(new DimensionKey("GLOBAL", key, config.getGlobalQuota()));
         }
 
         // Tenant dimension
-        if (config.getTenantQuota().isEnabled() && tenantId != null) {
-            String key = prefix + "tenant:" + routeId + ":" + tenantId;
+        if (config.getTenantQuota().isEnabled()) {
+            String key = prefix + "tenant:" + scopeKey + ":" + (tenantId != null ? tenantId : "anonymous");
             MultiDimRateLimiterConfig.QuotaConfig quota = config.getTenantQuota();
 
             // Check for tenant-specific limit
@@ -178,14 +185,14 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         }
 
         // User dimension
-        if (config.getUserQuota().isEnabled() && userId != null) {
-            String key = prefix + "user:" + routeId + ":" + (tenantId != null ? tenantId : "default") + ":" + userId;
+        if (config.getUserQuota().isEnabled()) {
+            String key = prefix + "user:" + scopeKey + ":" + (tenantId != null ? tenantId : "default") + ":" + (userId != null ? userId : "anonymous");
             keys.add(new DimensionKey("USER", key, config.getUserQuota()));
         }
 
         // IP dimension
         if (config.getIpQuota().isEnabled() && clientIp != null) {
-            String key = prefix + "ip:" + routeId + ":" + (tenantId != null ? tenantId : "default") + ":" + clientIp;
+            String key = prefix + "ip:" + scopeKey + ":" + (tenantId != null ? tenantId : "default") + ":" + clientIp;
             keys.add(new DimensionKey("IP", key, config.getIpQuota()));
         }
 
@@ -244,6 +251,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
                     }
 
                     result.setMinRemaining(Math.min(result.getMinRemaining(), checkResult.getRemaining()));
+                    result.setMinLimit(Math.min(result.getMinLimit(), totalCapacity(dimKey.getQuotaConfig())));
                 })
                 // FIRST_HIT: stop at the first denied dimension (previous loop returned immediately)
                 .takeWhile(outcome -> !("FIRST_HIT".equals(rejectStrategy) && !outcome.checkResult().isAllowed()))
@@ -311,15 +319,19 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
      * Apply the local rate limiter window (shared utility class) and fill the result.
      */
     private void applyLocalWindow(CheckResult result, String key, MultiDimRateLimiterConfig.QuotaConfig quota) {
-        // FIX (stale window): the cache key must include the quota parameters. Previously it
-        // was keyed only by the business dimension, so a RateLimiterWindow created under an
-        // old qps/burst/windowSize kept being reused after the strategy was updated - the new
-        // limits never took effect until the entry expired (up to 1h). Folding the params into
-        // the key makes an updated quota resolve to a fresh window immediately.
-        String windowKey = key + "|q=" + quota.getQps() + "|b=" + quota.getBurstCapacity()
-                + "|w=" + quota.getWindowSizeMs();
-        com.leoli.gateway.util.RateLimiterWindow window = rateLimiterCache.get(windowKey,
-                k -> new com.leoli.gateway.util.RateLimiterWindow(quota.getQps(), quota.getBurstCapacity(), quota.getWindowSizeMs()));
+        // Replace the window atomically on configuration changes. Encoding quota
+        // parameters in the key would resurrect an old counter when reverting a change.
+        int nodes = shadowQuotaEnabled && redisLimitEnabled ? Math.max(1, shadowQuotaManager.getCachedNodeCount()) : 1;
+        int localQps = quota.getQps() > 0 ? Math.max(1, quota.getQps() / nodes) : 0;
+        int localBurst = Math.max(0, quota.getBurstCapacity()) / nodes;
+        RateLimiterWindow window = rateLimiterCache.asMap().compute(key, (k, current) -> {
+            if (current == null || current.getMaxRequests() != localQps
+                    || current.getBurstCapacity() != localBurst
+                    || current.getWindowSizeMs() != quota.getWindowSizeMs()) {
+                return new RateLimiterWindow(localQps, localBurst, quota.getWindowSizeMs());
+            }
+            return current;
+        });
 
         result.setAllowed(window.tryAcquire());
         result.setRemaining(window.getRemaining());
@@ -335,9 +347,11 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         // keySource takes precedence over tenantIdSource for determining extraction strategy
         // This allows simpler configuration when using header-based tenant identification
         String source = config.getKeySource();
-        if (source == null || source.isEmpty() || "combined".equals(source)) {
+        if (source == null || source.isEmpty()) {
             source = config.getTenantIdSource();
         }
+
+        source = source == null ? "combined" : source.toLowerCase(Locale.ROOT);
 
         switch (source) {
             case "api_key_metadata":
@@ -394,7 +408,8 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
      */
     private String extractUserId(ServerWebExchange exchange, MultiDimRateLimiterConfig config) {
         Map<String, Object> attrs = exchange.getAttributes();
-        String source = config.getUserIdSource();
+        String source = config.getUserIdSource() == null ? "combined"
+                : config.getUserIdSource().toLowerCase(Locale.ROOT);
 
         switch (source) {
             case "jwt_subject":
@@ -413,15 +428,17 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
 
             case "combined":
             default:
-                // Try jwt_subject -> header
+                // Combined resolution accepts only identities established by authentication.
                 subject = (String) attrs.get("jwt_subject");
                 if (subject != null) {
                     return subject;
                 }
 
-                String userHeader = exchange.getRequest().getHeaders().getFirst(config.getHeaderNames().getUserIdHeader());
-                if (userHeader != null && !userHeader.isEmpty()) {
-                    return userHeader;
+                for (String identityKey : List.of("auth_user", "oauth2_username", "auth_access_key", "api_key")) {
+                    Object identity = attrs.get(identityKey);
+                    if (identity != null && !identity.toString().isBlank()) {
+                        return identity.toString();
+                    }
                 }
                 break;
         }
@@ -435,7 +452,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
      */
     private Mono<Void> rejectRequest(ServerWebExchange exchange, RateCheckResult result) {
         MultiDimRateLimiterConfig.QuotaConfig exceededQuota = result.getExceededQuota();
-        int burstCapacity = exceededQuota != null ? exceededQuota.getBurstCapacity() : 100;
+        int burstCapacity = exceededQuota != null ? totalCapacity(exceededQuota) : 100;
         long windowSizeMs = exceededQuota != null ? exceededQuota.getWindowSizeMs() : 1000;
 
         // Calculate retryAfter based on window size, minimum 1 second
@@ -478,6 +495,10 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         } else {
             return (windowMs / 3600000) + " h";
         }
+    }
+
+    private static int totalCapacity(MultiDimRateLimiterConfig.QuotaConfig quota) {
+        return (int) Math.min(Integer.MAX_VALUE, (long) quota.getQps() + Math.max(0, quota.getBurstCapacity()));
     }
 
     /**
@@ -587,6 +608,7 @@ public class MultiDimRateLimiterFilter implements GlobalFilter, Ordered {
         private String exceededKey;
         private MultiDimRateLimiterConfig.QuotaConfig exceededQuota;
         private int minRemaining;
+        private int minLimit = Integer.MAX_VALUE;
         private List<CheckResult> totalResults = new ArrayList<>();
     }
 }

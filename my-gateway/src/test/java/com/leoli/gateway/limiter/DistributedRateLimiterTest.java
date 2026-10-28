@@ -55,8 +55,8 @@ class DistributedRateLimiterTest {
             assertTrue(result.isAllowed());
             assertTrue(result.isRedisAvailable());
             assertFalse(result.isShouldFallback());
-            // allowed(burstCapacity)：2-参数重载的 burstCapacity 默认 = maxRequests * 2 = 200
-            assertEquals(200, result.getRemainingRequests());
+            // The positive Lua result encodes the actual remaining count plus one.
+            assertEquals(0, result.getRemainingRequests());
         }
 
         @Test

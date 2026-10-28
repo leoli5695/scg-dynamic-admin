@@ -311,9 +311,9 @@ public class RedisConfig {
      */
     @Bean
     public DefaultRedisScript<Long> rateLimitScript() {
-        // FIX (M2): ZSET member uses INCR sequence number for guaranteed uniqueness
-        // Before: `now .. '-' .. math.random(100000)` - collision risk in high QPS
-        // After: `now .. '-' .. INCR(key:seq)` - guaranteed unique per window
+        // Access only the declared ZSET key: a derived sequence key may live in
+        // another Redis Cluster slot. TIME plus count is unique inside this atomic
+        // script, including multiple acquisitions at the same microsecond.
         String script = """
             local key = KEYS[1]
             local windowSize = tonumber(ARGV[1])
@@ -337,26 +337,12 @@ public class RedisConfig {
             -- Get current request count in window
             local currentCount = redis.call('ZCARD', key)
 
-            -- Check if request is allowed
-            -- 优先级: 稳定流量(maxRequests) -> 突发流量(totalCapacity) -> 拒绝
-            if currentCount < maxRequests then
-                -- Within steady rate limit - allow request
-                -- FIX (M2): Use INCR sequence number instead of math.random()
-                -- Guaranteed unique member ID, prevents ZADD collision
-                local seq = redis.call('INCR', key .. ':seq')
-                redis.call('ZADD', key, now, now .. '-' .. seq)
-                -- Set TTL on sequence key (same as window TTL)
-                redis.call('EXPIRE', key .. ':seq', math.ceil(windowSize / 1000))
+            if currentCount < totalCapacity then
+                local member = time_result[1] .. ':' .. time_result[2] .. ':' .. currentCount
+                redis.call('ZADD', key, now, member)
                 redis.call('EXPIRE', key, math.ceil(windowSize / 1000))
-                return 1
-            elseif currentCount < totalCapacity then
-                -- Exceeds steady rate but within burst capacity - allow request
-                -- FIX (M2): Use INCR sequence number instead of math.random()
-                local seq = redis.call('INCR', key .. ':seq')
-                redis.call('ZADD', key, now, now .. '-' .. seq)
-                redis.call('EXPIRE', key .. ':seq', math.ceil(windowSize / 1000))
-                redis.call('EXPIRE', key, math.ceil(windowSize / 1000))
-                return 1
+                -- Positive result encodes remaining + 1; zero always means denied.
+                return totalCapacity - currentCount
             else
                 -- Total capacity exhausted - reject
                 return 0

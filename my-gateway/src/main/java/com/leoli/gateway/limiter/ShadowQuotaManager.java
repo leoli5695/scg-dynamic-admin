@@ -431,7 +431,7 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
         shadowQuotas.computeIfAbsent(routeId, k -> new AtomicLong(configQps / nodeCount));
         globalQpsSnapshots.computeIfAbsent(routeId, k -> new AtomicLong(configQps));
         if (strategyId != null && !strategyId.isEmpty()) {
-            routeStrategyIds.putIfAbsent(routeId, strategyId);
+            routeStrategyIds.put(routeId, strategyId);
         }
         log.debug("Registered route {} for shadow quota tracking, initial quota: {}",
                 routeId, configQps / nodeCount);
@@ -462,11 +462,14 @@ public class ShadowQuotaManager implements ApplicationListener<HeartbeatEvent> {
         AtomicLong quota = shadowQuotas.get(routeId);
         if (quota == null || quota.get() <= 0) {
             // No shadow quota calculated yet, use fair share based on cached node count
-            int nodeCount = cachedNodeCount.get();
+            int nodeCount = Math.max(1, cachedNodeCount.get());
             return Math.max(1, configQps / nodeCount);
         }
 
-        return quota.get();
+        // Snapshots may aggregate many clients and may predate a quota decrease or
+        // cluster resize. They must never raise the configured per-node ceiling.
+        long fairShare = Math.max(1, configQps / Math.max(1, cachedNodeCount.get()));
+        return Math.min(quota.get(), fairShare);
     }
 
     /**

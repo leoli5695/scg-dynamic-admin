@@ -77,13 +77,12 @@ class GatewayE2ETest {
         registerRoute("e2e-breaker", "/e2e/always-500", null);
         registerRoute("e2e-cache", "/e2e/cacheable", null);
 
-        // --- Rate limit strategy: window quota 2 per minute (qps=1, burst=0) ---
-        // Note: the explicit windowSizeMs key takes precedence over timeUnit; the local
-        // window capacity is qps + max(qps, burst) = 2, so the third request within the
-        // minute window must be rejected with 429.
+        // --- Rate limit strategy: window quota 2 per minute (qps=2, burst=0) ---
+        // The explicit windowSizeMs takes precedence over timeUnit. Zero burst adds
+        // no capacity: exactly two requests pass and the third is rejected.
         Map<String, Object> rateConfig = new HashMap<>();
         rateConfig.put("enabled", true);
-        rateConfig.put("qps", 1);
+        rateConfig.put("qps", 2);
         rateConfig.put("burstCapacity", 0);
         rateConfig.put("windowSizeMs", 60000);
         rateConfig.put("keyResolver", "ip");

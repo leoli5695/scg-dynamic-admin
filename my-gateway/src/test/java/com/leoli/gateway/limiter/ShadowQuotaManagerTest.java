@@ -47,6 +47,16 @@ class ShadowQuotaManagerTest {
     // Redis Health Tests
     // ============================================================
 
+    @Test void staleSnapshotCannotExceedNewQuotaOrNewClusterFairShare() {
+        shadowQuotaManager.registerRoute("r", "old-strategy", 100);
+        assertEquals(10, shadowQuotaManager.getShadowQuota("r", 10));
+        ReflectionTestUtils.setField(shadowQuotaManager, "cachedNodeCount", new AtomicInteger(4));
+        assertEquals(2, shadowQuotaManager.getShadowQuota("r", 10));
+        shadowQuotaManager.registerRoute("r", "new-strategy", 10);
+        java.util.Map<?, ?> ids = (java.util.Map<?, ?>) ReflectionTestUtils.getField(shadowQuotaManager, "routeStrategyIds");
+        assertEquals("new-strategy", ids.get("r"));
+    }
+
     @Nested
     @DisplayName("Redis Health Tests")
     class RedisHealthTests {

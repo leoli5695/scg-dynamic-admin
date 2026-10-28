@@ -73,11 +73,11 @@ public class RateLimitResetService {
         if ("MULTI_DIM_RATE_LIMITER".equals(strategyType)) {
             clearMultiDimRedisKeys(strategy);
         } else {
-            clearRedisKeys(strategyId, scope, routeId);
+            clearRedisKeys(strategy);
         }
 
         // 2. Publish reset command to Nacos for Gateway nodes
-        publishResetCommand(strategyId, strategyType, scope, routeId);
+        publishResetCommand(strategyId, strategyType, scope, routeId, strategy.getConfig());
 
         log.info("Rate limit counter reset completed for strategy: {}", strategyId);
     }
@@ -86,14 +86,21 @@ public class RateLimitResetService {
      * Clear Redis keys matching the strategy's pattern.
      * Uses SCAN to avoid blocking Redis on large key sets.
      */
-    private void clearRedisKeys(String strategyId, String scope, String routeId) {
+    private void clearRedisKeys(StrategyDefinition strategy) {
+        String strategyId = strategy.getStrategyId();
         if (redisTemplate == null) {
             log.warn("Redis template not available, skipping Redis key cleanup");
             return;
         }
 
         try {
-            Set<String> patterns = buildRedisKeyPatterns(strategyId, scope, routeId);
+            Set<String> patterns = buildRedisKeyPatterns(strategyId, strategy.getScope(), strategy.getRouteId());
+            String prefix = strategy.getConfig() != null && strategy.getConfig().get("keyPrefix") != null
+                    ? String.valueOf(strategy.getConfig().get("keyPrefix")) : RATE_LIMIT_KEY_PREFIX;
+            if (!RATE_LIMIT_KEY_PREFIX.equals(prefix)) {
+                patterns = patterns.stream().map(pattern -> prefix + pattern.substring(RATE_LIMIT_KEY_PREFIX.length()))
+                        .collect(Collectors.toSet());
+            }
             int totalDeleted = 0;
 
             for (String pattern : patterns) {
@@ -132,10 +139,14 @@ public class RateLimitResetService {
             }
 
             Set<String> patterns = new HashSet<>();
+            patterns.add(keyPrefix + strategy.getStrategyId() + ":*");
 
             if ("GLOBAL".equals(scope)) {
-                // Global strategy: clear all multi_rate keys across all routes
-                patterns.add(keyPrefix + "*");
+                // Legacy keys have no strategy id. Do not clear other strategies'
+                // new namespaced counters when resetting this global strategy.
+                for (String dimension : List.of("global", "tenant", "user", "ip")) {
+                    patterns.add(keyPrefix + dimension + ":*");
+                }
                 log.info("Global multi-dim strategy reset pattern: {}", patterns);
             } else if ("ROUTE".equals(scope) && routeId != null && !routeId.isEmpty()) {
                 // Route-specific strategy: clear keys for specific route
@@ -241,7 +252,8 @@ public class RateLimitResetService {
      * Publish reset command to Nacos for Gateway nodes.
      * Gateway nodes will listen and clear their local caches.
      */
-    private void publishResetCommand(String strategyId, String strategyType, String scope, String routeId) {
+    private void publishResetCommand(String strategyId, String strategyType, String scope, String routeId,
+                                     Map<String, Object> config) {
         try {
             // Build command payload
             Map<String, Object> command = new HashMap<>();
@@ -250,6 +262,9 @@ public class RateLimitResetService {
             command.put("scope", scope);
             command.put("routeId", routeId);
             command.put("timestamp", System.currentTimeMillis());
+            if (config != null && config.get("keyPrefix") != null) {
+                command.put("keyPrefix", config.get("keyPrefix"));
+            }
 
             String commandJson = objectMapper.writeValueAsString(command);
 

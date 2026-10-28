@@ -18,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -132,6 +133,19 @@ class RateLimitResetRefresherTest {
 
         verify(multiDimRateLimiterFilter, times(1)).invalidateCache(any());
         verify(hybridRateLimiterFilter, never()).invalidateCache(any());
+    }
+
+    @Test void customMultiDimPrefixResetsOnlyItsStrategyNamespaceAndLegacyKeys() {
+        stubCommand(null);
+        refresher.init();
+        stubCommand("{\"strategyId\":\"s1\",\"strategyType\":\"MULTI_DIM_RATE_LIMITER\","
+                + "\"scope\":\"GLOBAL\",\"keyPrefix\":\"custom:\",\"timestamp\":5000}");
+        refresher.periodicSyncResetCommand();
+        ArgumentCaptor<Set<String>> captor = ArgumentCaptor.forClass(Set.class);
+        verify(multiDimRateLimiterFilter).invalidateCache(captor.capture());
+        assertTrue(captor.getValue().contains("custom:s1:*"));
+        assertFalse(captor.getValue().contains("multi_rate:*"));
+        assertFalse(captor.getValue().contains("custom:*"));
     }
 
     @Test

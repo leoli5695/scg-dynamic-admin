@@ -542,8 +542,10 @@ class HybridRateLimiterFilterTest {
             lenient().when(strategyManager.getRateLimiterConfig(anyString())).thenReturn(config);
 
             lenient().when(redisHealthChecker.isRedisAvailableForRateLimiting()).thenReturn(true);
-            lenient().when(distributedRateLimiter.tryAcquireWithFallback(anyString(), anyInt(), anyInt(), anyLong()))
-                    .thenReturn(RateLimitResult.denied(0));
+            when(shadowQuotaManager.isRedisHealthy()).thenReturn(true);
+            when(shadowQuotaManager.getRecoveryProgress()).thenReturn(100);
+            when(distributedRateLimiter.tryAcquireReactive(anyString(), anyInt(), anyInt(), anyLong()))
+                    .thenReturn(Mono.just(RateLimitResult.denied(0)));
             // registerRoute is void, no need to mock;
 
             filter.filter(exchange, chain).block();
@@ -552,7 +554,7 @@ class HybridRateLimiterFilterTest {
             assertEquals(HttpStatus.TOO_MANY_REQUESTS, response.getStatusCode());
             assertTrue(response.getHeaders().containsKey("X-RateLimit-Limit"));
             assertTrue(response.getHeaders().containsKey("X-RateLimit-Remaining"));
-            assertEquals("100", response.getHeaders().getFirst("X-RateLimit-Limit"));
+            assertEquals("300", response.getHeaders().getFirst("X-RateLimit-Limit"));
             assertEquals("0", response.getHeaders().getFirst("X-RateLimit-Remaining"));
         }
     }

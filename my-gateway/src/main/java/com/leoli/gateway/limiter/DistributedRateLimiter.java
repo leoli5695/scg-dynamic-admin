@@ -38,13 +38,12 @@ public class DistributedRateLimiter {
         synchronized (this) {
             if (batchScript == null) {
                 String single = rateLimitScript.getScriptAsString();
-                String body = single.substring(single.indexOf("-- Use Redis TIME"))
-                        .replace("key .. ':seq'", "seqKey");
-                String script = "local function acquire(key, seqKey, windowSize, maxRequests, burstCapacity)\n"
+                String body = single.substring(single.indexOf("-- Use Redis TIME"));
+                String script = "local function acquire(key, windowSize, maxRequests, burstCapacity)\n"
                         + body + "\nend\nlocal results = {}\n"
-                        + "for i = 1, #KEYS / 2 do\n"
-                        + " local a = 2 + (i-1)*3\n local k = 1 + (i-1)*2\n"
-                        + " local result = acquire(KEYS[k], KEYS[k+1], tonumber(ARGV[a]), tonumber(ARGV[a+1]), tonumber(ARGV[a+2]))\n"
+                        + "for i = 1, #KEYS do\n"
+                        + " local a = 2 + (i-1)*3\n"
+                        + " local result = acquire(KEYS[i], tonumber(ARGV[a]), tonumber(ARGV[a+1]), tonumber(ARGV[a+2]))\n"
                         + " results[i] = result\n if result == 0 and ARGV[1] == '1' then break end\nend\nreturn results";
                 batchScript = new DefaultRedisScript<>(script, java.util.List.class);
             }
@@ -58,7 +57,7 @@ public class DistributedRateLimiter {
         java.util.List<String> args = new java.util.ArrayList<>();
         args.add(firstHit ? "1" : "0");
         for (LimitRequest request : requests) {
-            keys.add(request.key()); keys.add(request.key() + ":seq");
+            keys.add(request.key());
             args.add(Long.toString(request.windowMs())); args.add(Integer.toString(request.qps()));
             args.add(Integer.toString(request.burst()));
         }
@@ -69,8 +68,7 @@ public class DistributedRateLimiter {
                             || (!firstHit && values.size() != requests.size()))
                         throw new IllegalStateException("Invalid Redis batch result");
                     java.util.List<RateLimitResult> results = new java.util.ArrayList<>();
-                    for (int i = 0; i < values.size(); i++) results.add(((Number) values.get(i)).longValue() == 1
-                            ? RateLimitResult.allowed(requests.get(i).burst()) : RateLimitResult.denied(0));
+                    for (Object value : values) results.add(decodeResult(((Number) value).longValue()));
                     if (values.size() < requests.size() && results.getLast().isAllowed())
                         throw new IllegalStateException("Incomplete Redis batch result");
                     return results;
@@ -130,11 +128,11 @@ public class DistributedRateLimiter {
                 return RateLimitResult.fallback("Redis script returned null");
             }
 
-            boolean allowed = result == 1;
+            boolean allowed = result > 0;
 
             if (allowed) {
                 log.debug("Rate limit allowed for key: {}, maxRequests: {}, burstCapacity: {}", key, maxRequests, burstCapacity);
-                return RateLimitResult.allowed(burstCapacity);
+                return decodeResult(result);
             } else {
                 log.warn("Rate limit exceeded for key: {}", key);
                 return RateLimitResult.denied(0);
@@ -168,10 +166,10 @@ public class DistributedRateLimiter {
                                 String.valueOf(burstCapacity)))
                 .next()
                 .map(result -> {
-                    boolean allowed = result != null && result == 1L;
+                    boolean allowed = result != null && result > 0;
                     if (allowed) {
                         log.debug("Rate limit allowed for key: {}, maxRequests: {}, burstCapacity: {}", key, maxRequests, burstCapacity);
-                        return RateLimitResult.allowed(burstCapacity);
+                        return decodeResult(result);
                     } else {
                         log.warn("Rate limit exceeded for key: {}", key);
                         return RateLimitResult.denied(0);
@@ -197,6 +195,11 @@ public class DistributedRateLimiter {
     public RateLimitResult tryAcquireWithFallback(String key, int maxRequests, long windowSizeMs) {
         // Default burst capacity is 2x maxRequests
         return tryAcquireWithFallback(key, maxRequests, maxRequests * 2, windowSizeMs);
+    }
+
+    private static RateLimitResult decodeResult(long encoded) {
+        return encoded > 0 ? RateLimitResult.allowed((int) Math.min(Integer.MAX_VALUE, encoded - 1))
+                : RateLimitResult.denied(0);
     }
 
     /**
