@@ -85,6 +85,7 @@ prometheus/internal-token
 !**/.env.example
 
 # Application specific
+**/data/token-usage/
 gateway-admin/admin-err.log
 gateway-admin/admin.log
 gateway-admin/run.log

@@ -421,6 +421,10 @@ public class TokenQuotaService {
      */
     @Transactional
     public void recordTokenUsage(Map<String, Object> usageData) {
+        if (usageData.get("eventId") != null) {
+            recordTokenUsageBatch(List.of(usageData));
+            return;
+        }
         String tenantId = (String) usageData.get("tenantId");
         if (tenantId == null || tenantId.isEmpty()) {
             log.warn("No tenantId in usage data, skipping recording");
@@ -466,7 +470,7 @@ public class TokenQuotaService {
         log.debug("Recorded token usage for tenant {}: total={}", tenantId, history.getTotalTokens());
     }
 
-    /** One transaction and one JDBC batch; IDENTITY entities cannot provide batched inserts via saveAll. */
+    /** Fast JDBC batch with event-ID deduplication on replay or concurrent delivery. */
     @Transactional
     public void recordTokenUsageBatch(List<Map<String, Object>> records) {
         if (records.isEmpty() || records.size() > 32) throw new IllegalArgumentException("Batch must contain 1..32 records");
@@ -475,6 +479,9 @@ public class TokenQuotaService {
         for (Map<String, Object> row : records) {
             if (!(row.get("tenantId") instanceof String tenant) || tenant.isBlank())
                 throw new IllegalArgumentException("tenantId required");
+            Object eventId = row.get("eventId");
+            if (eventId != null && (!(eventId instanceof String text) || text.isBlank() || text.length() > 64))
+                throw new IllegalArgumentException("eventId must be a nonblank string of at most 64 characters");
             Object time = row.get("requestTime");
             LocalDateTime requestTime = time instanceof String text ? LocalDateTime.parse(text)
                     : time instanceof LocalDateTime date ? date : now;
@@ -484,12 +491,38 @@ public class TokenQuotaService {
                     Optional.ofNullable(asInt(row.get("totalTokens"))).orElse(0), row.get("instanceId"),
                     row.get("responseFormat"), asLong(row.get("latencyMs")), requestTime, now,
                     row.getOrDefault("usageStatus", "LEGACY"), row.getOrDefault("settlementStatus", "LEGACY"),
-                    row.get("provider"), row.get("serviceId"), asLong(row.get("chargedTokens")), asLong(row.get("reservedTokens"))});
+                    row.get("provider"), row.get("serviceId"), asLong(row.get("chargedTokens")), asLong(row.get("reservedTokens")), eventId});
         }
-        usageJdbc.batchUpdate("INSERT INTO token_usage_history (tenant_id,trace_id,route_id,model,prompt_tokens,"
+        String insert = "INSERT INTO token_usage_history (tenant_id,trace_id,route_id,model,prompt_tokens,"
                 + "completion_tokens,total_tokens,instance_id,response_format,latency_ms,request_time,created_at,"
-                + "usage_status,settlement_status,provider,service_id,charged_tokens,reserved_tokens)"
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows);
+                + "usage_status,settlement_status,provider,service_id,charged_tokens,reserved_tokens,event_id)"
+                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        List<Object[]> events = rows.stream().filter(row -> row[18] != null).toList();
+        List<Object[]> legacy = rows.stream().filter(row -> row[18] == null).toList();
+        try {
+            if (!events.isEmpty()) usageJdbc.batchUpdate(insert, events);
+        } catch (org.springframework.dao.DuplicateKeyException duplicate) {
+            // A JDBC batch may have already inserted some rows in this transaction. Locking reads
+            // also see concurrent commits under MySQL REPEATABLE READ, unlike snapshot reads.
+            for (Object[] row : events) {
+                if (alreadyRecorded(row)) continue;
+                try { usageJdbc.update(insert, row); }
+                catch (org.springframework.dao.DuplicateKeyException collision) {
+                    if (!alreadyRecorded(row)) throw collision;
+                }
+            }
+        }
+        // Legacy records have no replay identity. Insert them once, after the replayable batch.
+        if (!legacy.isEmpty()) usageJdbc.batchUpdate(insert, legacy);
+    }
+
+    private boolean alreadyRecorded(Object[] row) {
+        if (row[18] == null) return false;
+        List<String> tenants = usageJdbc.queryForList(
+                "SELECT tenant_id FROM token_usage_history WHERE event_id = ? FOR UPDATE", String.class, row[18]);
+        if (tenants.isEmpty()) return false;
+        if (!Objects.equals(tenants.get(0), row[0])) throw new IllegalArgumentException("eventId belongs to another tenant");
+        return true;
     }
 
     /** JSON 数字进 Map 后类型不定（Integer/Long），统一按 Number 取，避免强转 ClassCastException。 */

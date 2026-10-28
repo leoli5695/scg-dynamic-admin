@@ -23,6 +23,9 @@ public class TokenUsageHistoryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "event_id", length = 64, unique = true)
+    private String eventId;
+
     @Column(name = "usage_status", length = 20)
     private String usageStatus;
     @Column(name = "settlement_status", length = 20)

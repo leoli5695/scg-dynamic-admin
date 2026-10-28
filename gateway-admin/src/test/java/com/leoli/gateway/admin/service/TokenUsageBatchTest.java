@@ -27,7 +27,8 @@ class TokenUsageBatchTest {
                 response_format VARCHAR(20),latency_ms BIGINT,request_time TIMESTAMP NOT NULL,created_at TIMESTAMP NOT NULL)
                 """);
         new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(
-                new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-outcome.sql")).execute(source);
+                new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-outcome.sql"),
+                new org.springframework.core.io.ClassPathResource("sql/alter-token-usage-event-id.sql")).execute(source);
     }
     @Test void recordsNumbersUnicodeAndLifecycleFields() {
         tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(Map.of("tenantId", "租户", "traceId", "one",
@@ -60,5 +61,39 @@ class TokenUsageBatchTest {
         assertThrows(IllegalArgumentException.class, () -> service.recordTokenUsageBatch(List.of(Map.of("tenantId", "t"), Map.of())));
         assertThrows(IllegalArgumentException.class, () -> service.recordTokenUsageBatch(Collections.nCopies(33, Map.of("tenantId", "t"))));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM token_usage_history", Integer.class));
+    }
+    @Test void replayAndDuplicateWithinBatchAreRecordedOnce() {
+        var event = Map.<String, Object>of("tenantId", "t", "eventId", UUID.randomUUID().toString(), "totalTokens", 12);
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(event, event)));
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(event)));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM token_usage_history", Integer.class));
+        assertEquals(12, jdbc.queryForObject("SELECT SUM(total_tokens) FROM token_usage_history", Integer.class));
+    }
+    @Test void mixedLegacyAndReplayRecordsDoNotDuplicateLegacyRowsDuringRecovery() {
+        var event = Map.<String, Object>of("tenantId", "t", "eventId", "event-one");
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(event)));
+        tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(Map.of("tenantId", "legacy"), event,
+                Map.of("tenantId", "t", "eventId", "event-two"))));
+        assertEquals(3, jdbc.queryForObject("SELECT COUNT(*) FROM token_usage_history", Integer.class));
+    }
+    @Test void unrelatedUniqueConstraintStillRollsBackReplayableBatch() {
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> tx.executeWithoutResult(status ->
+                service.recordTokenUsageBatch(List.of(Map.of("tenantId", "t", "eventId", "one", "traceId", "dup"),
+                        Map.of("tenantId", "t", "eventId", "two", "traceId", "dup")))));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM token_usage_history", Integer.class));
+    }
+    @Test void concurrentDeliveryOfSameEventIsIdempotent() throws Exception {
+        var event = Map.<String, Object>of("tenantId", "t", "eventId", "concurrent-event", "totalTokens", 12);
+        var ready = new java.util.concurrent.CountDownLatch(2);
+        try (var workers = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            java.util.concurrent.Callable<Void> deliver = () -> {
+                ready.countDown(); assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS));
+                tx.executeWithoutResult(status -> service.recordTokenUsageBatch(List.of(event)));
+                return null;
+            };
+            var first = workers.submit(deliver); var second = workers.submit(deliver);
+            first.get(10, java.util.concurrent.TimeUnit.SECONDS); second.get(10, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM token_usage_history", Integer.class));
     }
 }

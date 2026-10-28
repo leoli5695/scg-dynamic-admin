@@ -184,6 +184,12 @@ gateway:
   # Gateway instance identifier (used for trace data and health status reporting)
   instance-id: ${GATEWAY_INSTANCE_ID:gateway-1}
 
+  # Mount this directory on persistent storage; each running gateway needs its own directory.
+  token-usage:
+    outbox-directory: ${GATEWAY_USAGE_OUTBOX_DIRECTORY:${user.dir}/data/token-usage/${gateway.instance-id}}
+    outbox-max-bytes: ${GATEWAY_USAGE_OUTBOX_MAX_BYTES:67108864}
+    outbox-max-records: ${GATEWAY_USAGE_OUTBOX_MAX_RECORDS:4096}
+
   # How often every refresher reconciles its configs against the config center.
   # This poll, not the change listener, is what carries console edits and deletions:
   # nacos-client 3.0.3 receives no pushes from nacos-server 2.5.4 (measured live - the
