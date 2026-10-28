@@ -30,6 +30,7 @@ import './App.premium.css';
 import { AntdStaticBridge } from './utils/antdStatic';
 
 const RouteDebugPage = lazy(() => import('./features/routes/debug'));
+const RequestJourneyPage = lazy(() => import('./features/request-journey'));
 const LoginPage = lazy(() => import('./features/auth/LoginPage'));
 const InstancesListPage = lazy(() => import('./features/instances/InstancesListPage'));
 const InstanceCreatePage = lazy(() => import('./features/instances/InstanceCreatePage'));
@@ -98,6 +99,7 @@ const AppRoutes: React.FC = () => (
           <Route path="services" element={<ServicesTab />} />
           <Route path="routes" element={<RoutesTab />} />
           <Route path="routes/:routeId/debug" element={<RouteDebugPage />} />
+          <Route path="trace/:traceId" element={<RequestJourneyPage />} />
           <Route path="plugins" element={<PluginsTab />} />
           <Route path="plugin_bindings" element={<PluginBindingsTab />} />
           <Route path="strategies" element={<StrategiesTab />} />

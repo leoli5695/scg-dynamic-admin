@@ -157,7 +157,8 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         // protocols and when all capture modes are disabled. Skip the response
         // decorator entirely in those cases and run the chain undecorated.
         boolean isStreaming = isWebSocketUpgrade(request) || isSseRequest(request);
-        boolean anyCaptureEnabled = captureErrors || captureSlow || captureAll;
+        boolean debug = Boolean.TRUE.equals(exchange.getAttribute(com.leoli.gateway.util.DebugTraceVerifier.TRUSTED_ATTR));
+        boolean anyCaptureEnabled = captureErrors || captureSlow || captureAll || debug;
         if (isStreaming || !anyCaptureEnabled) {
             return chain.filter(exchange)
                     .doFinally(signalType -> afterRequest(exchange, startTime, finalTraceId, null, null));
@@ -166,7 +167,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         // Decide before any body allocation. Error/slow metadata is still retained when
         // the body was not sampled, or when the concurrent capture budget is exhausted.
         long reservation = Math.max(0L, maxBodySize) * 4L;
-        if (ThreadLocalRandom.current().nextInt(100) >= bodySamplingRate || reservation == 0
+        if ((!debug && ThreadLocalRandom.current().nextInt(100) >= bodySamplingRate) || reservation == 0
                 || !reserveBodyBytes(reservation)) {
             return chain.filter(exchange)
                     .doFinally(signal -> afterRequest(exchange, startTime, finalTraceId, null, null));
@@ -339,6 +340,11 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
         boolean replayable = !isWebSocket && !isSse && (!mayHaveBody || completeBody);
 
         // Sampling logic
+        if (Boolean.TRUE.equals(exchange.getAttribute(com.leoli.gateway.util.DebugTraceVerifier.TRUSTED_ATTR))) {
+            captureTrace(exchange, startTime, traceId, requestBody, responseBody, duration, statusCode,
+                    isError, isSlow, replayType, replayable, "DEBUG");
+            return;
+        }
         int random = ThreadLocalRandom.current().nextInt(100);
 
         // Log trace check details (DEBUG level to avoid high-frequency logging)

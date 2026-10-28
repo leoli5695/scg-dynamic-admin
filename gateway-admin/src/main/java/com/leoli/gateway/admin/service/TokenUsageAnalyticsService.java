@@ -111,6 +111,15 @@ public class TokenUsageAnalyticsService {
         Page<TokenUsageHistoryEntity> p = repository.events(
                 from, to, instanceId, routeId, tenantId, model, unresolvedOnly,
                 PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 200)));
+        return eventPage(p);
+    }
+
+    public Map<String, Object> eventsByTrace(String instanceId, String traceId) {
+        return eventPage(new org.springframework.data.domain.PageImpl<>(
+                repository.findByInstanceIdAndTraceIdOrderByIdAsc(instanceId, traceId)));
+    }
+
+    private Map<String, Object> eventPage(Page<TokenUsageHistoryEntity> p) {
         List<Map<String, Object>> items = new ArrayList<>();
         for (TokenUsageHistoryEntity e : p.getContent()) {
             Map<String, Object> m = new LinkedHashMap<>();

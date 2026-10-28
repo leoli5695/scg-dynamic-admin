@@ -49,6 +49,10 @@ class TokenUsageExceptionQueryTest {
             assertEquals(3,unresolved.getTotalElements());
             assertEquals(2L, ((Number) repository.overview(from,to,null,null,null,null).getFirst()[8]).longValue());
             assertTrue(unresolved.stream().noneMatch(row -> "RECONCILED".equals(row.getUsageStatus())));
+            jdbc.update("UPDATE token_usage_history SET instance_id='gw-a',trace_id='exact-trace' WHERE id=1");
+            jdbc.update("UPDATE token_usage_history SET instance_id='gw-b',trace_id='exact-trace' WHERE id=2");
+            assertEquals(1,repository.findByInstanceIdAndTraceIdOrderByIdAsc("gw-a","exact-trace").size());
+            assertEquals(0,repository.findByInstanceIdAndTraceIdOrderByIdAsc("gw-a","exact").size());
         }
     }
 }

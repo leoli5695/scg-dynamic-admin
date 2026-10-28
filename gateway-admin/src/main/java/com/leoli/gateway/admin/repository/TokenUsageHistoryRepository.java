@@ -32,6 +32,7 @@ public interface TokenUsageHistoryRepository extends JpaRepository<TokenUsageHis
      * Find usage history by trace ID.
      */
     List<TokenUsageHistoryEntity> findByTraceId(String traceId);
+    List<TokenUsageHistoryEntity> findByInstanceIdAndTraceIdOrderByIdAsc(String instanceId, String traceId);
 
     /**
      * Find usage history by route ID.

@@ -15,6 +15,8 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { requestJourneyUrl } from '../../request-journey/links';
 import FilterWaterfallChart from './FilterWaterfallChart';
 import FilterExecutionDetailDrawer from './FilterExecutionDetailDrawer';
 import { useRequest } from '../../../hooks/useRequest';
@@ -49,6 +51,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
   open, trace, onClose, onJumpToDistributed, onNavigateToRoute,
 }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'formatted' | 'raw'>('formatted');
   const [requestBodyExpanded, setRequestBodyExpanded] = useState(false);
   const [responseBodyExpanded, setResponseBodyExpanded] = useState(false);
@@ -62,7 +65,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
   );
 
   const selectedTrace: RequestTrace | null = trace
-    ? { ...trace, filterChain: detail.data?.filterChain }
+    ? { ...trace, ...(detail.data?.id === trace.id ? detail.data : {}) }
     : null;
 
   const copyRequest = () => {
@@ -186,6 +189,10 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
         />
       )}
     >
+      {selectedTrace && (
+        <Button style={{ marginBottom: 16 }} disabled={!selectedTrace.instanceId}
+          onClick={() => { onClose(); navigate(requestJourneyUrl(selectedTrace.instanceId!, selectedTrace.traceId, selectedTrace.routeId)); }}>{t('journey.inspect')}</Button>
+      )}
       {selectedTrace && (
         <div>
           {detail.loading && <div style={{ textAlign: 'center', padding: 20 }}>Loading...</div>}

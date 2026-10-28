@@ -9,6 +9,7 @@ import { useRequest } from '../../../hooks/useRequest';
 import { useInstanceDetail } from '../../instance-detail/InstanceDetailContext';
 import type { RouteResponse } from '../../../types/route';
 import { debugDefaults, parseDebugHeaders } from './defaults';
+import { requestJourneyUrl, routeConfigurationUrl } from '../../request-journey/links';
 import './route-debug.css';
 
 const { Text, Title } = Typography;
@@ -72,6 +73,7 @@ function Workbench({ route }: { route: RouteResponse }) {
 
   const responseHeaders = meta?.headers ?? {};
   const traceId = Object.entries(responseHeaders).find(([name]) => name.toLowerCase() === 'x-trace-id')?.[1]?.[0];
+  const matchedRoute = Object.entries(responseHeaders).find(([name]) => name.toLowerCase() === 'x-gateway-route-id')?.[1]?.[0];
   const sse = Object.entries(responseHeaders).some(([name, values]) => name.toLowerCase() === 'content-type' && values.some((value) => value.includes('text/event-stream')));
   const gateway = instance.effectiveAccessUrl || instance.manualAccessUrl || instance.reportedAccessUrl || instance.discoveredAccessUrl || '';
 
@@ -119,6 +121,11 @@ function Workbench({ route }: { route: RouteResponse }) {
       <Card title={t('routes.debug_response')} extra={busy && <Spin size="small" />}>
         <Space wrap>{meta && <Tag color={meta.status! >= 400 ? 'red' : 'green'}>HTTP {meta.status}</Tag>}{meta?.firstByteMs !== undefined && <Text type="secondary">{t('routes.debug_first_byte')}: {meta.firstByteMs}ms</Text>}{completion?.durationMs !== undefined && <Text type="secondary">{t('routes.debug_duration')}: {completion.durationMs}ms</Text>}</Space>
         {traceId && <div className="route-debug-trace"><Text type="secondary">Trace ID: </Text><Text code copyable>{traceId}</Text></div>}
+        {traceId && <Space wrap style={{ marginBottom: 16 }}>
+          <Button type="primary" onClick={() => navigate(requestJourneyUrl(instanceId, traceId, route.id))}>{t('journey.inspect')}</Button>
+          <Button onClick={() => navigate(routeConfigurationUrl(instanceId, matchedRoute || route.id))}>{t('journey.openConfiguration')}</Button>
+        </Space>}
+        {matchedRoute && matchedRoute !== route.id && <Alert type="warning" showIcon title={t('journey.routeMismatch')} description={`${route.id} → ${matchedRoute}`} />}
         {error && <Alert type="error" showIcon title={error} />}
         {completion?.truncated && <Alert type="warning" showIcon title={t('routes.debug_truncated')} />}
         {sse && completion && !error && !output.includes('[DONE]') && route.category === 'AI' && <Alert type="warning" showIcon title={t('routes.debug_incomplete_stream')} />}

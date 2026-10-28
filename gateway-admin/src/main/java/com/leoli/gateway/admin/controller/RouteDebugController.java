@@ -30,6 +30,8 @@ public class RouteDebugController {
     private final RouteRepository routes;
     private final GatewayInstanceService instances;
     private final RouteDebugAuthService authentication;
+    @org.springframework.beans.factory.annotation.Value("${gateway.admin.internal-token:${GATEWAY_INTERNAL_TOKEN:}}")
+    private String internalToken;
     private final OkHttpClient client = new OkHttpClient.Builder()
             .followRedirects(false).followSslRedirects(false).build();
     private final ExecutorService workers = new ThreadPoolExecutor(4, 4, 0, TimeUnit.SECONDS,
@@ -79,6 +81,7 @@ public class RouteDebugController {
             try { request = authentication.authenticate(request, instanceId, input.authPolicyId(), input.credential(), input.credentialId()); }
             catch (IllegalArgumentException e) { throw badRequest("Invalid authentication credential or header"); }
         }
+        request = signDebugRequest(request, instanceId);
         servletResponse.setHeader("X-Accel-Buffering", "no");
         servletResponse.setHeader("Cache-Control", "no-cache, no-transform");
         int timeout = input.timeoutSeconds() == null ? 30 : input.timeoutSeconds();
@@ -125,6 +128,21 @@ public class RouteDebugController {
             return builder.method(method, payload).build();
         } catch (ResponseStatusException e) { throw e; }
         catch (IllegalArgumentException | NullPointerException e) { throw badRequest("Invalid request path or headers"); }
+    }
+
+    private Request signDebugRequest(Request request, String instanceId) {
+        var builder = request.newBuilder().removeHeader("X-Gateway-Debug-Trace");
+        if (internalToken == null || internalToken.isBlank()) return builder.build();
+        try {
+            String timestamp = Long.toString(System.currentTimeMillis());
+            String nonce = UUID.randomUUID().toString().replace("-", "");
+            String path = request.url().encodedPath() + (request.url().encodedQuery() == null ? "" : "?" + request.url().encodedQuery());
+            String payload = instanceId + "\n" + request.method() + "\n" + path + "\n" + timestamp + "\n" + nonce;
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(internalToken.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return builder.header("X-Gateway-Debug-Trace", timestamp + ":" + nonce + ":"
+                    + HexFormat.of().formatHex(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)))).build();
+        } catch (java.security.GeneralSecurityException failure) { throw new IllegalStateException("Cannot sign debug request", failure); }
     }
 
     private void execute(Call call, SseEmitter emitter) {

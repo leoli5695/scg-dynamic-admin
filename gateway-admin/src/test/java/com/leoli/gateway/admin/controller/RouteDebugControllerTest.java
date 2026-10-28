@@ -27,6 +27,7 @@ class RouteDebugControllerTest {
     private final RouteRepository routes = mock(RouteRepository.class);
     private final GatewayInstanceService instances = mock(GatewayInstanceService.class);
     private final AtomicReference<String> received = new AtomicReference<>();
+    private final AtomicReference<String> receivedDebugSignature = new AtomicReference<>();
     private RouteDebugController controller;
     private HttpServer gateway;
     private MockMvc mvc;
@@ -35,6 +36,7 @@ class RouteDebugControllerTest {
     void setUp() throws Exception {
         gateway = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         gateway.createContext("/hello", exchange -> {
+            receivedDebugSignature.set(exchange.getRequestHeaders().getFirst("X-Gateway-Debug-Trace"));
             received.set(exchange.getRequestMethod() + " " + exchange.getRequestURI() + " "
                     + exchange.getRequestHeaders().getFirst("Authorization") + " "
                     + new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
@@ -86,6 +88,18 @@ class RouteDebugControllerTest {
         String stream = execute(new RouteDebugController.DebugRequest("GET", "/unauthorized", Map.of(), "", 3));
         assertTrue(stream.contains("\"status\":401"));
         assertTrue(stream.contains("event:complete"));
+    }
+
+    @Test
+    void signsDebugRequestsForOnlyTheSelectedInstanceAndPath() throws Exception {
+        org.springframework.test.util.ReflectionTestUtils.setField(controller,"internalToken","test-shared-secret");
+        execute(new RouteDebugController.DebugRequest("GET","/hello?a=1",Map.of("X-Gateway-Debug-Trace","forged"),"",3));
+        String[] parts = receivedDebugSignature.get().split(":");
+        assertEquals(3,parts.length);
+        var mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        mac.init(new javax.crypto.spec.SecretKeySpec("test-shared-secret".getBytes(StandardCharsets.UTF_8),"HmacSHA256"));
+        assertEquals(parts[2],java.util.HexFormat.of().formatHex(mac.doFinal(
+                ("instance-a\nGET\n/hello?a=1\n"+parts[0]+"\n"+parts[1]).getBytes(StandardCharsets.UTF_8))));
     }
 
     @Test

@@ -103,6 +103,9 @@ export const getTracesByTimeRange = (
 export const getTraceById = (id: number, options?: RequestOptions) =>
   httpClient.get<RequestTrace>(`${BASE}/${id}`, options);
 
+export const getTraceByTraceId = (traceId: string, options?: RequestOptions) =>
+  httpClient.get<RequestTrace>(`${BASE}/trace-id/${encodeURIComponent(traceId)}`, options);
+
 /**
  * DELETE /api/traces/old — purge traces older than daysToKeep (default 7).
  * Note: the backend does NOT accept instanceId here (global purge).

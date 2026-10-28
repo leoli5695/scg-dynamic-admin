@@ -6,6 +6,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Checkbox, Col, DatePicker, Input, Row, Select, Spin, Table } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { requestJourneyUrl } from '../request-journey/links';
 import ReactECharts from 'echarts-for-react';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
@@ -101,11 +103,13 @@ const barOption = (rows: { key: string; totalTokens: number }[], horizontal: boo
 
 const TokenUsagePage: React.FC = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [range, setRange] = useState<[Dayjs, Dayjs]>([dayjs().subtract(24, 'hour'), dayjs()]);
   const [granularity, setGranularity] = useState<'hour' | 'day'>('hour');
-  const [instanceId, setInstanceId] = useState('');
+  const [instanceId, setInstanceId] = useState(() => searchParams.get('instanceId') ?? '');
   const [tenantId, setTenantId] = useState('');
-  const [routeId, setRouteId] = useState('');
+  const [routeId, setRouteId] = useState(() => searchParams.get('routeId') ?? '');
   const [model, setModel] = useState('');
   const [page, setPage] = useState(0);
   const [unresolvedOnly, setUnresolvedOnly] = useState(false);
@@ -592,7 +596,8 @@ const TokenUsagePage: React.FC = () => {
                   dataIndex: 'traceId',
                   width: 140,
                   ellipsis: true,
-                  render: (v: string | null) => v ?? '-',
+                  render: (v: string | null, record: TokenUsageEvent) => v && record.instanceId ?
+                    <Button type="link" size="small" title={v} onClick={() => navigate(requestJourneyUrl(record.instanceId!, v, record.routeId))}>{v}</Button> : v ?? '-',
                 },
                 {
                   title: t('tokenUsage.table.instance'),

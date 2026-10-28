@@ -7,11 +7,14 @@ import {
   getTokenUsageReconciliation, reconcileTokenUsage, retryTokenUsageReconciliation,
 } from '../../api/tokenUsage';
 import type { TokenUsageCorrection, TokenUsageEvent } from '../../api/tokenUsage';
+import { useNavigate } from 'react-router-dom';
+import { requestJourneyUrl } from '../request-journey/links';
 
 interface Props { event: TokenUsageEvent; onClose: () => void; onApplied: () => void }
 
 const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApplied }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const canWrite = user?.role === 'ADMIN';
   const [form] = Form.useForm<TokenUsageCorrection & { verified: boolean }>();
@@ -64,6 +67,8 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
   };
   return (
     <Drawer open width={620} title={t('tokenUsage.reconcile.title')} onClose={onClose}>
+      {event.traceId && event.instanceId && <Button style={{ marginBottom: 16 }}
+        onClick={() => navigate(requestJourneyUrl(event.instanceId!, event.traceId!, event.routeId))}>{t('journey.inspect')}</Button>}
       <Descriptions column={1} size="small" items={[
         { key: 'tenant', label: t('tokenUsage.table.tenant'), children: event.tenantId === '__unassigned__' ? t('tokenUsage.unassignedTenant') : event.tenantId },
         { key: 'trace', label: t('tokenUsage.table.trace'), children: event.traceId ?? '-' },

@@ -40,6 +40,8 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
     private io.micrometer.tracing.Tracer tracer;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private io.micrometer.tracing.propagation.Propagator propagator;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.leoli.gateway.util.DebugTraceVerifier debugTraceVerifier;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -76,9 +78,23 @@ public class TraceIdGlobalFilter implements GlobalFilter, Ordered {
             exchange.getAttributes().put(TRACE_ID_ATTR, traceId);
             if (spanId != null) exchange.getAttributes().put("gatewaySpanId", spanId);
             var request = exchange.getRequest().mutate().header(TRACE_ID_HEADER, traceId);
+            String debugSignature = exchange.getRequest().getHeaders().getFirst(com.leoli.gateway.util.DebugTraceVerifier.HEADER);
+            if (debugTraceVerifier != null && debugTraceVerifier.verify(debugSignature,
+                    exchange.getRequest().getMethod().name(), exchange.getRequest().getURI())) {
+                exchange.getAttributes().put(com.leoli.gateway.util.DebugTraceVerifier.TRUSTED_ATTR, true);
+            }
+            // Never propagate the control-plane signature to upstreams or captured headers.
+            request.headers(headers -> headers.remove(com.leoli.gateway.util.DebugTraceVerifier.HEADER));
             if (parent != null) request.header(TRACEPARENT_HEADER, parent);
             else request.headers(headers -> headers.remove(TRACEPARENT_HEADER));
             exchange.getResponse().getHeaders().set(TRACE_ID_HEADER, traceId);
+            exchange.getResponse().beforeCommit(() -> {
+                exchange.getResponse().getHeaders().set(TRACE_ID_HEADER, traceId);
+                String matchedRoute = RouteUtils.getRouteId(exchange);
+                if (matchedRoute != null && !"unknown".equals(matchedRoute))
+                    exchange.getResponse().getHeaders().set("X-Gateway-Route-Id", matchedRoute);
+                return Mono.empty();
+            });
             if (spanId != null) exchange.getResponse().getHeaders().set("X-Gateway-Span-Id", spanId);
             var mutated = exchange.mutate().request(request.build()).build();
             final var active = span;

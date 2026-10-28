@@ -103,6 +103,16 @@ class TraceCaptureGlobalFilterTest {
 
     private TraceCaptureGlobalFilter filter;
 
+    @Test
+    void verifiedDebugRequestsRetainStreamingMetadataEvenWhenNormalSamplingIsDisabled() {
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/stream").header("Accept","text/event-stream"));
+        exchange.getAttributes().put(com.leoli.gateway.util.DebugTraceVerifier.TRUSTED_ATTR,true);
+        exchange.getAttributes().put(TraceIdGlobalFilter.TRACE_ID_ATTR,"verified-debug");
+        filter.filter(exchange, ignored -> Mono.empty()).block();
+        org.mockito.Mockito.verify(reportDispatcher).submit(org.mockito.ArgumentMatchers.argThat(row ->
+                "verified-debug".equals(row.get("traceId")) && "DEBUG".equals(row.get("traceType"))));
+    }
+
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
