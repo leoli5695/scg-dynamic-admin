@@ -9,7 +9,7 @@ import {
 import type { MenuProps } from 'antd';
 import {
   CloudServerOutlined, ClusterOutlined, KeyOutlined, FundOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -44,8 +44,13 @@ const AppShell: React.FC = () => {
   const menuItems: MenuItem[] = useMemo(() => [
     getItem(t('menu.instances'), 'instances', <CloudServerOutlined />),
     getItem(t('menu.token_usage'), 'token-usage', <FundOutlined />),
-    getItem(t('menu.kubernetes'), 'kubernetes', <ClusterOutlined />),
-    getItem('License', 'license', <KeyOutlined />),
+    {
+      key: 'platform', label: t('menu.platform'), icon: <SettingOutlined />,
+      children: [
+        getItem(t('menu.kubernetes'), 'kubernetes', <ClusterOutlined />),
+        getItem('License', 'license', <KeyOutlined />),
+      ],
+    },
   ], [t]);
 
   const selectedKey = selectedKeyFromPath(location.pathname);
@@ -60,9 +65,12 @@ const AppShell: React.FC = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider
-        width={220}
+        width={216}
+        collapsedWidth={72}
+        breakpoint="lg"
+        onBreakpoint={(broken) => { if (broken) setCollapsed(true); }}
         theme="dark"
-        className="sidebar-premium"
+        className="sidebar-premium console-sidebar"
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
@@ -81,30 +89,38 @@ const AppShell: React.FC = () => {
             <GatewayLogo className="logo-icon" style={{ width: 28, height: 28 }} />
             {!collapsed && <span className="logo-text">API Gateway</span>}
           </div>
-          <div
-            className="sidebar-collapse-btn"
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            <Tooltip
-              title={collapsed ? t('common.expand') : t('common.collapse')}
-              placement="right"
-            >
-              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            </Tooltip>
-          </div>
         </div>
         <Menu
           theme="dark"
           mode="inline"
           selectedKeys={[selectedKey]}
+          defaultOpenKeys={['platform']}
           items={menuItems}
           onClick={handleMenuClick}
         />
+        <div className="sidebar-footer">
+          <Tooltip
+            title={collapsed ? t('common.expand') : t('common.collapse')}
+            placement="right"
+          >
+            <button
+              type="button"
+              className="sidebar-collapse-btn"
+              aria-label={collapsed ? t('common.expand') : t('common.collapse')}
+              aria-expanded={!collapsed}
+              onClick={() => setCollapsed((value) => !value)}
+            >
+              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              {!collapsed && <span>{t('common.collapse')}</span>}
+            </button>
+          </Tooltip>
+        </div>
       </Sider>
 
       <Layout
+        className="console-workspace"
         style={{
-          marginLeft: collapsed ? 80 : 220,
+          marginLeft: collapsed ? 72 : 216,
           transition: 'margin-left 0.2s',
         }}
       >
@@ -114,14 +130,14 @@ const AppShell: React.FC = () => {
               <h1 className="header-title">{t('app.console_title')}</h1>
               <span className="header-subtitle">{t('app.subtitle')}</span>
             </div>
-            <div className="header-right">
+            <div className="header-right console-header-actions">
               <LanguageSwitcher />
               <UserMenu />
             </div>
           </Header>
         )}
 
-        <Content className={`main-content${['/token-usage', '/kubernetes', '/license'].includes(location.pathname) ? ' management-content' : ''}${location.pathname === '/instances' ? ' instances-content' : ''}`} style={{ overflow: 'auto' }}>
+        <Content className={`main-content${isInstanceDetail ? ' instance-console-content' : ''}${['/token-usage', '/kubernetes', '/license'].includes(location.pathname) ? ' management-content' : ''}${location.pathname === '/instances' ? ' instances-content' : ''}`} style={{ overflow: 'auto' }}>
           <React.Suspense
             fallback={(
               <div style={{

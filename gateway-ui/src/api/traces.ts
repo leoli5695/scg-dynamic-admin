@@ -19,6 +19,11 @@ import type {
 
 const BASE = '/api/traces';
 
+export const searchTraces = (
+  params: { instanceId: string; start: string; end: string; routeId?: string; traceId?: string; statusCode?: number; page: number; size: number },
+  options?: RequestOptions,
+) => httpClient.get<TracePage>(`${BASE}/search`, { ...options, params });
+
 /** GET /api/traces — paged trace list (page is 0-based). */
 export const getTraces = (
   params: {

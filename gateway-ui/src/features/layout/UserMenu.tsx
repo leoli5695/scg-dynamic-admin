@@ -3,13 +3,14 @@
  * Shared by the main shell and the instance-detail console header.
  */
 import React, { useState } from 'react';
-import { Avatar, Dropdown, Space } from 'antd';
+import { Avatar, Dropdown } from 'antd';
 import { message } from '../../utils/antdStatic';
 import type { MenuProps } from 'antd';
-import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
+import { DownOutlined, LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../auth/AuthContext';
+import './header-actions.css';
 
 const UserMenu: React.FC = () => {
   const { user, logout } = useAuth();
@@ -31,6 +32,7 @@ const UserMenu: React.FC = () => {
       key: 'logout',
       icon: <LogoutOutlined />,
       label: t('common.logout'),
+      danger: true,
       onClick: handleLogout,
     },
   ];
@@ -38,20 +40,22 @@ const UserMenu: React.FC = () => {
   return (
     <Dropdown
       menu={{ items }}
+      classNames={{ root: 'console-account-popup' }}
+      popupRender={(menu) => <><div className="console-account-summary"><strong>{user.nickname || user.username}</strong>{user.nickname && user.nickname !== user.username && <span>{user.username}</span>}</div>{menu}</>}
       placement="bottomRight"
-      arrow
       trigger={['click']}
       open={open}
       onOpenChange={setOpen}
     >
-      <Space className="user-info" style={{ cursor: 'pointer' }}>
+      <button type="button" className="user-info console-account" aria-label={`${t('common.account')}: ${user.nickname || user.username}`} aria-haspopup="menu" aria-expanded={open}>
         <Avatar
-          style={{ backgroundColor: '#165DFF' }}
+          className="console-account-avatar"
           icon={<UserOutlined />}
           size="small"
         />
         <span className="username">{user.nickname || user.username}</span>
-      </Space>
+        <DownOutlined className="console-account-chevron" />
+      </button>
     </Dropdown>
   );
 };

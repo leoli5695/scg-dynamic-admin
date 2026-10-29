@@ -61,6 +61,11 @@ const EditRequestModal: React.FC<EditRequestModalProps> = ({
           modifiedQueryString:
             editQueryString !== request.queryString ? editQueryString : undefined,
           modifiedHeaders: editHeaders,
+          // The server merges modifiedHeaders; omissions alone do not remove captured credentials.
+          // Compare case-insensitively so deleting and re-adding a header with new casing keeps it.
+          removedHeaders: Object.keys(request.headers || {}).filter(
+            key => !Object.keys(editHeaders).some(editedKey => editedKey.toLowerCase() === key.toLowerCase()),
+          ),
           modifiedBody: editBody !== request.requestBody ? editBody : undefined,
           compareWithOriginal: true,
         };

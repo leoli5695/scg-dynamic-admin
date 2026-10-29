@@ -1,11 +1,12 @@
-/** Stable route keys shared by grouped navigation and direct URL handling. */
 export const INSTANCE_NAV_GROUPS = [
-  { key: 'overview', pages: ['overview'] },
-  { key: 'traffic', pages: ['services', 'routes', 'strategies', 'plugins', 'plugin_bindings', 'middleware'] },
+  { key: 'overview', pages: ['overview', 'monitor'] },
+  { key: 'services', pages: ['services'] },
+  { key: 'routes', pages: ['routes', 'strategies'] },
+  { key: 'requests', pages: ['requests', 'trace', 'access_log', 'diagnostic', 'topology', 'filter_chain', 'request_replay'] },
+  { key: 'usage', pages: ['token_usage'] },
   { key: 'security', pages: ['authentication', 'token_revocation', 'certificates'] },
-  { key: 'observability', pages: ['monitor', 'alerts', 'trace', 'access_log', 'audit_logs', 'events', 'resources'] },
-  { key: 'diagnostics', pages: ['diagnostic', 'topology', 'filter_chain', 'request_replay'] },
-  { key: 'tools', pages: ['copilot', 'stress_test'] },
+  { key: 'operations', pages: ['audit_logs', 'alerts', 'events', 'resources'] },
+  { key: 'tools', pages: ['copilot', 'plugins', 'plugin_bindings', 'stress_test', 'middleware'] },
 ] as const;
 
 export type InstancePageKey = typeof INSTANCE_NAV_GROUPS[number]['pages'][number];

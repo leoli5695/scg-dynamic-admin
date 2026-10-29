@@ -34,7 +34,7 @@ import {
 } from './utils';
 import TraceDetailDrawer from './components/TraceDetailDrawer';
 import FullChainTab from './components/FullChainTab';
-import { routeConfigurationUrl } from '../request-journey/links';
+import { requestJourneyUrl, routeConfigurationUrl } from '../request-journey/links';
 import './trace.css';
 
 const { Title, Text } = Typography;
@@ -274,15 +274,18 @@ const TracePage: React.FC = () => {
     {
       title: '',
       key: 'actions',
-      width: 40,
+      width: 145,
       fixed: 'right',
       render: (_, record) => (
-        <Button size="small" type="link" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)} style={{ padding: 0 }} />
+        <Space size={4}>
+          <Button size="small" type="link" onClick={() => navigate(requestJourneyUrl(instanceId, record.traceId, record.routeId))}>{t('journey.inspect')}</Button>
+          <Button size="small" type="link" title={t('journey.openTrace')} aria-label={t('journey.openTrace')} icon={<EyeOutlined />} onClick={() => handleViewDetail(record)} style={{ padding: 0 }} />
+        </Space>
       ),
     },
     ];
     return all.filter((col) => visibleColumns.includes(col.key as string));
-  }, [t, visibleColumns, handleViewDetail]);
+  }, [t, visibleColumns, handleViewDetail, navigate, instanceId]);
 
   const getRowClassName = (record: RequestTrace): string => (
     record.statusCode >= 400 ? 'trace-row-error' : ''
@@ -296,6 +299,7 @@ const TracePage: React.FC = () => {
           {t('trace.title')}
         </Title>
         <Space>
+          <Button icon={<SearchOutlined />} onClick={() => navigate(`/instances/${encodeURIComponent(instanceId)}/requests`)}>{t('menu.requests')}</Button>
           <Button
             icon={<PlayCircleOutlined />}
             onClick={() => navigate(`/instances/${instanceId}/request_replay`)}

@@ -105,6 +105,14 @@ public class RequestTraceService {
         return requestTraceRepository.findRecentErrorsByInstanceId(instanceId, pageable);
     }
 
+    @Transactional(readOnly = true)
+    public Page<RequestTrace> searchTraces(String instanceId, LocalDateTime start, LocalDateTime end,
+                                          String routeId, String traceId, Integer statusCode, String method,
+                                          int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "traceTime", "id"));
+        return requestTraceRepository.searchTraces(instanceId, start, end, routeId, traceId, statusCode, method, pageable);
+    }
+
     /**
      * Get all traces with pagination
      */

@@ -23,14 +23,16 @@ import {
   AccessLogTab, AlertsTab, AuditLogsTab, AuthenticationTab, CertificatesTab,
   CopilotTab, DiagnosticTab, FilterChainTab, MiddlewareTab, MonitorTab,
   PluginBindingsTab, PluginsTab, RequestReplayTab, RoutesTab, ServicesTab,
-  StrategiesTab, StressTestTab, TokenRevocationTab, TopologyTab, TraceTab,
+  StrategiesTab, StressTestTab, TokenRevocationTab, TopologyTab, TraceTab, TokenUsageTab,
 } from './features/instance-detail/tabs/legacyTabs';
 import './App.css';
 import './App.premium.css';
+import './styles/console-shell.css';
 import { AntdStaticBridge } from './utils/antdStatic';
 
 const RouteDebugPage = lazy(() => import('./features/routes/debug'));
 const RequestJourneyPage = lazy(() => import('./features/request-journey'));
+const RequestQueryPage = lazy(() => import('./features/request-journey/RequestQueryPage'));
 const LoginPage = lazy(() => import('./features/auth/LoginPage'));
 const InstancesListPage = lazy(() => import('./features/instances/InstancesListPage'));
 const InstanceCreatePage = lazy(() => import('./features/instances/InstanceCreatePage'));
@@ -100,6 +102,8 @@ const AppRoutes: React.FC = () => (
           <Route path="routes" element={<RoutesTab />} />
           <Route path="routes/:routeId/debug" element={<RouteDebugPage />} />
           <Route path="trace/:traceId" element={<RequestJourneyPage />} />
+          <Route path="requests" element={<RequestQueryPage />} />
+          <Route path="token_usage" element={<TokenUsageTab />} />
           <Route path="plugins" element={<PluginsTab />} />
           <Route path="plugin_bindings" element={<PluginBindingsTab />} />
           <Route path="strategies" element={<StrategiesTab />} />

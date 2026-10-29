@@ -1,4 +1,6 @@
 {
+  "common.language": "Switch language",
+  "common.account": "Account menu",
   "common.submit": "Submit",
   "common.total": "Total",
   "common.cancel": "Cancel",

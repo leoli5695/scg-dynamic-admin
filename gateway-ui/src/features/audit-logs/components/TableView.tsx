@@ -17,6 +17,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../../api/http';
 import { useRequest } from '../../../hooks/useRequest';
 import {
@@ -50,6 +51,7 @@ interface TableViewProps {
 
 const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff, onRollback }) => {
   const { t } = useTranslation();
+  const [params, setParams] = useSearchParams();
 
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -58,11 +60,13 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
   const [pageSize, setPageSize] = useState(20);
 
   // Draft filters → applied on search
-  const [targetType, setTargetType] = useState<string>();
+  const [targetType, setTargetType] = useState<string | undefined>(() => params.get('targetType') || undefined);
   const [operationType, setOperationType] = useState<string>();
-  const [targetId, setTargetId] = useState('');
+  const [targetId, setTargetId] = useState(() => params.get('targetId') ?? '');
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
-  const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>({});
+  const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>(() => ({
+    targetType: params.get('targetType') || undefined, targetId: params.get('targetId') || undefined,
+  }));
 
   const [exportLoading, setExportLoading] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
@@ -118,6 +122,7 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
     setDateRange(null);
     setPage(0);
     setAppliedFilters({});
+    setParams({});
   };
 
   const handleDelete = useCallback(async (id: number) => {

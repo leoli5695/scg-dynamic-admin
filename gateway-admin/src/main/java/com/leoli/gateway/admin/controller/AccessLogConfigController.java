@@ -23,6 +23,7 @@ import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -1060,37 +1061,38 @@ services:
             @RequestParam(required = false) Integer statusCode,
             @RequestParam(required = false) String path,
             @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) String routeId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
+        if ((instanceId != null && instanceId.isBlank())
+                || page < 0 || size < 1 || size > 200 || (long) page * size > Integer.MAX_VALUE
+                || (statusCode != null && (statusCode < 100 || statusCode > 599))) {
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest("Invalid instanceId, pagination or statusCode"));
+        }
+        LocalDateTime now = LocalDateTime.now();
+        final LocalDateTime start;
+        final LocalDateTime end;
+        try {
+            // Keep the stored local clock semantics, including legacy ISO strings ending in Z.
+            start = startTime != null
+                    ? LocalDateTime.parse(startTime, DateTimeFormatter.ISO_DATE_TIME) : now.minusHours(1);
+            end = endTime != null
+                    ? LocalDateTime.parse(endTime, DateTimeFormatter.ISO_DATE_TIME) : now;
+        } catch (DateTimeParseException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest("Invalid startTime or endTime"));
+        }
+        if (start.isAfter(end)) {
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest("startTime must not be after endTime"));
+        }
         try {
             String effectiveInstanceId = instanceId != null ? instanceId : "default";
-
-            LocalDateTime start = startTime != null
-                ? LocalDateTime.parse(startTime.replace("Z", "").substring(0, 19))
-                : LocalDateTime.now().minusHours(1);
-            LocalDateTime end = endTime != null
-                ? LocalDateTime.parse(endTime.replace("Z", "").substring(0, 19))
-                : LocalDateTime.now();
-
-            Pageable pageable = PageRequest.of(page, size, Sort.by("logTimestamp").descending());
-
-            Page<AccessLogEntryEntity> logPage;
-
-            if (traceId != null && !traceId.isEmpty()) {
-                logPage = accessLogEntryRepository.findByInstanceIdAndTraceId(effectiveInstanceId, traceId, pageable);
-            } else if (method != null && statusCode != null && path != null) {
-                logPage = accessLogEntryRepository.findByInstanceIdAndMethodAndTimeRange(
-                    effectiveInstanceId, method, start, end, pageable);
-            } else if (statusCode != null) {
-                logPage = accessLogEntryRepository.findByInstanceIdAndStatusCodeAndTimeRange(
-                    effectiveInstanceId, statusCode, start, end, pageable);
-            } else if (path != null && !path.isEmpty()) {
-                logPage = accessLogEntryRepository.findByInstanceIdAndPathLikeAndTimeRange(
-                    effectiveInstanceId, "%" + path + "%", start, end, pageable);
-            } else {
-                logPage = accessLogEntryRepository.findByInstanceIdAndTimeRange(
-                    effectiveInstanceId, start, end, pageable);
-            }
+            Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "logTimestamp", "id"));
+            Page<AccessLogEntryEntity> logPage = accessLogEntryRepository.searchEntries(
+                    effectiveInstanceId, start, end,
+                    method == null || method.isEmpty() ? null : method, statusCode,
+                    path == null || path.isEmpty() ? null : "%" + path + "%",
+                    traceId == null || traceId.isEmpty() ? null : traceId,
+                    routeId == null || routeId.isEmpty() ? null : routeId, pageable);
 
             List<Map<String, Object>> entries = logPage.getContent().stream()
                 .map(entity -> {

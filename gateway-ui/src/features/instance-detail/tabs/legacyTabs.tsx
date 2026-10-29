@@ -6,6 +6,7 @@
  */
 import React, { lazy } from 'react';
 import ErrorBoundary from '../../layout/components/ErrorBoundary';
+import { useInstanceDetail } from '../InstanceDetailContext';
 
 const ServicesPage = lazy(() => import('../../services'));
 const RoutesPage = lazy(() => import('../../routes'));
@@ -27,6 +28,12 @@ const RequestReplayPage = lazy(() => import('../../request-replay'));
 const AiCopilotPage = lazy(() => import('../../copilot'));
 const StressTestPage = lazy(() => import('../../stress-test'));
 const ServiceMiddlewarePage = lazy(() => import('../../middleware'));
+const TokenUsagePage = lazy(() => import('../../token-usage/TokenUsagePage'));
+
+export const TokenUsageTab: React.FC = () => {
+  const { instance } = useInstanceDetail();
+  return <ErrorBoundary><TokenUsagePage key={instance.instanceId} scopeInstanceId={instance.instanceId} /></ErrorBoundary>;
+};
 
 // Services page rewritten as a feature; reads instanceId from the route.
 export const ServicesTab: React.FC = () => (

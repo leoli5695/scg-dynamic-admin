@@ -1,0 +1,48 @@
+/* Global navigation stays separate from the instance workspace. */
+.console-sidebar.sidebar-premium { z-index: 200; transform: none; }
+.console-sidebar .ant-layout-sider-children { display: flex; flex-direction: column; min-height: 100%; }
+.console-sidebar.sidebar-premium .sidebar-header {
+  height: 68px;
+  min-height: 68px;
+  box-sizing: border-box;
+  padding: 0 20px;
+  justify-content: flex-start;
+}
+.console-sidebar.sidebar-premium .sidebar-logo { gap: 10px; min-width: 0; }
+.console-sidebar.sidebar-premium .logo-text { white-space: nowrap; font-size: 14px; }
+.console-sidebar.sidebar-premium .ant-menu { flex: 1; width: 100%; padding: 12px 10px !important; }
+.console-sidebar.sidebar-premium .ant-menu-item {
+  width: 100%;
+  height: 42px;
+  line-height: 42px;
+  margin: 4px 0;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+.console-sidebar.sidebar-premium .ant-menu-item-selected { background: #172b48 !important; border-color: #294a76; }
+.console-sidebar.sidebar-premium .ant-menu-item .anticon { filter: none; }
+.console-sidebar.sidebar-premium .sidebar-footer { padding: 12px; border-top: 1px solid #1e2c42; }
+.console-sidebar.sidebar-premium .sidebar-collapse-btn {
+  position: static;
+  width: 100%;
+  height: 36px;
+  gap: 10px;
+  justify-content: flex-start;
+  padding: 0 12px;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.console-sidebar.sidebar-premium .sidebar-collapse-btn:hover { background: #1a2740; color: #eaf1fb; }
+.console-sidebar.sidebar-premium.ant-layout-sider-collapsed .sidebar-header { flex-direction: row; justify-content: center; padding: 0; }
+.console-sidebar.sidebar-premium.ant-layout-sider-collapsed .sidebar-collapse-btn { justify-content: center; padding: 0; }
+.console-sidebar.sidebar-premium.ant-layout-sider-collapsed .ant-menu-item { padding-inline: 0 !important; display: flex; align-items: center; justify-content: center; }
+.console-sidebar.sidebar-premium.ant-layout-sider-collapsed .ant-menu-title-content { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: 0; }
+.console-sidebar.sidebar-premium.ant-layout-sider-collapsed .ant-menu-item .anticon { margin: 0; }
+.console-workspace { min-width: 0; }
+.console-workspace .main-content.instance-console-content { padding: 0 !important; margin: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .console-sidebar.sidebar-premium, .console-workspace { transition: none !important; }
+}

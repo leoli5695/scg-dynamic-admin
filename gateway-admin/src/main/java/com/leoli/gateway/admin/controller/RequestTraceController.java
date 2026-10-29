@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
@@ -143,6 +144,26 @@ public class RequestTraceController {
             return ResponseEntity.ok(requestTraceService.getAllTraces(instanceId, page, size, sortBy, sortDir));
         }
         return ResponseEntity.ok(requestTraceService.getAllTraces(page, size, sortBy, sortDir));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<Page<RequestTrace>> searchTraces(
+            @RequestParam String instanceId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end,
+            @RequestParam(required = false) String routeId,
+            @RequestParam(required = false) String traceId,
+            @RequestParam(required = false) Integer statusCode,
+            @RequestParam(required = false) String method,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        if (instanceId == null || instanceId.isBlank() || start == null || end == null || start.isAfter(end)
+                || page < 0 || size < 1 || size > 200 || (long) page * size > Integer.MAX_VALUE
+                || (statusCode != null && (statusCode < 100 || statusCode > 599))) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(requestTraceService.searchTraces(
+                instanceId, start, end, routeId, traceId, statusCode, method, page, size));
     }
 
     /**

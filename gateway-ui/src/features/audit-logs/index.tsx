@@ -9,6 +9,7 @@ import { Radio, Typography } from 'antd';
 import { message } from '../../utils/antdStatic';
 import { HistoryOutlined, TableOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api/http';
 import { rollbackAuditLog } from '../../api/auditLogs';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
@@ -20,6 +21,7 @@ const AuditLogsPage: React.FC = () => {
   const { t } = useTranslation();
   const { instance } = useInstanceDetail();
   const instanceId = instance.instanceId;
+  const [params] = useSearchParams();
 
   const [viewMode, setViewMode] = useState<'table' | 'timeline'>('table');
   // Bumped after any mutation so table + stats re-query together.
@@ -54,7 +56,8 @@ const AuditLogsPage: React.FC = () => {
           {t('menu.audit_logs')}
         </Typography.Title>
         <Radio.Group
-          value={viewMode}
+          disabled={!!params.get('targetId')}
+          value={params.get('targetId') ? 'table' : viewMode}
           onChange={(e) => setViewMode(e.target.value)}
           optionType="button"
           buttonStyle="solid"
@@ -69,8 +72,9 @@ const AuditLogsPage: React.FC = () => {
         </Radio.Group>
       </div>
 
-      {viewMode === 'table' ? (
+      {viewMode === 'table' || params.get('targetId') ? (
         <TableView
+          key={`${instanceId}?${params}`}
           instanceId={instanceId}
           reloadKey={reloadKey}
           onShowDiff={(logId) => {

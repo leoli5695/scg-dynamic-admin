@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import {
-  Badge, Button, Drawer, Tag, Typography
+  Badge, Button, Drawer, Space, Tag, Typography
 } from 'antd';
 import { modal } from '../../../utils/antdStatic';
 import {
@@ -15,6 +15,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { RouteResponse, RouteServiceBinding } from '../../../types/route';
+import { routeChangesUrl, routeRequestsUrl, routeUsageUrl } from '../../request-journey/links';
 
 interface RouteDetailDrawerProps {
   route: RouteResponse;
@@ -84,7 +85,28 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
           </Tag>
         </div>
 
-        {route.mode !== 'MULTI' && (
+        <div className="drawer-section">
+          <div className="section-title">{t('routes.workflow')}</div>
+          <Space wrap>
+            <Button type="primary" icon={<BugOutlined />} onClick={() => navigate(`/instances/${encodeURIComponent(instanceId ?? '')}/routes/${encodeURIComponent(route.id)}/debug`)}>{t('routes.debug')}</Button>
+            <Button onClick={() => navigate(routeRequestsUrl(instanceId ?? '', route.id))}>{t('routes.recentRequests')}</Button>
+            {route.category === 'AI' && <Button onClick={() => navigate(routeUsageUrl(instanceId ?? '', route.id))}>{t('routes.usage')}</Button>}
+            <Button onClick={() => navigate(routeChangesUrl(instanceId ?? '', route.id))}>{t('routes.changes')}</Button>
+          </Space>
+          <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>{t('routes.configurationHint')}</Typography.Paragraph>
+        </div>
+
+        {route.category === 'AI' && route.aiUpstreams && (
+          <div className="drawer-section">
+            <div className="section-title"><CloudOutlined /> {t('routes.target_service')}</div>
+            {route.aiUpstreams.map((upstream, index) => <div key={`${upstream.provider}-${index}`}>
+              <Typography.Text code>{upstream.provider}</Typography.Text>
+              <Tag>{t('services.weight')}: {upstream.weight ?? 100}</Tag>
+            </div>)}
+          </div>
+        )}
+
+        {route.mode !== 'MULTI' && route.category !== 'AI' && (
           <div className="drawer-section">
             <div className="section-title">
               <CloudOutlined />
@@ -128,7 +150,7 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
                   </div>
                   <div className="service-meta">
                     <span>
-                      {t('routes.weight')}
+                      {t('services.weight')}
                       :
                       {' '}
                       {s.weight}
@@ -242,7 +264,6 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
         )}
 
         <div className="drawer-actions">
-          <Button icon={<BugOutlined />} onClick={() => navigate(`/instances/${instanceId}/routes/${route.id}/debug`)}>{t('routes.debug')}</Button>
           <Button type="primary" icon={<EditOutlined />} onClick={() => onEdit(route)}>{t('common.edit')}</Button>
           <Button danger icon={<DeleteOutlined />} onClick={handleDeleteClick}>{t('common.delete')}</Button>
         </div>

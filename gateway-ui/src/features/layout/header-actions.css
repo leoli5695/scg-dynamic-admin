@@ -1,0 +1,60 @@
+.console-header-actions { display: flex; align-items: center; gap: 8px; }
+.console-header-actions .console-refresh.ant-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border-color: #2b3a50;
+  background: #142035;
+  color: #a5b4cb;
+  box-shadow: none;
+}
+.console-header-actions .console-refresh.ant-btn:hover { background: #1b2d47; border-color: #47648c; color: #eaf1fb; }
+.console-language-switcher.ant-select { width: 126px; height: 36px; flex-shrink: 0; font-size: 13px; }
+.console-language-switcher.ant-select .ant-select-content { color: #eaf1fb !important; background: transparent !important; border: 0 !important; outline: none !important; box-shadow: none !important; }
+.console-language-switcher.ant-select .ant-select-input { outline: none !important; border: 0 !important; box-shadow: none !important; }
+.console-language-switcher.ant-select:focus-within { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.console-language-switcher.ant-select .ant-select-prefix { color: #94a3b8; padding-right: 4px; }
+.console-language-switcher.ant-select .ant-select-suffix { font-size: 10px; color: #94a3b8; }
+.console-account.user-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #cbd5e1;
+  font: inherit;
+  cursor: pointer;
+}
+.console-account.user-info:hover,
+.console-account.user-info[aria-expanded="true"] { background: #19283f; border-color: #2b3a50; }
+.console-account .console-account-avatar { background: #2451a1; flex-shrink: 0; }
+.console-account .username { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.console-account .console-account-chevron { color: #7d8fa9; font-size: 10px; }
+.console-account:focus-visible,
+.console-refresh:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+.console-language-popup.ant-select-dropdown,
+.console-account-popup.ant-dropdown { padding: 6px; background: #111e32; border: 1px solid #2b3a50; border-radius: 10px; box-shadow: 0 16px 40px #03071266; }
+.console-popup-heading { padding: 6px 10px 10px; color: #8fa1bb; font-size: 11px; border-bottom: 1px solid #25344b; margin-bottom: 6px; }
+.console-language-popup .ant-select-item { border-radius: 6px; padding: 9px 10px; color: #eaf1fb; }
+.console-language-popup .ant-select-item-option-selected:not(.ant-select-item-option-disabled) { background: #1d3a60 !important; color: #bfdbfe !important; }
+.console-language-popup .ant-select-item-option-selected .ant-select-item-option-content { color: #bfdbfe !important; text-shadow: none; }
+.console-language-popup .ant-select-item-option-active:not(.ant-select-item-option-selected):not(.ant-select-item-option-disabled) { background: #1b2d47 !important; }
+.console-language-option { display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 19px; }
+.console-language-option small { color: #94a3b8; font-size: 11px; font-weight: 400; }
+.console-language-popup .ant-select-item-option-state { align-self: center; color: #93c5fd !important; }
+.console-account-summary { display: flex; flex-direction: column; gap: 4px; padding: 10px; max-width: 240px; overflow-wrap: anywhere; border-bottom: 1px solid #25344b; font-size: 13px; color: #eaf1fb; }
+.console-account-summary span { font-size: 11px; color: #94a3b8; }
+.console-account-popup.ant-dropdown .ant-dropdown-menu { min-width: 176px; padding: 4px 0 0; background: transparent; box-shadow: none; border: 0; }
+.console-account-popup .ant-dropdown-menu .ant-dropdown-menu-item { padding: 9px 10px; border-radius: 6px; }
+.console-account-popup .ant-dropdown-menu .ant-dropdown-menu-item-danger { color: #fca5a5 !important; }
+.console-account-popup .ant-dropdown-menu .ant-dropdown-menu-item-danger:hover { background: #482630 !important; color: #fecaca !important; }
+@media (max-width: 1200px) {
+  .console-header-actions .console-account .username,
+  .console-account .console-account-chevron { display: none; }
+  .console-account.user-info { padding: 0 6px; }
+}

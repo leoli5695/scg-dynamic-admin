@@ -409,6 +409,10 @@
 
   /* Collapse Button */
   .sidebar-collapse-btn {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
     width: 32px;
     height: 32px;
     display: flex;
@@ -425,6 +429,11 @@
       color: #f1f5f9;
     }
 
+    &:focus-visible {
+      outline: 2px solid #60a5fa;
+      outline-offset: 2px;
+    }
+
     .anticon {
       font-size: 16px;
     }
@@ -433,16 +442,18 @@
   /* Collapsed state */
   &.ant-layout-sider-collapsed {
     .sidebar-header {
+      flex-direction: column;
       justify-content: center;
-      padding: 0;
+      gap: 8px;
+      height: 88px;
+      padding: 8px 0;
+      box-sizing: border-box;
     }
 
     .sidebar-collapse-btn {
-      position: absolute;
-      top: 14px;
-      right: -16px;
-      width: 24px;
-      height: 24px;
+      position: static;
+      width: 32px;
+      height: 32px;
       background: #1e293b;
       border-radius: 4px;
       z-index: 10;

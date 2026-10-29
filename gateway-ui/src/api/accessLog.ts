@@ -103,6 +103,7 @@ export const getK8sStats = (
 
 export interface HistoryLogQuery extends AccessLogQueryFilters {
   instanceId?: string;
+  routeId?: string;
   /** ISO-8601 instant. */
   startTime: string;
   endTime: string;

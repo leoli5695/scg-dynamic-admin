@@ -16,6 +16,26 @@ import java.util.List;
 @Repository
 public interface AccessLogEntryRepository extends JpaRepository<AccessLogEntryEntity, Long>, JpaSpecificationExecutor<AccessLogEntryEntity> {
 
+    @Query("""
+            SELECT l FROM AccessLogEntryEntity l
+            WHERE l.instanceId = :instanceId AND l.logTimestamp BETWEEN :startTime AND :endTime
+              AND (:method IS NULL OR l.method = :method)
+              AND (:statusCode IS NULL OR l.statusCode = :statusCode)
+              AND (:pathPattern IS NULL OR l.path LIKE :pathPattern)
+              AND (:traceId IS NULL OR l.traceId = :traceId)
+              AND (:routeId IS NULL OR l.routeId = :routeId)
+            """)
+    Page<AccessLogEntryEntity> searchEntries(
+            @Param("instanceId") String instanceId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("method") String method,
+            @Param("statusCode") Integer statusCode,
+            @Param("pathPattern") String pathPattern,
+            @Param("traceId") String traceId,
+            @Param("routeId") String routeId,
+            Pageable pageable);
+
     Page<AccessLogEntryEntity> findByInstanceId(String instanceId, Pageable pageable);
 
     Page<AccessLogEntryEntity> findByInstanceIdOrderByLogTimestampDesc(String instanceId, Pageable pageable);

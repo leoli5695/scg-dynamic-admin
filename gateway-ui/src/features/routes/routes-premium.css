@@ -44,6 +44,7 @@
 /* ==================== Card Header ==================== */
 .route-card-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--space-3);
@@ -53,7 +54,7 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  flex: 1;
+  flex: 1 1 200px;
   min-width: 0;
 }
 

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -14,6 +15,24 @@ import java.util.Optional;
 
 @Repository
 public interface RequestTraceRepository extends JpaRepository<RequestTrace, Long> {
+
+    @Query("""
+            SELECT t FROM RequestTrace t
+            WHERE t.instanceId = :instanceId AND t.traceTime BETWEEN :startTime AND :endTime
+              AND (:routeId IS NULL OR t.routeId = :routeId)
+              AND (:traceId IS NULL OR t.traceId = :traceId)
+              AND (:statusCode IS NULL OR t.statusCode = :statusCode)
+              AND (:method IS NULL OR t.method = :method)
+            """)
+    Page<RequestTrace> searchTraces(
+            @Param("instanceId") String instanceId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("routeId") String routeId,
+            @Param("traceId") String traceId,
+            @Param("statusCode") Integer statusCode,
+            @Param("method") String method,
+            Pageable pageable);
 
     /**
      * Find by trace ID

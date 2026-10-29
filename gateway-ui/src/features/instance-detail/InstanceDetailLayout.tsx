@@ -12,7 +12,7 @@ import {
   HistoryOutlined, HomeOutlined, KeyOutlined, LineChartOutlined, LinkOutlined,
   LockOutlined, MedicineBoxOutlined, PauseCircleOutlined, PlayCircleOutlined,
   PlusSquareOutlined, ReloadOutlined, RobotOutlined, RocketOutlined,
-  SafetyOutlined, StopOutlined, ThunderboltOutlined, DownOutlined, SearchOutlined,
+  SafetyOutlined, StopOutlined, ThunderboltOutlined, SearchOutlined, FundOutlined, DownOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -27,10 +27,10 @@ import UserMenu from '../layout/UserMenu';
 import { InstanceDetailProvider } from './InstanceDetailContext';
 import ScaleModal from './ScaleModal';
 import { getInstanceNavigation } from './instanceNavigation';
-import './instance-navigation.css';
 import './instance-detail.css';
 import './console-ui.css';
 import './operations-ui.css';
+import './instance-navigation.css';
 
 const { Title } = Typography;
 
@@ -62,6 +62,8 @@ const TAB_ICONS = {
   events: AlertOutlined,
   resources: DashboardOutlined,
   middleware: DatabaseOutlined,
+  requests: SearchOutlined,
+  token_usage: FundOutlined,
 } as const;
 
 export type TabKey = keyof typeof TAB_ICONS;
@@ -98,9 +100,10 @@ const InstanceDetailLayout: React.FC = () => {
   }, [location.pathname]);
 
   const handleTabChange = (key: string) => {
+    if (key === activeTab) return;
     navigate(key === 'overview'
-      ? `/instances/${instanceId}`
-      : `/instances/${instanceId}/${key}`);
+      ? `/instances/${encodeURIComponent(instanceId ?? '')}`
+      : `/instances/${encodeURIComponent(instanceId ?? '')}/${key}`);
   };
 
   const runLifecycle = async (
@@ -174,10 +177,11 @@ const InstanceDetailLayout: React.FC = () => {
   const navigation = getInstanceNavigation(isExternal);
   const activeGroup = navigation.find((group) => group.pages.some((page) => page === activeTab));
   const groupIcons = {
-    overview: CloudServerOutlined, traffic: DeploymentUnitOutlined,
-    security: SafetyOutlined, observability: DashboardOutlined,
-    diagnostics: MedicineBoxOutlined, tools: ThunderboltOutlined,
+    overview: CloudServerOutlined, services: AppstoreOutlined, routes: DeploymentUnitOutlined,
+    requests: SearchOutlined, usage: FundOutlined, security: SafetyOutlined,
+    operations: HistoryOutlined, tools: ThunderboltOutlined,
   };
+  const tools = navigation.find(group => group.key === 'tools')!;
 
   return (
     <InstanceDetailProvider value={{ instance, globalNacosAddr, refresh: instanceRequest.run }}>
@@ -205,7 +209,7 @@ const InstanceDetailLayout: React.FC = () => {
             )}
           </div>
 
-          <div className="instance-detail-header-right">
+          <div className="instance-detail-header-right console-header-actions">
             {!isExternal && instance.status === 'Running' && (
               <>
                 <Button icon={<PlusSquareOutlined />} onClick={() => setScaleModalOpen(true)}>
@@ -237,50 +241,42 @@ const InstanceDetailLayout: React.FC = () => {
               </Button>
             )}
             <Tooltip title={t('common.refresh')}>
-              <Button icon={<ReloadOutlined />} onClick={() => instanceRequest.run()} />
+              <Button className="console-refresh" aria-label={t('common.refresh')} loading={instanceRequest.loading} icon={<ReloadOutlined />} onClick={() => instanceRequest.run()} />
             </Tooltip>
             <LanguageSwitcher />
-            <span style={{ marginLeft: 12 }}>
-              <UserMenu />
-            </span>
+            <UserMenu />
           </div>
         </div>
 
         <nav className="instance-navigation" aria-label={t('instance_nav.label')}>
           <div className="instance-navigation-groups">
-            {navigation.map((group) => {
+            {navigation.filter(group => group.key !== 'tools').map((group) => {
               const Icon = groupIcons[group.key];
               const selected = activeGroup?.key === group.key;
               const label = group.key === 'overview'
                 ? t('instance.overview') : t(`instance_nav.${group.key}`);
-              const button = (
+              return (
                 <button
+                  key={group.key}
                   type="button"
                   className={`instance-navigation-group${selected ? ' is-active' : ''}`}
                   aria-current={selected ? 'true' : undefined}
-                  onClick={group.key === 'overview' ? () => handleTabChange('overview') : undefined}
+                  onClick={() => handleTabChange(selected ? activeTab : group.pages[0])}
                 >
                   <Icon /><span>{label}</span>
-                  {group.pages.length > 1 && <DownOutlined className="instance-navigation-chevron" />}
                 </button>
-              );
-              return group.key === 'overview' ? <React.Fragment key={group.key}>{button}</React.Fragment> : (
-                <Dropdown
-                  key={group.key}
-                  trigger={['click']}
-                  overlayClassName="instance-navigation-dropdown"
-                  menu={{
-                    selectedKeys: [activeTab],
-                    onClick: ({ key }) => handleTabChange(key),
-                    items: group.pages.map((page) => {
-                      const PageIcon = TAB_ICONS[page];
-                      return { key: page, icon: <PageIcon />, label: t(tabI18nKey(page)) };
-                    }),
-                  }}
-                >{button}</Dropdown>
               );
             })}
           </div>
+          <Dropdown trigger={['click']} menu={{
+            selectedKeys: [activeTab],
+            onClick: ({ key }) => handleTabChange(key),
+            items: tools.pages.map(page => ({ key: page, label: t(tabI18nKey(page)) })),
+          }}>
+            <Button type="text" className={activeGroup?.key === 'tools' ? 'is-active' : undefined}>
+              {t('instance_nav.tools')} <DownOutlined />
+            </Button>
+          </Dropdown>
           <Select<string, { value: string; label: string; searchText: string }>
             className="instance-navigation-search"
             showSearch={{
@@ -297,10 +293,24 @@ const InstanceDetailLayout: React.FC = () => {
               searchText: `${t(tabI18nKey(page))} ${page} ${group.key === 'overview' ? '' : t(`instance_nav.${group.key}`)}`,
             })))}
           />
-          <div className="instance-navigation-location" aria-live="polite">
-            {activeGroup && activeGroup.key !== 'overview' && <><span>{t(`instance_nav.${activeGroup.key}`)}</span><span>/</span></>}
-            <strong>{t(tabI18nKey(activeTab))}</strong>
-          </div>
+          {activeGroup && activeGroup.pages.length > 1 && (
+            <div className="instance-navigation-pages" aria-label={t(`instance_nav.${activeGroup.key}`)}>
+              {activeGroup.pages.map((page) => {
+                const PageIcon = TAB_ICONS[page];
+                return (
+                  <button
+                    key={page}
+                    type="button"
+                    className={`instance-navigation-page${page === activeTab ? ' is-active' : ''}`}
+                    aria-current={page === activeTab ? 'page' : undefined}
+                    onClick={() => handleTabChange(page)}
+                  >
+                    <PageIcon /><span>{t(tabI18nKey(page))}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </nav>
 
         {/* Tab content via router Outlet */}
