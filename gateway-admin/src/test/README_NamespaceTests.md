@@ -1,8 +1,9 @@
 # Namespace-Aware Integration Tests
 
 > **状态（2026-10-28 逐条核实）**
-> - 本文件与 [`gateway-admin/TEST_SUMMARY.md`](../../TEST_SUMMARY.md) 内容高度重复，
->   **以本文件为准**（TEST_SUMMARY.md 顶部已注明）。
+> - 本文件是这批测试的**唯一权威文档**。原先重复的英文版 `gateway-admin/TEST_SUMMARY.md`
+>   已于 2026-10-28 归档为 [`docs/archive/gateway-admin-namespace-test-summary.md`](../../../docs/archive/gateway-admin-namespace-test-summary.md)，
+>   不再维护，勿据其内容操作。
 > - **覆盖范围**：本文只讲 7 个 namespace 隔离测试类，共 **98 个 `@Test`**（已复核，数字正确）。
 >   整个 `gateway-admin` 测试目录实为 **81 个 `.java` / 80 个 `*Test.java`**，
 >   `mvn test` 跑的是全部而不只是这 98 个。
@@ -310,9 +311,9 @@ A: 全部 98 个测试大约需要 2-5 分钟，具体取决于：
 
 ## 参考资料
 
-- [TEST_SUMMARY.md](../../TEST_SUMMARY.md) - 同一批测试的英文版总结（内容与本文重复，**以本文为准**）
-  ⚠️ 原文写的是 `../TEST_SUMMARY.md`，从 `src/test/` 出发会指向不存在的 `src/TEST_SUMMARY.md`，
-  正确相对路径是 `../../TEST_SUMMARY.md`
+- [docs/archive/gateway-admin-namespace-test-summary.md](../../../docs/archive/gateway-admin-namespace-test-summary.md)
+  - 原 `gateway-admin/TEST_SUMMARY.md`，同一批测试的英文版总结，内容与本文重复，**已归档、以本文为准**
+  （历史坑：它原来被写成 `../TEST_SUMMARY.md`，从 `src/test/` 出发会指向不存在的 `src/TEST_SUMMARY.md`）
 - [NamespaceIntegrationTest.java](./java/com/leoli/gateway/admin/NamespaceIntegrationTest.java) - 基础测试类
   （原链接文字误写为 `BaseIntegrationTest.java`；同包下确实另有一个 `BaseIntegrationTest.java`，
   但这 7 个测试类继承的是 `NamespaceIntegrationTest`）

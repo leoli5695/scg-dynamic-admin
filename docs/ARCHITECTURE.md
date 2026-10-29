@@ -873,7 +873,7 @@ gateway-admin/
 |   |   |-- EmailConfigController.java      # Email config API
 |   |   |-- AccessLogConfigController.java  # Access log config API
 |   |   |-- RequestTraceController.java     # Request trace API
-|   |   |-- RequestJourneyController.java   # /api/request-journeys/{traceId} - cross-hop request journey
+|   |   |-- RequestJourneyController.java   # /api/request-journeys/{traceId} - per-request trace + token-usage correlation
 |   |   |-- AuditLogController.java         # Audit log API
 |   |   |-- AiConfigController.java         # AI analysis config API
 |   |   |-- HealthSyncController.java       # Health sync API
@@ -2117,7 +2117,7 @@ The gateway implements several performance optimizations:
 ## 21. Feature Documentation Index
 
 All feature documentation is organized by category (36 documents under `docs/features/` at commit
-`b45d40a`; re-count with `ls docs/features/*.md | wc -l`):
+`a69fd71`; re-count with `ls docs/features/*.md | wc -l`):
 
 ### Core Gateway Features
 
@@ -2170,7 +2170,7 @@ All feature documentation is organized by category (36 documents under `docs/fea
 | **Filter Chain Analysis** | Filter execution statistics | [filter-chain-analysis.md](features/filter-chain-analysis.md) |
 | **Traffic Topology** | Real-time traffic visualization | [traffic-topology.md](features/traffic-topology.md) |
 | **Access Log** | Access log configuration, collection and query | [access-log.md](features/access-log.md) |
-| **Historical Comparison** | Period-over-period metric/filter/config comparison | [historical-comparison.md](features/historical-comparison.md) |
+| **Historical Comparison** | **Design doc, not a shipping feature** - see `docs/design/`. Period-over-period comparison of metrics, filter stats and config changes | [historical-comparison.md](design/historical-comparison.md) |
 | **Performance Optimization** | JWT cache, shadow quota, non-blocking locks, log rotation | [performance-optimization.md](features/performance-optimization.md) |
 
 ### Debugging & Analysis
@@ -2180,6 +2180,7 @@ All feature documentation is organized by category (36 documents under `docs/fea
 | **Request Replay** | Replay captured requests for debugging | [request-replay.md](features/request-replay.md) |
 | **System Diagnostic** | Comprehensive health checks | [system-diagnostic.md](features/system-diagnostic.md) |
 | **Route Debug** | Per-route debug page that pre-fills a request from the route's Path/Method/Host/Header predicates and streams the response | [route-debug.md](features/route-debug.md) |
+| **Request Journey** | Per-request diagnosis page: correlates the matched route, the `request_trace` record and the `token_usage_history` rows by Trace ID (`GET /api/request-journeys/{traceId}`) | [request-journey.md](features/request-journey.md) |
 | **Stress Test** | Load testing tool | [stress-test.md](features/stress-test.md) |
 
 ### AI Integration
@@ -2218,7 +2219,7 @@ This API Gateway architecture demonstrates:
 - **Heartbeat monitoring** for real-time instance health tracking
 - **Performance optimizations** including JWT cache, shadow quota, non-blocking locks
 - **Comprehensive testing** with 2082 tests across the six test-bearing Maven modules (see section 19.1) ensuring reliability
-- **36 feature documents** under `docs/features/`, indexed in section 21
+- **36 feature documents** under `docs/features/`, indexed in section 21; unimplemented designs live in `docs/design/`
 
 ---
 

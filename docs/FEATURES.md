@@ -52,7 +52,7 @@
 | **System Diagnostic** | Comprehensive health checks | [system-diagnostic.md](features/system-diagnostic.md) |
 | **Traffic Topology** | Real-time traffic visualization | [traffic-topology.md](features/traffic-topology.md) |
 | **Filter Chain Analysis** | Filter execution statistics | [filter-chain-analysis.md](features/filter-chain-analysis.md) |
-| **Historical Comparison** | Period-over-period comparison of metrics, filter stats and config changes | [historical-comparison.md](features/historical-comparison.md) |
+| **Historical Comparison** | **Design doc, not a shipping feature** - moved to `docs/design/`. Period-over-period comparison of metrics, filter stats and config changes | [historical-comparison.md](design/historical-comparison.md) |
 | **Performance Optimization** | JWT cache, shadow quota, non-blocking locks and other throughput optimizations | [performance-optimization.md](features/performance-optimization.md) |
 | **AI Token Quota Ledger** | Per-request UUID ledger for AI token pre-deduction, settlement, refund and local degradation | [ai-quota-ledger.md](features/ai-quota-ledger.md) |
 | **AI Usage Delivery** | Durable local outbox with `eventId` for reliable AI token-usage reporting to the admin | [ai-usage-delivery.md](features/ai-usage-delivery.md) |
@@ -77,6 +77,7 @@
 |---------|-------------|----------|
 | **Request Replay Debugger** | Modify and replay captured requests | [request-replay.md](features/request-replay.md) |
 | **Route Debug Page** | Per-route debug page that pre-fills a request from the route's Path/Method/Host/Header predicates and streams the response | [route-debug.md](features/route-debug.md) |
+| **Request Journey** | Per-request diagnosis page reached from the debugger: `GET /api/request-journeys/{traceId}?instanceId=...` correlates the matched route, the `request_trace` row and the `token_usage_history` rows for one Trace ID | [request-journey.md](features/request-journey.md) |
 | **AI Copilot Assistant** | Intelligent configuration assistant | [ai-copilot.md](features/ai-copilot.md) |
 | **Stress Test Tool** | Concurrent load testing with AI analysis, Markdown export (the `format` query parameter is accepted but currently ignored — PDF/Excel/JSON export is not implemented), and shareable reports | [stress-test.md](features/stress-test.md) |
 
@@ -187,7 +188,7 @@ bugs, fixed by moving them inside -1; the reasoning is recorded in the javadoc o
 
 ## Implemented Surface Without a Dedicated Feature Document
 
-The tables above index the 36 documents under `docs/features/` (count at commit `b45d40a`;
+The tables above index the 36 documents under `docs/features/` (count at commit `65f8e8f`;
 re-count with `ls docs/features/*.md | wc -l`). The following implemented pieces have
 no standalone feature document yet and are only described in the code / console UI:
 
@@ -197,8 +198,7 @@ the ones not covered above):
 `PluginController`, `RoutePluginBindingController`, `LicenseController`,
 `GatewayTokenRevocationController`, `TokenQuotaController`, `TokenUsageController`,
 `TokenUsageReconciliationController`, `ProviderCredentialController`, `ServiceMiddlewareController`,
-`MultiInstanceComparisonController`, `FullChainTraceController`, `RequestJourneyController`
-(`/api/request-journeys/{traceId}`, the cross-hop request journey added with route debugging)
+`MultiInstanceComparisonController`, `FullChainTraceController`
 
 **Maven modules**: `seckill-core-engine` (standalone flash-sale workload engine — Redis Lua rate
 limiting, MQ order delivery/stock release; **not deployed to production**, and it is the only module

@@ -7,7 +7,7 @@
 >   files (**80** of them named `*Test.java`), and a full `mvn test` run of this module executes far more
 >   than 98 tests. A more accurate title would be *"Namespace Integration Test Summary"*.
 > - **Duplicate**: this file overlaps heavily with
->   [`src/test/README_NamespaceTests.md`](./src/test/README_NamespaceTests.md).
+>   [`src/test/README_NamespaceTests.md`](../../gateway-admin/src/test/README_NamespaceTests.md).
 >   **Treat `src/test/README_NamespaceTests.md` as the authoritative version** (it is the Chinese
 >   counterpart, lives next to the tests, and carries the corrected prerequisite split between
 >   `./run-tests.sh` and `mvn test`).

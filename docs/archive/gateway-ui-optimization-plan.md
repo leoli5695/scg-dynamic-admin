@@ -204,7 +204,7 @@ export const PageLoading = () => <Skeleton active />;
 > 补充：`vite.config.ts` 的 `build` 段现在用 `minify: 'terser'` +
 > `pure_funcs: ['console.log','console.debug','console.trace','console.info']` 剥离噪音日志，
 > **刻意不用 `drop_console`**（会连带删掉 `console.error/warn`）。详见
-> `gateway-ui/CONSOLE_CLEANUP_GUIDE.md`。
+> `docs/archive/gateway-ui-console-cleanup.md`（原 `gateway-ui/CONSOLE_CLEANUP_GUIDE.md`，已归档）。
 
 ---
 

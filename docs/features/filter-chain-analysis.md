@@ -426,7 +426,7 @@ Analysis content:
 - [Request Replay](request-replay.md) - Request replay debugging
 - [Monitoring & Alerts](monitoring-alerts.md) - Monitoring
 - [AI Copilot](ai-copilot.md) - AI tool call analysis
-- [Historical Comparison](historical-comparison.md) - Historical data comparison and anomaly detection
+- [Historical Comparison](../design/historical-comparison.md) - Historical data comparison and anomaly detection
 - [ARCHITECTURE.md](../ARCHITECTURE.md) - Filter Chain architecture
 
 ---

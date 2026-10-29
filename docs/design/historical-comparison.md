@@ -35,7 +35,7 @@ What *does* exist today:
 
 The `/internal/**` endpoints live on the **gateway** process (port 8080), not on admin (9090), and
 require the `X-Internal-Token` header (`InternalApiAuthWebFilter` refuses to start if the token is
-unset). See [Filter Chain Analysis](filter-chain-analysis.md) for details.
+unset). See [Filter Chain Analysis](../features/filter-chain-analysis.md) for details.
 
 ---
 
@@ -454,7 +454,7 @@ Only **one** of the five tools originally listed here is registered. `compare_pe
 Related tools that do exist and are useful for historical work: `get_history_metrics` (time-series
 metrics), `get_gateway_metrics`, `get_route_metrics`, `get_pod_metrics`, `get_filter_chain_stats`,
 `get_slow_requests`, `get_slow_traces`, `get_trace_statistics`. See
-[AI Copilot Assistant](ai-copilot.md) for the full 65-tool list.
+[AI Copilot Assistant](../features/ai-copilot.md) for the full 65-tool list.
 
 ### Example: AI Analysis
 
@@ -542,7 +542,7 @@ The values that are actually in force are hard-coded:
 
 ## Related Features
 
-- [Filter Chain Analysis](filter-chain-analysis.md) - Filter performance analysis
-- [Monitoring & Alerts](monitoring-alerts.md) - Real-time monitoring
-- [AI Copilot](ai-copilot.md) - AI-powered analysis
-- [Request Tracing](request-tracing.md) - Request-level tracing
+- [Filter Chain Analysis](../features/filter-chain-analysis.md) - Filter performance analysis
+- [Monitoring & Alerts](../features/monitoring-alerts.md) - Real-time monitoring
+- [AI Copilot](../features/ai-copilot.md) - AI-powered analysis
+- [Request Tracing](../features/request-tracing.md) - Request-level tracing
