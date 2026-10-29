@@ -1,6 +1,8 @@
 # API Gateway Management Platform
 
-> **Enterprise-Grade API Gateway with Dynamic Configuration, Multi-Service Routing & Intelligent Monitoring**
+> **Enterprise-Grade API Gateway with Dynamic Configuration, Multi-Service Routing, Intelligent
+> Monitoring — and a full AI/LLM gateway data plane (provider routing, key pools, token quota,
+> usage metering, semantic cache, content moderation)**
 
 **📺 [Watch Full Feature Demo on YouTube](https://youtu.be/u4CjBDdKTQ4)**
 
@@ -28,6 +30,7 @@
 | **Multi-Service Routing** | Not supported | Weighted routing with fine-grained rules |
 | **Kubernetes Deploy** | Manual YAML editing | One-click deployment from UI |
 | **Multi-Tenancy** | Shared configuration | Namespace isolation per instance |
+| **LLM / AI traffic** | Not addressed, or a separate AI gateway product | Same gateway: provider routing with key pools, per-tenant token quota with pre-deduction and refund, durable usage metering, semantic cache, content moderation |
 
 ---
 
@@ -64,19 +67,46 @@
 | **Request Validation** | JSON Schema validation, required field checks, type constraints |
 | **Mock Response** | Static/dynamic/template responses for frontend-backend collaboration, with delay/error simulation |
 
+### AI Gateway — LLM Traffic (data plane)
+
+The gateway itself can sit in front of LLM providers. These capabilities apply to **your users'
+AI traffic** as it passes through; they are configured as strategies bound to routes, not as static
+YAML. Full walkthrough: **[docs/features/ai-gateway.md](docs/features/ai-gateway.md)**.
+
+| Feature | Description |
+|---------|-------------|
+| **LLM Provider Routing** | Route to OpenAI, DeepSeek, Qwen/Bailian, Zhipu GLM, Moonshot Kimi or Anthropic Claude, with per-route targets, weights and failover (`AiProviderRoutingFilter`) |
+| **Provider Key Pools** | Multiple API keys per provider, stored AES-GCM encrypted in `provider_credentials`, selected per request and resolved inside the gateway - keys are not returned to clients or written to logs |
+| **Token Quota** | Per-tenant monthly/daily token budgets with pre-deduction, exact settlement, refund on early termination, and a crash-safe local ledger that survives restarts ([ai-quota-ledger.md](docs/features/ai-quota-ledger.md)) |
+| **Usage Metering** | Token usage parsed from provider responses (including streaming), persisted through a durable local outbox with `eventId` deduplication ([ai-usage-delivery.md](docs/features/ai-usage-delivery.md)) |
+| **Usage Reconciliation** | Audit and compensate `UNKNOWN`/`ESTIMATED` usage and `PENDING`/`FAILED` settlements ([ai-usage-reconciliation.md](docs/features/ai-usage-reconciliation.md)) |
+| **Semantic Cache** | Embedding-based similarity cache for LLM responses, scoped by model + tenant, bounded by `gateway.ai.cache.max-bytes` (default 32 MiB). **Non-streaming only, in-memory per gateway instance, and fails open** on embedding or store errors. A request that cannot prove its tenant bypasses the cache rather than risk reading or poisoning another tenant's entries |
+| **AI Content Moderation** | In-flight text moderation of requests and responses: word lists, regex, PII handling, and optional external moderators behind a dependency-free SPI ([ai-content-security.md](docs/features/ai-content-security.md), module `gateway-moderation-spi`) |
+| **Context Limit** | Reject or trim requests that exceed a per-route context-token budget |
+| **Prompt Template** | Inject server-side prompt templates so clients cannot override them |
+| **AI Statistics** | Per-route LLM call statistics written to `ai_log` |
+
+> **Two different "AI" directions, easy to conflate.** The table above is the **data plane** — the
+> gateway proxying LLM traffic. The sections below (*AI-Powered Analysis*, *AI Copilot*) are the
+> **control plane** — the admin console calling an LLM to help you operate the gateway. They do
+> **not** share provider configuration or API keys: the data plane uses six lowercase provider ids
+> (`LlmProvider`) stored in `provider_credentials`, the control plane uses four uppercase ids
+> (`AiAnalysisService.PROVIDER_MODELS`) stored in `AiConfig.api_key`. See
+> [ai-gateway.md](docs/features/ai-gateway.md) for what that means in practice.
+
 ### Observability & Operations
 
 | Feature | Description |
 |---------|-------------|
 | **Real-time Monitoring** | JVM, CPU, memory, HTTP metrics with historical charts |
 | **Request Tracing** | Capture error/slow requests with full headers and replay capability |
-| **AI-Powered Analysis** | Integration with GPT, Claude, Qwen for intelligent metrics analysis |
-| **AI Copilot** | 35+ tools for autonomous route creation, error analysis, performance optimization |
+| **AI-Powered Analysis** | *Control plane* - the console calls an LLM (OpenAI / Claude / Gemini / Bailian) to analyse gateway metrics |
+| **AI Copilot** | *Control plane* - 65 registered tools for route creation, error analysis and performance optimization (re-count: `grep -c 'tools.put(' ToolRegistry.java` plus the two registries that inject into the same map) |
 | **Filter Chain Analysis** | Self-time tracking, P50/P95/P99 percentiles, slow request detection |
-| **Historical Comparison** | Period-over-period analysis, trend detection, performance prediction |
-| **Anomaly Detection** | AI-powered detection of performance anomalies and unusual patterns |
-| **Alert System** | Configurable thresholds with email notifications |
-| **SSL Certificate Management** | Upload, monitor expiry, get alerts before certificates expire |
+| **Historical Comparison** | Period-over-period **filter** comparison and multi-instance comparison exist; the broader `/api/historical/*` surface described in the doc is **design only** - see [docs/design/](docs/design/) |
+| **Anomaly Detection** | Filter-health anomaly detection on the gateway (`AIAnomalyDetector`, `FilterHealthMonitor`); there is no ARIMA/ML forecasting |
+| **Alert System** | Configurable thresholds (CPU, system CPU, JVM heap, HTTP error rate, response time, thread count, instances down) with email notifications |
+| **SSL Certificate Management** | Upload (PEM/keystore), track expiry status (30-day threshold, hardcoded). **Expiry email alerts are not implemented** - `SslCertificateService` contains no mail or notification code |
 | **Audit Logs** | Configuration change tracking with diff comparison and rollback |
 | **Stress Test Tool** | Concurrent load testing with AI analysis, Markdown export (the `format` query parameter is accepted but ignored - PDF/Excel/JSON export is not implemented), and shareable links |
 
@@ -382,7 +412,97 @@ refresh is listener-driven, not polled.
 
 ---
 
-## AI-Powered Analysis
+## AI Gateway (LLM Traffic)
+
+The same gateway that routes ordinary HTTP can sit in front of LLM providers. This is a **data-plane**
+capability: it applies to your users' AI traffic as it passes through, and it is configured as
+strategies bound to routes rather than as static YAML.
+
+**Full documentation: [docs/features/ai-gateway.md](docs/features/ai-gateway.md)** — request path,
+every rejection point and its real response body, key-pool resolution, the end-to-end quota and
+metering chain, semantic-cache isolation semantics, a worked example of configuring an AI route, and
+an explicit list of what is *not* covered.
+
+### Supported upstream providers
+
+Six, all speaking the OpenAI-compatible `/chat/completions` protocol with `Authorization: Bearer`
+(source of truth: `my-gateway/.../ai/LlmProvider.java`):
+
+| Provider id | Display name | Default base URL | Model prefixes |
+|---|---|---|---|
+| `openai` | OpenAI | `https://api.openai.com/v1` | `gpt-`, `o1`, `o3`, `o4`, `chatgpt-` |
+| `deepseek` | DeepSeek | `https://api.deepseek.com` | `deepseek-` |
+| `qwen` | 通义千问/百炼 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen`, `qwq` |
+| `zhipu` | 智谱GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-`, `chatglm`, `cogview`, `cogvideo` |
+| `moonshot` | 月之暗面/Kimi | `https://api.moonshot.cn/v1` | `kimi-`, `moonshot-` |
+| `anthropic` | Anthropic Claude | `https://api.anthropic.com/v1` | `claude-` |
+
+Anthropic is reached through **its OpenAI-compatibility endpoint**, so passthrough needs no transform;
+native `/v1/messages` (`x-api-key` + `anthropic-version`) is declared in the `Protocol`/`AuthScheme`
+enums but not implemented yet. There is no Ollama or other self-hosted-runtime provider.
+
+### What happens to a request
+
+Eight filters act on LLM traffic, in this order (values from `FilterOrderConstants`; lower runs
+first):
+
+| Order | Filter | Role |
+|---|---|---|
+| -246 | `AiSecurityGuardFilter` | Moderate request text before it is forwarded |
+| -243 | `AiContextLimitFilter` | Enforce the per-route context-token budget |
+| -242 | `AiSemanticCacheFilter` | Serve a semantically equivalent cached answer, or continue |
+| -241 | `TokenQuotaPreCheckFilter` | Pre-deduct the tenant's token quota, or reject |
+| -44 | `TokenUsageCollectorFilter` | Parse real usage from the response and settle the quota |
+| -43 | `AiStatisticsFilter` | Record per-route LLM statistics to `ai_log` |
+| 10004 | `AiPromptTemplateFilter` | Inject server-side prompt templates |
+| 10005 | `AiProviderRoutingFilter` | Pick the provider target and resolve the API key |
+
+The last two run at large positive orders because they rewrite the request immediately before it is
+sent upstream, after routing decisions are settled — not because they are "late" in a semantic sense.
+
+### Credentials never leave the gateway
+
+API keys are stored AES-GCM encrypted in the `provider_credentials` table and managed through
+`ProviderCredentialController`. The gateway fetches plaintext over its internal API authenticated by
+`X-Internal-Token`, injects the `Authorization` header on the way out, and strips client-supplied
+provider credentials. Key material is not returned to the console in plaintext and is masked in logs
+by `SensitiveDataSanitizer`.
+
+### Quota and metering are crash-safe
+
+Token quota is not a counter in Redis alone. Every admitted request writes a `PREPARING` intent to a
+local ledger directory (fsync + atomic rename) before the upstream call, advances to `ADMITTED`, then
+settles the exact token count and only then deletes the intent — so a process crash, a Redis failover
+or a lost response leaves an auditable record rather than a silently leaked deduction. Final usage
+goes to a durable local outbox with an `eventId` the admin de-duplicates on, which means a report can
+be retried safely when the admin is unreachable. Details:
+[ai-quota-ledger.md](docs/features/ai-quota-ledger.md),
+[ai-usage-delivery.md](docs/features/ai-usage-delivery.md),
+[ai-usage-reconciliation.md](docs/features/ai-usage-reconciliation.md).
+
+> **Deployment note:** the ledger and outbox default to `${user.dir}/data/...`, and the container
+> runs as a non-root user. If the module directory is root-owned (which is how the `root:600` env file
+> is kept out of the app user's reach) the app cannot create `data/` and the whole Spring context
+> fails at startup with an `AccessDeniedException`. Create it first:
+> `install -d -o <uid> -g <gid> -m 755 <module-dir>/data`, where uid/gid come from
+> `docker inspect -f '{{.Config.User}}'`. `scripts/deploy-gateway.sh` preflights this.
+
+### Configuration shape
+
+Only three things are static YAML: `gateway.ai.cache.max-bytes` (default 33554432),
+`gateway.token-quota-ledger.*` and `gateway.token-usage.*`. Everything else — which provider, which
+key pool, what quota, what to moderate, what template to inject — is a **strategy** bound to a route,
+managed from the console or via `POST /api/strategies` / `PUT /api/strategies/{strategyId}`. The AI
+strategy types are `AI_PROXY`, `AI_PROMPT_TEMPLATE`, `AI_SECURITY`, `AI_SEMANTIC_CACHE`,
+`AI_CONTEXT_LIMIT` and `AI_STATISTICS` (`StrategyDefinition.java:89-104`).
+
+---
+
+## AI-Powered Analysis (control plane)
+
+This is the other direction: the **admin console** calling an LLM to help you operate the gateway.
+It does not touch your users' AI traffic and does not share provider configuration or API keys with
+the AI gateway above.
 
 ### Integrated AI Providers
 
@@ -398,11 +518,27 @@ four provider IDs `validateApiKey` accepts - anything else returns `false`. Ther
 other self-hosted-runtime provider**, and DeepSeek/Kimi/GLM are reached through `BAILIAN`, not as
 separate providers.
 
+> **Do not confuse this table with the provider table in
+> [AI Gateway (LLM Traffic)](#ai-gateway-llm-traffic) above.** These four uppercase ids configure the
+> LLM the *console* talks to. The six lowercase ids in `LlmProvider` configure the LLMs the *gateway*
+> proxies to. The two sets are stored in different tables (`AiConfig.api_key` vs
+> `provider_credentials`), are resolved by unrelated code, and share no keys — `grep -l
+> "ProviderRegistry\|LlmProvider" gateway-admin/src/main/java` matches only a comment. A provider
+> configured for analysis is therefore not automatically usable as an AI-gateway upstream, and
+> vice versa.
+
 ### AI Analysis Features
 
-- **Real-time Metrics Analysis**: Upload current metrics, get insights
-- **Alert Content Generation**: AI-written alert emails with recommendations
-- **Anomaly Detection**: Identify unusual patterns in HTTP traffic
+- **Time-range Metrics Analysis**: `POST /api/ai/analyze/timerange` sends the period's metrics to the
+  configured LLM and returns its assessment as plain text (`AiAnalysisService.analyzeTimeRange:600`)
+- **Alert Content Generation**: alert email body text is AI-written **when a valid AI config exists**;
+  with none configured, or if the call fails, `AlertContentGenerator` falls back to a built-in Java
+  template (`:67,:71,:85-88`). Alerting never blocks on an AI provider being reachable
+- **Stress-test Analysis**: `analyzeStressTest:628` and `analyzePodStressTest:1290` are invoked by AI
+  Copilot tools, not by a standalone REST endpoint
+- **Not here**: anomaly detection. `AiAnalysisService` contains no anomaly logic; the anomaly
+  detection that does exist is gateway-side and scoped to *filter health*
+  (`AIAnomalyDetector`, `FilterHealthMonitor`)
 
 ---
 
@@ -921,7 +1057,7 @@ For licensing inquiries: https://github.com/leoli5695
 - ✓ Kubernetes Deployment & DevOps Automation
 - ✓ High-Availability Patterns (Rate Limiting, Circuit Breaker, Failover)
 - ✓ Full-Stack Development (Java Backend + React Frontend)
-- ✓ AI Integration for Intelligent Operations
+- ✓ AI Integration — both as an LLM traffic gateway (provider routing, token quota, usage metering) and as AI-assisted operations
 
 All core features of this project were designed and implemented independently, demonstrating production-grade distributed system development capability.
 

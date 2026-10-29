@@ -2116,8 +2116,8 @@ The gateway implements several performance optimizations:
 
 ## 21. Feature Documentation Index
 
-All feature documentation is organized by category (36 documents under `docs/features/` at commit
-`a69fd71`; re-count with `ls docs/features/*.md | wc -l`):
+All feature documentation is organized by category (37 documents under `docs/features/` at commit
+`a2ac1ae`; re-count with `ls docs/features/*.md | wc -l`):
 
 ### Core Gateway Features
 
@@ -2187,8 +2187,9 @@ All feature documentation is organized by category (36 documents under `docs/fea
 
 | Feature | Description | Documentation |
 |---------|-------------|---------------|
-| **AI Copilot** | Intelligent gateway assistance | [ai-copilot.md](features/ai-copilot.md) |
-| **AI Analysis** | AI-powered metrics analysis | [ai-analysis.md](features/ai-analysis.md) |
+| **AI Gateway (data-plane overview)** | **Read this first.** Using the gateway as an LLM traffic gateway: provider routing and key pools, semantic cache, context limit, prompt templates, content moderation, token quota and metering — the full filter path with real orders and real error bodies. Also draws the boundary against the control-plane AI below | [ai-gateway.md](features/ai-gateway.md) |
+| **AI Copilot** | Intelligent gateway assistance (**control plane** — the admin console calls an LLM to analyse its own gateway) | [ai-copilot.md](features/ai-copilot.md) |
+| **AI Analysis** | AI-powered metrics analysis (**control plane**) | [ai-analysis.md](features/ai-analysis.md) |
 | **AI Token Quota Ledger** | Per-request UUID ledger for pre-deduction, settlement, refund and local degradation | [ai-quota-ledger.md](features/ai-quota-ledger.md) |
 | **AI Usage Delivery** | Durable local outbox with `eventId` for reliable usage reporting to the admin | [ai-usage-delivery.md](features/ai-usage-delivery.md) |
 | **AI Usage Reconciliation** | Reconcile/compensate `UNKNOWN`/`ESTIMATED` usage and `PENDING`/`FAILED` settlements | [ai-usage-reconciliation.md](features/ai-usage-reconciliation.md) |
@@ -2219,7 +2220,7 @@ This API Gateway architecture demonstrates:
 - **Heartbeat monitoring** for real-time instance health tracking
 - **Performance optimizations** including JWT cache, shadow quota, non-blocking locks
 - **Comprehensive testing** with 2082 tests across the six test-bearing Maven modules (see section 19.1) ensuring reliability
-- **36 feature documents** under `docs/features/`, indexed in section 21; unimplemented designs live in `docs/design/`
+- **37 feature documents** under `docs/features/`, indexed in section 21; unimplemented designs live in `docs/design/`
 
 ---
 

@@ -294,11 +294,20 @@ Defaults (`EmailConfig.java:26-80`): port **465**, `useSsl` **true**, `useStartT
 
 ### Email Content
 
-Alert emails are **not** AI-generated. The body is rendered from the alert's own values by
-`AlertEmailBuilder` (`buildAlertEmailBody` → `buildZhBody` / `buildEnBody`, Java text blocks — there
-are no `.html` template files) and contains: alert type, level, metric name, current value,
-threshold and instance. AI analysis is a separate, on-demand feature
-(`POST /api/ai/analyze/timerange`).
+Two layers, and it matters which one you mean:
+
+- **Body text** - `AlertContentGenerator.generateAlertContent` (`:62-90`) asks
+  `aiConfigRepository.findFirstValidConfig()` (`:67`). When a valid AI config exists the text is
+  AI-generated; when there is none (`:71`) or the AI call throws (`:85-88`) it falls back to
+  `generateDefaultContent` (`:199`), a Java-rendered template. So alert emails are AI-generated
+  **only if** an AI provider is configured and reachable - they are never blocked on it.
+- **HTML envelope** - always `AlertEmailBuilder.buildAlertEmailBody(alertType, level, metricName,
+  currentValue, threshold, content, language)` (`:16`), which wraps that content via `buildZhBody` /
+  `buildEnBody` (Java text blocks). There are **no `.html` template files** in the repository.
+  Called from `AlertCheckService.java:288-293`.
+
+The envelope contains: alert type, level, metric name, current value, threshold and instance.
+On-demand AI analysis of a time range is a separate feature (`POST /api/ai/analyze/timerange`).
 
 ---
 

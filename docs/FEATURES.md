@@ -8,6 +8,7 @@
 
 | Feature | Description | Document |
 |---------|-------------|----------|
+| **AI Gateway (LLM traffic proxy)** | Data-plane overview: the gateway proxies your users' LLM calls — provider routing across the 6 built-in `LlmProvider` entries, encrypted key pools, semantic cache, context limit, prompt templates, content moderation, token quota and usage metering. Start here; it links to the four data-plane AI docs below | [ai-gateway.md](features/ai-gateway.md) |
 | **Route Management** | Dynamic route configuration with hot reload | [route-management.md](features/route-management.md) |
 | **Multi-Service Routing** | Traffic distribution across multiple services | [multi-service-routing.md](features/multi-service-routing.md) |
 | **Service Discovery** | Dynamic (Nacos/Consul) and static discovery | [service-discovery.md](features/service-discovery.md) |
@@ -48,7 +49,7 @@
 | **Access Log** | JSON logging with K8S real-time viewing; entries are shipped to `POST /api/access-log/collect` and stored in the `access_log_entries` table (no Elasticsearch integration — not implemented) | [access-log.md](features/access-log.md) |
 | **Request Tracing** | Error/slow request capture with replay | [request-tracing.md](features/request-tracing.md) |
 | **AI-Powered Analysis** | GPT/Claude/Qwen metrics analysis | [ai-analysis.md](features/ai-analysis.md) |
-| **Email Notifications** | SMTP alerts rendered by `AlertEmailBuilder` (not AI-generated) | [email-notifications.md](features/email-notifications.md) |
+| **Email Notifications** | SMTP alerts; the body text is AI-generated when a valid AI config exists and falls back to a built-in template otherwise, and the HTML envelope is always rendered by `AlertEmailBuilder` | [email-notifications.md](features/email-notifications.md) |
 | **System Diagnostic** | Comprehensive health checks | [system-diagnostic.md](features/system-diagnostic.md) |
 | **Traffic Topology** | Real-time traffic visualization | [traffic-topology.md](features/traffic-topology.md) |
 | **Filter Chain Analysis** | Filter execution statistics | [filter-chain-analysis.md](features/filter-chain-analysis.md) |
@@ -188,7 +189,7 @@ bugs, fixed by moving them inside -1; the reasoning is recorded in the javadoc o
 
 ## Implemented Surface Without a Dedicated Feature Document
 
-The tables above index the 36 documents under `docs/features/` (count at commit `65f8e8f`;
+The tables above index the 37 documents under `docs/features/` (count at commit `a2ac1ae`;
 re-count with `ls docs/features/*.md | wc -l`). The following implemented pieces have
 no standalone feature document yet and are only described in the code / console UI:
 
@@ -196,9 +197,12 @@ no standalone feature document yet and are only described in the code / console 
 `ls gateway-admin/src/main/java/com/leoli/gateway/admin/controller/*.java | wc -l`;
 the ones not covered above):
 `PluginController`, `RoutePluginBindingController`, `LicenseController`,
-`GatewayTokenRevocationController`, `TokenQuotaController`, `TokenUsageController`,
-`TokenUsageReconciliationController`, `ProviderCredentialController`, `ServiceMiddlewareController`,
+`GatewayTokenRevocationController`, `ServiceMiddlewareController`,
 `MultiInstanceComparisonController`, `FullChainTraceController`
+
+(`ProviderCredentialController`, `TokenQuotaController` and `TokenUsageController` are covered by
+[ai-gateway.md](features/ai-gateway.md); `TokenUsageReconciliationController` by
+[ai-usage-reconciliation.md](features/ai-usage-reconciliation.md).)
 
 **Maven modules**: `seckill-core-engine` (standalone flash-sale workload engine — Redis Lua rate
 limiting, MQ order delivery/stock release; **not deployed to production**, and it is the only module
