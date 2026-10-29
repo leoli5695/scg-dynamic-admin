@@ -193,7 +193,7 @@ The tables above index the 37 documents under `docs/features/` (count at commit 
 re-count with `ls docs/features/*.md | wc -l`). The following implemented pieces have
 no standalone feature document yet and are only described in the code / console UI:
 
-**`gateway-admin` REST controllers** (46 at commit `b45d40a` — re-count with
+**`gateway-admin` REST controllers** (46 at commit `a750757` — re-count with
 `ls gateway-admin/src/main/java/com/leoli/gateway/admin/controller/*.java | wc -l`;
 the ones not covered above):
 `PluginController`, `RoutePluginBindingController`, `LicenseController`,

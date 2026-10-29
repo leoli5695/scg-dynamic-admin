@@ -652,35 +652,49 @@ self-service registration - so if they are missing the console has no user at al
 
 ## Testing
 
-Counts below were measured with `mvn -o -B -ntp -fae test` on 2026-10-28 at commit `b45d40a`
-(JDK 21, offline); the `gateway-ui` row comes from `npm run test:routes` at the same commit.
-"Errors" are tests that could not run at all because an external dependency is absent; the suite
-has zero assertion failures. These counts drift with every commit - re-measure rather than trusting
-the table, and read the per-module aggregate line rather than summing surefire reports (`@Nested`
-classes make the sum come out low).
+Counts below were measured with `mvn -o -B -ntp -fae test` on 2026-10-29 on the working tree at
+commit `a750757` (JDK 21, offline); the `gateway-ui` row comes from `npm run test:routes`.
+"Errors" are tests that could not run at all because an external dependency is absent. These counts
+drift with every commit - re-measure rather than trusting the table, and read the per-module
+aggregate line rather than summing surefire reports (`@Nested` classes make the sum come out low).
+
+> **⚠ The suite is not green.** `my-gateway` has **11 real assertion failures**, all in
+> `AiUsageLifecycleTest`. Commit `a69fd71` switched `TokenUsageCollectorFilter` from
+> `TokenUsageReporter.report(...)` to `reportDurably(...)` without updating the test, which still
+> does `verify(reporter).report(...)`. Usage *is* collected correctly - the failure is a stale mock
+> expectation, not a behavioural regression - but it is 11 red tests and it hides anything else that
+> might break in that class. Verified by running the same class in a clean worktree at the parent
+> commit: identical failures, so it is not caused by anything after it.
 
 | Module | Tests | Failures | Errors | Status |
 |--------|-------|----------|--------|--------|
-| **my-gateway** | 1018 | 0 | 0 | ✅ All passing (2 skipped) |
-| **gateway-admin** | 564 | 0 | 80 | ⚠️ 63 of 75 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
+| **my-gateway** | 1035 | **11** | 0 | ❌ 11 failures in `AiUsageLifecycleTest` (stale `report` vs `reportDurably` expectation, see above); everything else passes (2 skipped) |
+| **gateway-admin** | 572 | 0 | 80 | ⚠️ 63 of 75 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
 | **gateway-trace-starter** | 160 | 0 | 0 | ✅ All passing |
 | **license-client** | 83 | 0 | 0 | ✅ All passing |
 | **license-server** | 40 | 0 | 0 | ✅ All passing |
 | **gateway-moderation-spi** | 0 | 0 | 0 | ➖ Contract-only module (a single SPI interface), no tests yet |
 | **seckill-core-engine** | 217 | 0 | 4 | ⚠️ 3 need a bare Redis on `localhost:30379`; 1 (`LuaSlidingWindowRateLimitTest`) needs Docker via Testcontainers (4 skipped) |
 | **gateway-ui** | 51 | 0 | 0 | ✅ Node `--test` over the `tests/*.test.mjs` files run by `npm run test:routes`; no component coverage |
-| **Total (JVM)** | **2082** | **0** | **84** | ⚠️ Not reproducible on a clean machine without MySQL:3306, Redis:30379 and Docker |
+| **Total (JVM)** | **2107** | **11** | **84** | ⚠️ The 84 errors are environmental; the 11 failures are real. Not reproducible on a clean machine without MySQL:3306, Redis:30379 and Docker |
 
 CI (`.github/workflows/ci.yml`) runs on every push to `main` and starts real MySQL 8, Redis 7 and
 Nacos v2.3.0 service containers, so the 84 errors above do not occur there - the Actions tab is the
 authoritative verdict, and it is also the only place those 12 `@SpringBootTest` classes and the 3
 Redis-backed seckill tests actually execute.
 
-That verdict is currently **red**. On the latest commit (`5007d87`, run `40665661510`) the
-`Frontend (gateway-ui)` and `Images build` jobs are `success` while `Backend (Java 21, Maven)` is
-`failure` at its `Build and test` step, so the overall run conclusion is `failure`. The backend job
-logs and annotations are not retrievable without authentication, so the specific failing test is not
-identified here.
+That verdict is currently **red**, and has been on every non-cancelled run since `2209032`. The
+`Frontend (gateway-ui)` and `Images build` jobs are `success`; `Backend (Java 21, Maven)` is `failure`
+at its `Build and test` step, so the overall run conclusion is `failure`. Check the Actions tab rather
+than trusting any commit pinned here - this repository moves several commits a day.
+
+The backend job's logs and annotations are not retrievable without authentication
+(`/actions/jobs/<id>/logs` and `/check-runs/<id>/annotations` both return 404 anonymously), so the
+CI-side cause cannot be identified from a clone. What *can* be said: the 11 local
+`AiUsageLifecycleTest` failures described above were introduced by `a69fd71`, which is **later** than
+the commit where CI first went red - so CI has at least one additional failure that is not visible
+locally (it needs the real MySQL/Redis/Nacos service containers). Fixing those 11 should not be
+expected to turn the backend job green on its own.
 
 Counts are the surefire aggregate lines, not a sum of the per-class reports: `@Nested` classes
 (133 in my-gateway, 27 in gateway-admin) make a per-class sum undercount.

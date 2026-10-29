@@ -113,7 +113,15 @@ grep -nE "^    int (AI_|TOKEN_|HYBRID_|MULTI_DIM_)" \
 | AI 代理请求体超 `maxBodySize` | 413 | `{"httpStatus":413,"code":41301,"error":"Payload Too Large","message":"请求体超过 AI 代理上限","data":null}` | `AiProviderRoutingFilter.java:146-149` |
 | 所有 failover 目标的密钥都取不到 | 502 | `{"httpStatus":502,"code":50201,"error":"Bad Gateway","message":"无法获取任何 Provider 密钥（已尝试 N 个目标）","data":null}` | `AiProviderRoutingFilter.java:164-167` |
 | 计量持久化不可用（请求未发往上游） | 503 | `{"httpStatus":503,"code":50303,"error":"Service Unavailable","message":"AI usage persistence is temporarily unavailable; request was not sent upstream","data":null}` | `TokenUsageCollectorFilter.java:323-347` |
-| JSON 响应超 `gateway.token-usage.max-body-size`（Content-Length 未知） | 502 | `{"code":502,"message":"Response too large for token usage collection"}` — **只有 2 个键，与其它网关错误体都不同** | `TokenUsageCollectorFilter.java:207-218` |
+| 上游声明的 `Content-Length` 小于实际发送量（响应已损坏） | 502 | `{"code":502,"message":"Response too large for token usage collection"}` — **只有 2 个键，与其它网关错误体都不同** | `TokenUsageCollectorFilter.java:216-227` |
+
+★ **响应体超过 `gateway.token-usage.max-body-size` 不再是拒绝理由。** 以前 chunked 响应（无
+`Content-Length`）会走 `DataBufferUtils.join`，超限时 join 已释放它消费过的缓冲区、正文不可恢复，
+于是只能返回 502 并**丢掉上游已经完整生成的答复**——而 chunked 是 LLM provider 和中间代理的常态。
+现在只有"上游声明了长度且在限内"才聚合（这也是唯一能在响应提交前写 `X-Token-Usage-*` 的情形）；
+长度未知或已知超限的响应一律**原样流式放行**，同时做一份有界旁路拷贝用于解析用量。代价是这类响应
+拿不到 `X-Token-Usage-*` 头；换来的是**计量永远不会毁掉一次成功的推理**。超限被截断时用量解析不出来，
+结算记为 `UNKNOWN`（保留预扣待人工核对），不会静默按 0 计费。
 
 ⚠️ `AI_SECURITY` 的 `code` 是**字符串**（`"CONTENT_BLOCKED"`），其余是**整数**；且它的响应体只有 3 个键，没有 `error` 和 `data`。客户端不要写统一的错误解析逻辑。
 
@@ -269,7 +277,10 @@ curl -X POST http://localhost:9090/api/provider-credentials \
 ┌─ 响应阶段 ────────────────────────────────────────────────────────────┐
 │ TOKEN_USAGE_COLLECTOR(-44)                                            │
 │   ① 按上游 Content-Type 判定 JSON / SSE（在写响应时判，不看 Accept）      │
-│   ② JSON：整包 join（上限 gateway.token-usage.max-body-size）→ 解析 usage│
+│   ② JSON：仅当上游声明了 Content-Length 且不超限时才整包 join          │
+│      （这是唯一能在提交前写 X-Token-Usage-* 的情形）；长度未知或超限    │
+│      则原样流式放行 + 有界旁路拷贝解析 usage，超限截断记 UNKNOWN，      │
+│      绝不因为计量失败而 502 丢掉上游已生成的答复                        │
 │      SSE：跨 DataBuffer 重组帧 → SseUsageAccumulator 取最大快照          │
 │   ③ 判定中断：CANCEL / ON_ERROR / SSE 缺 [DONE]（收到 [DONE] 后客户端断开 │
 │      算正常完成，不触发保底计费）                                        │
@@ -353,10 +364,18 @@ curl -X POST http://localhost:9090/api/provider-credentials \
 | 是否调上游 | **否** | 是 |
 | 是否预扣配额 | **否**（在 -241 之前短路） | 是 |
 | 是否有 `token_usage_history` 记录 | **否** | 是 |
-| 是否有 `ai.*` 指标 / `ai_log` | **否** | 是 |
+| 是否有 `ai.*` 指标 / `ai_log` | **是**（`usage_status=NOT_BILLED`、token 数 0、`cache_hit=true`） | 是 |
 | 网关日志 | `INFO AI cache HIT on route {} scope={}` | `DEBUG AI cache MISS on route {} scope={}` |
 
-命中路径**不调用 `chain.filter`**，所以 -241 之后的一切（配额预扣、提示词模板、provider 路由、用量采集、AI 统计）全部不执行。这是设计意图（`FilterOrderConstants.java:195-207`：命中若发生在预扣之后，预扣的估算量就没人结算/退款，租户会被为没花的 token 计费），代价是**命中流量在管理端计量页和 AI 指标里完全不可见**。
+命中路径**不调用 `chain.filter`**，所以 -241 之后的一切（配额预扣、提示词模板、provider 路由、用量采集）全部不执行。这是设计意图（`FilterOrderConstants.java:195-207`：命中若发生在预扣之后，预扣的估算量就没人结算/退款，租户会被为没花的 token 计费）。
+
+**但 AI 统计不再跟着一起丢失。** `AiStatisticsFilter`(-43) 确实不会执行，所以 `AiSemanticCacheFilter` 在写完缓存响应后直接调用 `AiStatisticsRecorder.recordShortCircuited(exchange)`，产出 `ai.usage.requests{status="NOT_BILLED"}`、`ai.llm.service.duration`、以及一行 `cache_hit=true`、token 数为 0 的 `ai_log`。因为 `NOT_BILLED` 只在 `cacheHit` 为真时出现，**命中率 = `ai.usage.requests{status="NOT_BILLED"}` ÷ `ai.usage.requests` 全状态之和**，可按 route/model/provider 维度下钻。
+
+两点实现约束值得知道：
+
+- 记录逻辑被抽成了 `AiStatisticsRecorder`（普通 `@Component`）而不是留在过滤器里，因为 `GlobalFilterTrackingPostProcessor` 会把**每一个** `GlobalFilter` bean 替换成 `TrackedGlobalFilter` 装饰器，而该装饰器不暴露 delegate ⇒ **按具体类型注入另一个 GlobalFilter 会在启动期抛 `BeanNotOfRequiredTypeException`**。普通组件不被包装，可以正常注入。
+- 命中时 `AiProviderRoutingFilter`(10005) 同样不会执行，所以模型归属由缓存过滤器用请求体里的 `model` 补写（`putIfAbsent(AI_MODEL_ATTR, model)`），否则每条命中的 `ai_log` 都是 `model=none`，命中率无法按模型拆分。
+- 命中**仍然没有** `token_usage_history` 记录：没有消耗 provider token，也就没有可结算的用量。管理端的 Token 计量页看不到命中流量，要看命中率请用 `ai.*` 指标或 `ai_log`。
 
 ### 5.4 ★ 隔离边界：跨路由 / 跨租户共享吗
 
@@ -473,12 +492,15 @@ git grep -n '@Value("\${gateway\.\(ai\|token\)' -- my-gateway/src/main/java
 grep -n "ai:\|token-quota-ledger:\|token-usage:" my-gateway/src/main/resources/application.yml
 ```
 
-⚠️ `gateway.token-usage.max-body-size` 默认 **64 KiB**，是 JSON 响应做用量解析的上限。超限时行为分两种（`TokenUsageCollectorFilter.java:185-221`）：
+⚠️ `gateway.token-usage.max-body-size` 默认 **64 KiB**，是 JSON 响应做用量解析时**旁路拷贝**的上限。行为按上游是否声明长度分三种（`TokenUsageCollectorFilter.java:185-247`）：
 
-- `Content-Length` 已知且 > 64 KiB → **透传但不解析 usage**，用量落 `UNKNOWN`、预扣保留待人工核对。
-- `Content-Length` 未知（chunked）→ join 触发 `DataBufferLimitException` → **返回 502** `{"code":502,"message":"Response too large for token usage collection"}`，客户端拿不到上游已经生成的答复。
+- `Content-Length` 已知且 ≤ 64 KiB → 整包聚合后解析 usage，并在响应提交前写入 `X-Token-Usage-*` 头。**这是唯一能拿到这组响应头的情形。**
+- `Content-Length` 已知且 > 64 KiB，**或** `Content-Length` 未知（chunked）→ **原样流式放行**，同时做一份截断到 64 KiB 的旁路拷贝。正文完整送达客户端；若实际超出上限，拷贝被截断、usage 解析不出来，用量落 `UNKNOWN`、预扣保留待人工核对。这类响应拿不到 `X-Token-Usage-*` 头（响应已提交）。
+- 唯一还会 502 的情形：上游**声明的 `Content-Length` 小于实际发送量**（响应本身已损坏），此时 `join` 已经释放了它消费过的缓冲区、正文不可恢复。
 
-长补全场景必须调大这个值。注意它和 `gateway.trace.max-body-size`（`application.yml:182`，也是 65536）是**两个不同的 key**。
+**chunked 超限曾经是 502**：旧实现把长度未知的响应也交给 `DataBufferUtils.join(flux, maxBodySize)`，超限时 join 已释放消费过的缓冲区，正文无法恢复，只能返回 502 并丢掉上游已经完整生成的答复。而 chunked 是 LLM provider 与中间代理的常态，所以那是常见路径而非边角情况。现已改为流式放行——**计量永远不会毁掉一次成功的推理**。
+
+长补全场景仍建议调大这个值：不是因为会失败，而是因为超过上限的部分不进旁路拷贝，用量会落 `UNKNOWN` 而需要人工核对。注意它和 `gateway.trace.max-body-size`（`application.yml:182`，也是 65536）是**两个不同的 key**。
 
 ### 8.2 策略驱动（其余全部）
 
@@ -722,15 +744,15 @@ Span 标签（`enableSpanTags=true` 且 micrometer-tracing 的 `Tracer` 存在�
 
 ## 11. 当前不覆盖的部分 / 已知边界
 
-照实列。每条都有代码依据。
+照实列。每条都有代码依据。第 6、7、11 条已在本次修复中解决，保留原文并划掉，以免读者以为它们仍然成立、也免得同一个坑被重新挖出来。
 
 1. **Anthropic 原生 `/v1/messages` 未实现。** 6 个内置 provider 全部通过各自的 OpenAI 兼容 `/chat/completions` 端点访问，`Protocol` 恒为 `OPENAI_COMPAT`（`LlmProvider.java:41-46`）。`Protocol.ANTHROPIC` / `Protocol.CUSTOM` 与 `AuthScheme.X_API_KEY` / `AuthScheme.CUSTOM` 是预留枚举值，**没有请求/响应转换实现**，`AiProviderRoutingFilter.java:399-401` 的 `x-api-key` 分支在当前枚举下不可达。
 2. **只代理 chat-completions 的 POST。** 非 POST 请求直接放行、不做任何 AI 处理（`AiProviderRoutingFilter.java:102-105`；其余 5 个 AI 过滤器同样只处理 POST）。`resolveChatUrl` 把路径写死为 `/chat/completions`（`LlmProvider.java:71-76`），所以 `/v1/embeddings`、`/v1/responses`、`/v1/audio/*`、`/v1/images/*`、`/v1/rerank` **都不能经 AI 代理转发**（`/embeddings` 只被语义缓存自己用作出站调用）。
 3. **请求体只读顶层 `model` 一个字段。** `extractModel` 只做 `readTree(body).path("model")` 且要求是文本（`:414-425`）。OpenAI Responses API 的 `instructions` / `input` 形态、批量请求、非 JSON 请求体都识别不出模型。
 4. **语义缓存：单实例内存态、不持久化、无共享存储。** 进程重启即清空；多副本之间不共享，命中率随副本数下降（`SemanticCacheStore.java:12-21`）。共享存储（Redis-Stack / 外部向量库）是 javadoc 里写明的后续工作，当前没有实现。
 5. **语义缓存的作用域不含 routeId。** 见 §5.4：跨路由会共享条目。
-6. **缓存命中对计量与指标完全不可见。** 命中在 -242 短路，`TokenUsageCollectorFilter`(-44) 与 `AiStatisticsFilter`(-43) 都不执行 → 没有 `token_usage_history` 记录、没有 `ai.tokens.*` / `ai.usage.requests` 指标、没有 `ai_log` 行。唯一痕迹是响应头 `X-AI-Cache: HIT` 和一条 `INFO AI cache HIT on route ... scope=...` 日志。因此**命中率无法在管理端统计**，"节省了多少 token"也无处可查。
-7. **`AiStatisticsFilter` 里的缓存命中分支不可达。** `:136,139,143-145` 读 `AI_CACHE_HIT_ATTR` 并把 `usage_status` 置为 `NOT_BILLED`、token 数置 0——但该属性由 -242 的短路路径写入，而短路路径根本不会走到 -43。`ai_log` 里的 `cache_hit` 恒为 `false`。
+6. ~~**缓存命中对计量与指标完全不可见。**~~ **已修复。** 命中仍在 -242 短路、`TokenUsageCollectorFilter`(-44) 与 `AiStatisticsFilter`(-43) 仍不执行，但 `AiSemanticCacheFilter` 现在写完缓存响应后直接调用 `AiStatisticsRecorder.recordShortCircuited(exchange)`，产出 `ai.usage.requests{status="NOT_BILLED"}`、`ai.llm.service.duration` 和一行 `cache_hit=true`、token 数为 0 的 `ai_log`。命中率 = `NOT_BILLED` ÷ 全状态之和，可按 route/model/provider 下钻。**残留边界**：命中仍然没有 `token_usage_history` 记录（没消耗 provider token，无可结算用量），所以管理端的 Token 计量页看不到命中流量；"节省了多少 token" 也仍无处可查——那需要知道被缓存的那次回答原本会消耗多少，而网关没有这个信息。
+7. ~~**`AiStatisticsFilter` 里的缓存命中分支不可达。**~~ **已修复**（同上一条）。`AiStatisticsRecorder` 读 `AI_CACHE_HIT_ATTR` 并把 `usage_status` 置为 `NOT_BILLED`、token 数置 0 的分支现在真的会执行；`ai_log.cache_hit` 不再恒为 `false`。记录逻辑被抽成 `AiStatisticsRecorder`（普通 `@Component`）而非留在过滤器里，原因见 §5.3：`GlobalFilterTrackingPostProcessor` 会把每个 `GlobalFilter` bean 换成不暴露 delegate 的 `TrackedGlobalFilter`，按具体类型注入另一个过滤器会在启动期抛 `BeanNotOfRequiredTypeException`。
 8. **AI 路由的 `modelPredicates` 不参与路由匹配。** 它被 `RouteDefinition.java:131` 持久化、被 `RouteResponse.java:105` 回传、被前端表单编辑，但 `git grep -n "modelPredicates" -- '*.java'` 在 gateway-admin 与 my-gateway 里只命中这两处字段声明加 `RouteEntity.java:41` 的一句注释，**没有任何代码把它转成 SCG 路由断言**，`AiModelPredicate` 类本身也没有消费者。实际路由选择完全由路由的普通断言（Path 等）决定；按模型名分流到不同 AI 路由**当前做不到**。
 9. **流式响应的能力衰减：**
    - 语义缓存**永不存储** SSE（`AiSemanticCacheFilter.java:222-224`）。`cacheStreaming` 字段是"为向前兼容保留"的，即使设成 `true`，流式请求也只会白做一次 embedding 调用与查表（还可能命中一条非流式缓存、把 JSON 返回给期待 SSE 的客户端），**不会写入**。
@@ -740,7 +762,7 @@ Span 标签（`enableSpanTags=true` 且 micrometer-tracing 的 `Tracer` 存在�
    - failover 只能在第一个字节之前发生（`AiProxyConfig.java:118-121`）。
    - 上游不支持 `stream_options.include_usage` 时，流式用量拿不到 → `UNKNOWN` → 预扣保留待人工核对。
 10. **Anthropic 的 prompt-cache token 默认不计费。** 见 §4：AI 代理路由的 `responseFormat` 恒被写成非空值（缺省 `OPENAI`），自动探测分支不可达，`cache_creation_input_tokens` / `cache_read_input_tokens` 只有显式配 `responseFormat:"ANTHROPIC"` 才会被加进输入 token（`TokenUsageParser.java:147-151`）。
-11. **`gateway.token-usage.max-body-size` 默认只有 64 KiB。** 见 §8.1：超限的 JSON 响应要么不解析用量（Content-Length 已知），要么直接 **502**（chunked）。这是长补全场景的默认陷阱。
+11. ~~**`gateway.token-usage.max-body-size` 默认只有 64 KiB，chunked 超限直接 502 丢掉答复。**~~ **已修复。** 见 §8.1：现在只有"上游声明了 `Content-Length` 且在限内"才聚合，长度未知或已知超限的响应一律原样流式放行 + 有界旁路拷贝，**计量不再能毁掉一次成功的推理**。**残留边界**：超过 64 KiB 的部分不进旁路拷贝，用量会落 `UNKNOWN` 需人工核对，且这类响应拿不到 `X-Token-Usage-*` 头；唯一还会 502 的情形是上游声明的长度小于实际发送量（响应本身已损坏，缓冲区已被 join 释放、不可恢复）。
 12. **`AI_CONTEXT_LIMIT` 的 Java 默认值 `maxContextTokens=0` 等于关闭。** 见 §7.1。
 13. **密钥轮转后最长 300 秒不生效。** `AdminProviderKeyResolver` 的 Caffeine 缓存写后过期 300 秒，`invalidate(ref)` 方法存在但**无任何调用点**（`:102-105`）。管理端轮转密钥不会通知网关。
 14. **provider 自动识别是纯前缀匹配，按枚举声明顺序取第一个命中。** `openai` 排在最前，所以 `chatgpt-` 前缀归 openai；`ProviderRegistry.resolveByModel` 没有权重或最长前缀概念（`ProviderRegistry.java:44-58`，`LlmProvider.matchesModel` `:95-106`）。自托管后端的自定义模型名必须靠 `modelRouting` 显式映射，否则解析不出 → 400 `code=40001`。

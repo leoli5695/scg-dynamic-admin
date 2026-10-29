@@ -880,7 +880,7 @@ gateway-admin/
 |   |   |-- InstanceHealthController.java   # Instance health API
 |   |   |-- HealthCheckController.java      # Health check API
 |   |   # ---- the 24 controllers below were missing from earlier revisions of this tree;
-|   |   #      the package held 46 *Controller.java files at commit b45d40a - re-count with
+|   |   #      the package held 46 *Controller.java files at commit a750757 - re-count with
 |   |   #      `ls gateway-admin/src/main/java/com/leoli/gateway/admin/controller/*.java | wc -l`
 |   |   |-- AiCopilotController.java        # /api/copilot - AI copilot assistant
 |   |   |-- DiagnosticController.java       # /api/diagnostic - system diagnostics
@@ -2052,14 +2052,14 @@ The reconcile task ensures consistency between database and Nacos configuration.
 
 | Module | Tests | Coverage Areas |
 |--------|-------|----------------|
-| **my-gateway** | 1018 (2 skipped) | Filters, Auth, Rate Limiting, Strategies |
-| **gateway-admin** | 564 (80 errors) | API, Services, Repository, Integration |
+| **my-gateway** | 1035 (**11 failures**, 2 skipped) | Filters, Auth, Rate Limiting, Strategies |
+| **gateway-admin** | 572 (80 errors) | API, Services, Repository, Integration |
 | **license-client** | 83 | Offline RSA license verification |
 | **gateway-trace-starter** | 160 | Trace context propagation / async reporting |
 | **license-server** | 40 | License issuing API |
 | **gateway-moderation-spi** | 0 | Contract-only module (one SPI interface), no tests yet |
 | **seckill-core-engine** | 217 (4 errors, 4 skipped) | Seckill flow, Redis Lua rate limiting |
-| **Total** | **2082** (0 failures, 84 errors, 6 skipped) | — |
+| **Total** | **2107** (**11 failures**, 84 errors, 6 skipped) | — |
 
 > Counts are the Surefire **aggregate** lines from `mvn -o -B -ntp -fae test` (do not sum the
 > per-class `*.txt` files — `@Nested` classes make that total come out low). The 84 errors are all
@@ -2067,6 +2067,12 @@ The reconcile task ensures consistency between database and Nacos configuration.
 > cascade from having no MySQL on `localhost:3306`, and the 4 in `seckill-core-engine` need Redis
 > (`:30379`) and Docker. Earlier revisions of this table said 332 / 229 (561 total); that is several
 > generations out of date.
+>
+> **The 11 failures are real, not environmental.** All 11 are in `AiUsageLifecycleTest`: commit
+> `a69fd71` switched `TokenUsageCollectorFilter` from `TokenUsageReporter.report(...)` to
+> `reportDurably(...)` and the test still verifies `report(...)`. Usage is collected correctly - the
+> mock expectation is stale - but the class is red and would mask a genuine regression. Confirmed
+> against a clean worktree at the parent commit, where the same 11 fail identically.
 
 ### 19.2 Test Structure
 
@@ -2219,7 +2225,7 @@ This API Gateway architecture demonstrates:
 - **Namespace isolation** for multi-tenancy support
 - **Heartbeat monitoring** for real-time instance health tracking
 - **Performance optimizations** including JWT cache, shadow quota, non-blocking locks
-- **Comprehensive testing** with 2082 tests across the six test-bearing Maven modules (see section 19.1) ensuring reliability
+- **Comprehensive testing** with 2107 tests across the six test-bearing Maven modules (see section 19.1 - 11 of them are currently failing)
 - **37 feature documents** under `docs/features/`, indexed in section 21; unimplemented designs live in `docs/design/`
 
 ---

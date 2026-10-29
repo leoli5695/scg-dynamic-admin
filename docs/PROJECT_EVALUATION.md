@@ -7,7 +7,7 @@
 > **最新实测入口:** CI 现状见 GitHub `leoli5695/scg-dynamic-admin` 的 workflow `CI` 最近一次 run
 > (事实基线 §5:HEAD 那次 Images build=success、Frontend=success、Backend=failure);
 > 本机复测命令 `mvn -o -B -ntp -fae test`、`npm run lint` / `npm run type-check` / `npm run test:routes`。
-> **这些数字每次提交都会漂移**——本文下表测于 2026-10-28 的 `b45d40a`,请用上面的命令重测,不要引用本文数值。
+> **这些数字每次提交都会漂移**——本文下表测于 2026-10-29 的 `a750757`,请用上面的命令重测,不要引用本文数值。
 >
 > 2026-04-25 的版本自评 4.8/5、"达到商业级"、"安全防护满分",且技术栈写的是 Java 17 / Boot 3.2。
 > 这些结论与仓库自身的提交历史矛盾(见下文),已作废。本文只写**可验证**的事实,
@@ -20,25 +20,30 @@
 
 ### 测试(实测,非文档转述)
 
-**实测更正(2026-10-28,commit `b45d40a`):** 评估时点(2e80a2e)的 1603 已过期。当前全反应堆
-`mvn -o -B -ntp -fae test` 为 **2082 个测试,0 个断言失败,84 个错误,6 个跳过,且 84 个错误全部是缺外部依赖**。
-(同一天早先在 `ed93868` 测得 2020——**四小时内涨了 57 个**,这就是不要引用本文数字的原因。)
+**实测更正(2026-10-29,commit `a750757` 的工作树):** 评估时点(2e80a2e)的 1603 已过期。当前全反应堆
+`mvn -o -B -ntp -fae test` 为 **2107 个测试、11 个断言失败、84 个错误、6 个跳过**。
+84 个错误全部是缺外部依赖;**但 11 个失败是真的**——全在 `AiUsageLifecycleTest`,由 `a69fd71`
+把 `TokenUsageCollectorFilter` 从 `report(...)` 改成 `reportDurably(...)` 却没同步测试造成
+(测试仍 `verify(reporter).report(...)`)。用量本身采集正确,是 mock 期望过期;但该类现在是红的,
+会掩盖它内部的真实回归。已用父提交的干净 worktree 对基线,同样 11 个失败,故与其后的改动无关。
+(数字漂移轨迹:`ed93868` 2020 → `d42a273` 2077 → `b45d40a` 2082 → 现在 2107,**一天内四次**,
+这就是不要引用本文数字的原因。)
 
-| 模块 | run | fail | err | skip | 错误原因 |
+| 模块 | run | fail | err | skip | 原因 |
 |---|---|---|---|---|---|
-| my-gateway | 1018 | 0 | 0 | 2 | — |
-| gateway-admin | 564 | 0 | 80 | 0 | `entityManagerFactory` → 无本机 MySQL:3306,其余为同 context 级联 |
+| my-gateway | 1035 | **11** | 0 | 2 | 11 个失败全在 `AiUsageLifecycleTest`(`report` → `reportDurably` 未同步测试) |
+| gateway-admin | 572 | 0 | 80 | 0 | `entityManagerFactory` → 无本机 MySQL:3306,其余为同 context 级联 |
 | gateway-trace-starter | 160 | 0 | 0 | 0 | — |
 | license-client | 83 | 0 | 0 | 0 | — |
 | license-server | 40 | 0 | 0 | 0 | — |
 | gateway-moderation-spi | 0 | 0 | 0 | 0 | 契约模块,只有一个 SPI 接口,尚无测试 |
 | seckill-core-engine | 217 | 0 | 4 | 4 | 3 × 无 Redis:30379;1 × 要 Docker |
-| **合计** | **2082** | **0** | **84** | **6** | |
+| **合计** | **2107** | **11** | **84** | **6** | |
 
 (评估时点 2e80a2e 的旧表为 my-gateway 684 / admin 458 / trace-starter 147 / seckill 191,合计 1603;已作废。)
 
 - 主代码 0 个 `FIXME`/`HACK`,**6** 个 `TODO`(评估时写 7,实测为 6)。0 个 `@Disabled`。
-- **实测更正:** 前端 `gateway-ui` **不是 0 个测试**:`tests/` 下有 **11** 个 `*.test.mjs`、
+- **实测更正:** 前端 `gateway-ui` **不是 0 个测试**:`tests/` 下有 **15** 个 `*.test.mjs`、
   共 **51 个测试全部通过**;`npm run lint` 与 `npm run type-check` 当前**退出码均为 0**
   (评估时"`npm run lint` 退出码 1"已在 `cfb0050` 修复后失效)。
   注意 `npm run test:routes` 需要 Node ≥22.18(类型剥离默认开启);本机 22.14.0 上要临时加
@@ -103,7 +108,7 @@
 |---|---|---|
 | 架构设计 | 4.0 | 控制面/数据面分离、模块依赖单向、父 pom 集中管版本。扣分:gateway-admin 仍有 1600 行级 service |
 | 代码质量 | 4.0 | 19 万行 0 FIXME/HACK;ToolExecutor 已从 4241 行拆至 553 行 |
-| 测试 | 3.5 | 2082 测试 0 真失败(实测更正,测于 `b45d40a`;评估时点为 1603);扣分:前端测试覆盖仍薄(现 51 个,评估时误记 0)、trace-starter 曾用 300 次同义反复断言撑数字 |
+| 测试 | 3.5 | 2107 测试、**11 个真失败**(实测更正,测于 `a750757`;评估时点为 1603、当时记 0 真失败)。11 个失败全在 `AiUsageLifecycleTest`,由 `a69fd71` 改用 `reportDurably` 未同步测试造成。**按本行自己的扣分逻辑,今天的分数应低于 3.5**——但本表是 2026-10-27 的时点打分,不代为重算;扣分:前端测试覆盖仍薄(现 51 个,评估时误记 0)、trace-starter 曾用 300 次同义反复断言撑数字 |
 | 文档准确性 | 2.5 | 体量与散文诚实度优秀;但测试表曾 6 行错 4 行、自称"没有 CI",即本文取代的旧自评 |
 | 可复现性/交付验证 | 2.0 | CI 已运行但 Backend job 当前 failure 且日志匿名不可取(实测更正,原"CI 从未执行"为错);三个外部依赖只文档化了两个;部署校验 10-27 才补上 |
 | 安全(现状) | 3.0 | 已知缺陷已修且有测试;扣分依据是历史自评与真实缺陷的偏差,而非现存证据 |
@@ -117,7 +122,7 @@
 1. **实测更正:** CI 并非"首跑从未发生";它已运行 39+ 次。当前真实缺口是 **Backend job 持续 failure**
    (失败步骤 = `Build and test`),且 job 日志/annotations 匿名取不到,无法定位具体红测;需在有权限的环境排查。
    评估时"首跑会在 frontend lint 失败"的预测已被证伪(Frontend job 在 `cfb0050` 后转绿)。
-2. **实测更正:** 前端并非 0 测试,现 `tests/` 有 15 个 `*.test.mjs`、51 个测试全过(测于 `b45d40a`);缺口转为**覆盖广度**
+2. **实测更正:** 前端并非 0 测试,现 `tests/` 有 15 个 `*.test.mjs`、51 个测试全过(测于 `a750757`);缺口转为**覆盖广度**
    (相对庞大的 UI 而言 25 个仍偏少),而非"完全没有"。
 3. 84 个环境错误在本机永远跑不了;要覆盖需隔离的测试 MySQL/Redis 或 Testcontainers。
 4. gateway-admin 的巨型 service(PrometheusService 1609 行、GatewayInstanceService 1511 行、
