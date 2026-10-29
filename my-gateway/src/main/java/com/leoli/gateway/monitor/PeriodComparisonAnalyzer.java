@@ -105,7 +105,9 @@ public class PeriodComparisonAnalyzer {
             result.setRegressionAlerts(generateRegressionAlerts(filterComparisons));
             result.setRegressionThreshold(request.getRegressionThreshold());
             result.setAnalysisTime(System.currentTimeMillis());
-            result.setStatus("success");
+            result.setStatus(filterComparisons.isEmpty() ? "insufficient_data" : "success");
+            result.setDataScope(Map.of("type", "RETAINED_REQUEST_SAMPLES", "completeHistory", false,
+                    "description", "Only retained in-memory request samples are compared; missing historical data is not zero traffic"));
 
             log.info("Period comparison completed: {} filters compared, {} regressions detected",
                     filterComparisons.size(), result.getRegressionAlerts().size());
@@ -161,38 +163,40 @@ public class PeriodComparisonAnalyzer {
 
     /**
      * Get filter metrics for a specific time period.
-     * Uses HistoricalDataTracker for historical data, FilterChainTracker for recent data.
+     * Uses retained request samples with a half-open [start,end) time range.
+     * Global cumulative counters cannot be substituted for period-specific data.
      */
-    private Map<String, FilterPeriodMetrics> getMetricsForPeriod(LocalDateTime start, LocalDateTime end) {
+    Map<String, FilterPeriodMetrics> getMetricsForPeriod(LocalDateTime start, LocalDateTime end) {
+        if (start == null || end == null || !start.isBefore(end)) throw new IllegalArgumentException("Invalid comparison time range");
         Map<String, FilterPeriodMetrics> metrics = new HashMap<>();
-
-        // For very recent data (last 60 minutes), use FilterChainTracker
-        LocalDateTime now = LocalDateTime.now();
-        long minutesFromNow = ChronoUnit.MINUTES.between(end, now);
-
-        if (minutesFromNow <= 60) {
-            // Use current tracker data
-            Map<String, FilterChainTracker.FilterStats> stats = filterChainTracker.getFilterStats();
-            for (Map.Entry<String, FilterChainTracker.FilterStats> entry : stats.entrySet()) {
-                FilterPeriodMetrics periodMetrics = new FilterPeriodMetrics();
-                periodMetrics.setFilterName(entry.getKey());
-                periodMetrics.setAvgSelfTimeMs(entry.getValue().getAvgSelfTimeMs());
-                periodMetrics.setAvgTotalTimeMs(entry.getValue().getAvgDurationMicros() / 1000.0);
-                periodMetrics.setAvgP95Ms(entry.getValue().getSelfP95Micros() / 1000.0);
-                periodMetrics.setAvgP99Ms(entry.getValue().getSelfP99Micros() / 1000.0);
-                periodMetrics.setSuccessRate(entry.getValue().getSuccessRate());
-                periodMetrics.setTotalExecutions(entry.getValue().getTotalCount());
-                periodMetrics.setSlowRequestCount(0); // TODO: from slow request tracker
-
-                metrics.put(entry.getKey(), periodMetrics);
+        long from = start.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long to = end.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+        Map<String, List<FilterChainTracker.FilterExecution>> samples = new HashMap<>();
+        Map<String, Long> slowRequests = new HashMap<>();
+        for (var record : filterChainTracker.getRecentRecords()) {
+            if (record.getCreatedAt() < from || record.getCreatedAt() >= to) continue;
+            Set<String> filtersInSlowRequest = new HashSet<>();
+            for (var execution : record.getExecutions()) {
+                if (execution.getEndTime() <= 0) continue;
+                samples.computeIfAbsent(execution.getFilterName(), ignored -> new ArrayList<>()).add(execution);
+                if (record.getTotalDurationMs() > filterChainTracker.getSlowThresholdMs())
+                    filtersInSlowRequest.add(execution.getFilterName());
             }
-        } else {
-            // Use HistoricalDataTracker
-            // Note: HistoricalDataTracker currently only stores overall metrics, not per-filter
-            // For now, return empty - this would need database queries for real historical per-filter data
-            log.debug("Historical period {} to {} requires database query", start, end);
+            filtersInSlowRequest.forEach(name -> slowRequests.merge(name, 1L, Long::sum));
         }
-
+        samples.forEach((name, executions) -> {
+            var period = new FilterPeriodMetrics();
+            period.setFilterName(name);
+            period.setTotalExecutions(executions.size());
+            period.setAvgSelfTimeMs(executions.stream().mapToDouble(e -> e.getSelfTimeMicros() / 1000.0).average().orElse(0));
+            period.setAvgTotalTimeMs(executions.stream().mapToDouble(e -> e.getDurationMicros() / 1000.0).average().orElse(0));
+            double[] selfTimes = executions.stream().mapToDouble(e -> e.getSelfTimeMicros() / 1000.0).sorted().toArray();
+            period.setAvgP95Ms(selfTimes[(int) Math.ceil(selfTimes.length * .95) - 1]);
+            period.setAvgP99Ms(selfTimes[(int) Math.ceil(selfTimes.length * .99) - 1]);
+            period.setSuccessRate(100.0 * executions.stream().filter(FilterChainTracker.FilterExecution::isSuccess).count() / executions.size());
+            period.setSlowRequestCount(slowRequests.getOrDefault(name, 0L));
+            metrics.put(name, period);
+        });
         return metrics;
     }
 
@@ -422,6 +426,9 @@ public class PeriodComparisonAnalyzer {
     }
 
     public static class ComparisonResult {
+        private Map<String, Object> dataScope;
+        public Map<String, Object> getDataScope() { return dataScope; }
+        public void setDataScope(Map<String, Object> dataScope) { this.dataScope = dataScope; }
         private String comparisonType;
         private Map<String, String> currentPeriod;
         private Map<String, String> historicalPeriod;
@@ -439,8 +446,9 @@ public class PeriodComparisonAnalyzer {
             map.put("currentPeriod", currentPeriod);
             map.put("historicalPeriod", historicalPeriod);
             map.put("overallComparison", overallComparison);
-            map.put("filterComparisons", filterComparisons.stream().map(FilterComparison::toMap).toList());
-            map.put("regressionAlerts", regressionAlerts.stream().map(RegressionAlert::toMap).toList());
+            map.put("filterComparisons", filterComparisons == null ? List.of() : filterComparisons.stream().map(FilterComparison::toMap).toList());
+            map.put("regressionAlerts", regressionAlerts == null ? List.of() : regressionAlerts.stream().map(RegressionAlert::toMap).toList());
+            map.put("dataScope", dataScope);
             map.put("regressionThreshold", regressionThreshold);
             map.put("analysisTime", analysisTime);
             map.put("status", status);

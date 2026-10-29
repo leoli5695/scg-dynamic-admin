@@ -28,11 +28,15 @@ public class TokenUsageReporter {
     @Value("${gateway.token-usage.outbox-max-records:4096}") private int maxRecords = 4096;
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     private volatile TokenUsageOutbox outbox;
+    public record Admission(String slot, String eventId, Object requestTime) { }
+    // Bounded by the number of durable active reservations, never an unbounded fallback queue.
+    private final Map<String, byte[]> deferredCompletions = new ConcurrentHashMap<>();
     private final Object lifecycle = new Object();
     private final Counter reportFailures;
     private final Counter deliveryRetries;
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TokenUsageReporter.class);
     private long retryAtNanos;
+    private long persistenceRetryAtNanos;
     private int consecutiveFailures;
     private final java.util.concurrent.atomic.AtomicLong nextPersistenceWarning = new java.util.concurrent.atomic.AtomicLong();
     private final ConnectionProvider pool = ConnectionProvider.builder("gateway-token-usage")
@@ -66,6 +70,44 @@ public class TokenUsageReporter {
     public void report(Map<String, Object> data) {
         reportDurably(data);
     }
+
+    public Admission begin(Map<String, Object> context) {
+        try {
+            if (!enabled() || reactor.core.scheduler.Schedulers.isInNonBlockingThread())
+                throw new IllegalStateException("Durable usage admission unavailable");
+            var snapshot = new LinkedHashMap<>(context);
+            String eventId = UUID.randomUUID().toString();
+            snapshot.put("eventId", eventId);
+            snapshot.put("usageStatus", "UNKNOWN");
+            snapshot.put("promptTokens", null); snapshot.put("completionTokens", null); snapshot.put("totalTokens", null);
+            snapshot.put("chargedTokens", null); snapshot.put("interrupted", true);
+            snapshot.put("settlementStatus", "PENDING".equals(context.get("settlementStatus")) ? "PENDING" : "NOT_REQUIRED");
+            return new Admission(store().begin(mapper.writeValueAsBytes(snapshot)), eventId, snapshot.get("requestTime"));
+        } catch (Exception error) {
+            reportFailures.increment();
+            throw new IllegalStateException("Unable to reserve durable AI usage record", error);
+        }
+    }
+
+    public boolean complete(Admission admission, Map<String, Object> data) {
+        synchronized (deferredCompletions) {
+        try {
+            var snapshot = new LinkedHashMap<>(data);
+            snapshot.put("eventId", admission.eventId());
+            snapshot.put("requestTime", admission.requestTime());
+            byte[] payload = mapper.writeValueAsBytes(snapshot);
+            if (payload.length > TokenUsageOutbox.MAX_RECORD_BYTES) throw new IllegalArgumentException("Usage record too large");
+            deferredCompletions.put(admission.slot(), payload);
+            store().complete(admission.slot(), payload);
+            deferredCompletions.remove(admission.slot(), payload);
+            return true;
+        } catch (Exception error) {
+            reportFailures.increment();
+            log.error("Final AI usage persistence failed; durable admission {} retained for recovery", admission.eventId(), error);
+            return false;
+        }
+        }
+    }
     /** True only after the immutable snapshot has been accepted by the persistent outbox. */
     public boolean reportDurably(Map<String, Object> data) {
         if (!enabled()) return false;
@@ -87,9 +129,23 @@ public class TokenUsageReporter {
         }
     }
     synchronized void flush() {
-        if (closed || !enabled() || (retryAtNanos != 0 && System.nanoTime() - retryAtNanos < 0)) return;
+        if (closed || !enabled()) return;
         try {
             TokenUsageOutbox store = store();
+            // Finalization retries must neither block delivery of other records nor
+            // spin on an unavailable disk every 50ms. Never hold this lock across HTTP.
+            synchronized (deferredCompletions) {
+                if (System.nanoTime() - persistenceRetryAtNanos >= 0) {
+                    for (var entry : deferredCompletions.entrySet()) {
+                        try {
+                            store.complete(entry.getKey(), entry.getValue());
+                            deferredCompletions.remove(entry.getKey(), entry.getValue());
+                        } catch (java.io.IOException failure) { reportFailures.increment(); }
+                    }
+                    persistenceRetryAtNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+                }
+            }
+            if (retryAtNanos != 0 && System.nanoTime() - retryAtNanos < 0) return;
             List<TokenUsageOutbox.Entry> batch = store.batch(32);
             if (batch.isEmpty()) return;
             List<com.fasterxml.jackson.databind.util.RawValue> values = batch.stream()

@@ -198,7 +198,9 @@ public class ServiceService {
     String serviceDataId = SERVICE_PREFIX + entity.getServiceId();
 
     // Create a copy without description for Nacos
-    ServiceDefinition nacosConfig = new ServiceDefinition();
+    ServiceDefinition nacosConfig = objectMapper.convertValue(service, ServiceDefinition.class);
+    nacosConfig.setDescription(null);
+    nacosConfig.setApiKey(null);
     nacosConfig.setName(service.getName());
     nacosConfig.setServiceId(entity.getServiceId());
     nacosConfig.setLoadBalancer(service.getLoadBalancer());
@@ -286,7 +288,9 @@ public class ServiceService {
     service.setServiceId(entity.getServiceId());
     
     // Create a copy without description for Nacos
-    ServiceDefinition nacosConfig = new ServiceDefinition();
+    ServiceDefinition nacosConfig = objectMapper.convertValue(service, ServiceDefinition.class);
+    nacosConfig.setDescription(null);
+    nacosConfig.setApiKey(null);
     nacosConfig.setName(service.getName());
     nacosConfig.setServiceId(entity.getServiceId());
     nacosConfig.setLoadBalancer(service.getLoadBalancer());

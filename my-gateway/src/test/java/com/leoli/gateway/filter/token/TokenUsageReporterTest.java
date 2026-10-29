@@ -12,6 +12,62 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TokenUsageReporterTest {
+    @Test void fullQueueRejectsAdmissionButReservedResultCanStillFinalize() throws Exception {
+        var reporter = reporter(new SimpleMeterRegistry());
+        ReflectionTestUtils.setField(reporter, "maxRecords", 1);
+        try {
+            var admission = reporter.begin(Map.of("tenantId", "t", "requestTime", "2026-10-29T10:00:00"));
+            assertThrows(IllegalStateException.class, () -> reporter.begin(Map.of("tenantId", "next")));
+            assertTrue(reporter.complete(admission, Map.of("tenantId", "t", "totalTokens", 98, "usageStatus", "CONFIRMED")));
+        } finally { reporter.close(); }
+        try (var store = new TokenUsageOutbox(directory, 67108864, 4096)) {
+            var row = new ObjectMapper().readTree(store.batch(1).getFirst().bytes());
+            assertEquals(98, row.get("totalTokens").asInt());
+            assertEquals("2026-10-29T10:00:00", row.get("requestTime").asText());
+        }
+    }
+    @Test void crashBeforeCompletionRecoversUnknownInsteadOfLosingCall() throws Exception {
+        var reporter = reporter(new SimpleMeterRegistry());
+        String eventId;
+        try { eventId = reporter.begin(Map.of("tenantId", "t", "traceId", "trace1")).eventId(); }
+        finally { reporter.close(); }
+        try (var store = new TokenUsageOutbox(directory, 67108864, 4096)) {
+            var row = new ObjectMapper().readTree(store.batch(1).getFirst().bytes());
+            assertEquals(eventId, row.get("eventId").asText());
+            assertEquals("UNKNOWN", row.get("usageStatus").asText());
+            assertTrue(row.get("totalTokens").isNull());
+            assertEquals("trace1", row.get("traceId").asText());
+        }
+    }
+    @Test void failedFinalWriteRetainsAdmissionAndRetriesExactUsage() throws Exception {
+        var reporter = reporter(new SimpleMeterRegistry());
+        ReflectionTestUtils.setField(reporter, "adminUrl", "http://127.0.0.1:1");
+        TokenUsageReporter.Admission admission = reporter.begin(Map.of("tenantId", "t"));
+        // Deterministically simulate an unwritable final snapshot while the active file survives.
+        var obstacle = directory.resolve(admission.slot() + ".tmp");
+        java.nio.file.Files.createDirectory(obstacle);
+        java.nio.file.Files.writeString(obstacle.resolve("block"), "disk failure");
+        try {
+            assertFalse(reporter.complete(admission, Map.of("tenantId", "t", "totalTokens", 98)));
+            assertTrue(java.nio.file.Files.exists(directory.resolve(admission.slot() + ".active")));
+            java.nio.file.Files.delete(obstacle.resolve("block")); java.nio.file.Files.delete(obstacle);
+            reporter.flush();
+        } finally { reporter.close(); }
+        try (var store = new TokenUsageOutbox(directory, 67108864, 4096)) {
+            var row = new ObjectMapper().readTree(store.batch(1).getFirst().bytes());
+            assertEquals(98, row.get("totalTokens").asInt());
+            assertEquals(admission.eventId(), row.get("eventId").asText());
+        }
+    }
+    @Test void inflightReservationDoesNotExportBeforeCompletionAndReservesBytes() throws Exception {
+        try (var store = new TokenUsageOutbox(directory, 16384, 10)) {
+            String slot = store.begin("{}".getBytes());
+            assertTrue(store.batch(32).isEmpty());
+            assertThrows(java.io.IOException.class, () -> store.append(new byte[1]));
+            store.complete(slot, new byte[16384]);
+            assertEquals(1, store.batch(32).size());
+        }
+    }
     @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory;
     private TokenUsageReporter reporter(SimpleMeterRegistry meters) {
         var reporter = new TokenUsageReporter(meters);

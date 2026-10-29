@@ -25,6 +25,27 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ServiceServicePublishTest {
+    @Test void updatePublishesAiProviderFieldsAndRefreshesCacheAfterCommit() {
+        var definition = setupCreate();
+        definition.setCategory("AI"); definition.setProviderType("qwen");
+        definition.setBaseUrl("https://old.example"); definition.setCredentialRef("cred1"); definition.setProtocol("OPENAI");
+        var entity = new ServiceEntity(); entity.setServiceName("backend"); entity.setServiceId("s1"); entity.setInstanceId("i1");
+        when(serviceRepository.findByServiceName("backend")).thenReturn(entity);
+        when(configCenterService.publishConfig(eq("config.gateway.service-s1"), eq("ns1"), any())).thenReturn(true);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.updateService("backend", definition);
+            var config = org.mockito.ArgumentCaptor.forClass(ServiceDefinition.class);
+            verify(configCenterService).publishConfig(eq("config.gateway.service-s1"), eq("ns1"), config.capture());
+            assertEquals("AI", config.getValue().getCategory());
+            assertEquals("https://old.example", config.getValue().getBaseUrl());
+            assertEquals("cred1", config.getValue().getCredentialRef());
+            assertNull(config.getValue().getApiKey());
+            assertNull(service.getServiceByName("backend"));
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+            assertEquals("https://old.example", service.getServiceByName("backend").getBaseUrl());
+        } finally { TransactionSynchronizationManager.clearSynchronization(); }
+    }
     @Mock ConfigCenterService configCenterService;
     @Mock ServiceRepository serviceRepository;
     @Mock GatewayInstanceRepository gatewayInstanceRepository;

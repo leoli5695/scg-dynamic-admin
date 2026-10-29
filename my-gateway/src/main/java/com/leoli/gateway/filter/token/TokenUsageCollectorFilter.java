@@ -98,6 +98,7 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
     private static final String ATTR_TENANT_ID = "token_quota_tenant_id";
     public static final String SETTLEMENT_OWNER_ATTR = "token_quota_settlement_collector";
     private static final String METERING_ONLY_ATTR = "ai.usage.metering-only";
+    private static final String USAGE_ADMISSION_ATTR = "ai.usage.durable-admission";
     public static final String UNASSIGNED_TENANT = "__unassigned__";
     private static final String ATTR_STREAM_INTERRUPTED = "token_quota_stream_interrupted";
 
@@ -319,6 +320,31 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                             meteringTenant, preDeductedTokens, error.getMessage(), error);
                                     });
                 });
+        if (tokenUsageReporter != null && tokenUsageReporter.isConfigured()
+                && exchange.getAttribute(TokenQuotaLedger.REQUEST_ATTR) == null) {
+            return Mono.fromCallable(() -> {
+                        try {
+                            var context = usagePayload(exchange, meteringTenant, null, 0);
+                            context.put("settlementStatus", quotaActive ? "PENDING" : "NOT_REQUIRED");
+                            context.put("reservedTokens", preDeductedTokens);
+                            exchange.getAttributes().put(USAGE_ADMISSION_ATTR, tokenUsageReporter.begin(context));
+                            return true;
+                        } catch (Exception failure) {
+                            // Legacy quota mode has no ledger to cancel the pre-deduction.
+                            if (quotaActive && preDeductedTokens > 0) {
+                                var stamp = exchange.<TokenQuotaManager.QuotaPeriodStamp>getAttribute(TokenQuotaPreCheckFilter.ATTR_PERIOD_STAMP);
+                                if (stamp != null) tokenQuotaManager.settleTokenUsage(meteringTenant, preDeductedTokens, 0, config.tokenQuotaConfig, stamp);
+                                else tokenQuotaManager.settleTokenUsage(meteringTenant, preDeductedTokens, 0, config.tokenQuotaConfig);
+                            }
+                            log.error("AI request rejected before upstream call: durable metering unavailable", failure);
+                            return false;
+                        }
+                    }).subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(admitted -> admitted ? result :
+                            com.leoli.gateway.util.GatewayResponseHelper.writeErrorResponse(exchange.getResponse(),
+                                    org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, 50303,
+                                    "AI usage persistence is temporarily unavailable; request was not sent upstream"));
+        }
         return result;
     }
 
@@ -641,9 +667,18 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
             return;
         }
         try {
-            tokenUsageReporter.report(usagePayload(exchange,tenantId,usage,actualTokens));
+            TokenUsageReporter.Admission admission = exchange.getAttribute(USAGE_ADMISSION_ATTR);
+            boolean persisted = admission != null
+                    ? tokenUsageReporter.complete(admission, usagePayload(exchange, tenantId, usage, actualTokens))
+                    : tokenUsageReporter.reportDurably(usagePayload(exchange, tenantId, usage, actualTokens));
+            if (!persisted) {
+                exchange.getAttributes().put("ai.usage.persistence.failed", true);
+                log.error("AI usage final record was not persisted for trace {}; admission retained when available",
+                        (Object) exchange.getAttribute(TraceIdGlobalFilter.TRACE_ID_ATTR));
+            }
         } catch (Exception e) {
-            log.warn("Failed to build token usage report for tenant {} (ignored)", tenantId, e);
+            exchange.getAttributes().put("ai.usage.persistence.failed", true);
+            log.error("Failed to build token usage report for tenant {}; durable admission retained", tenantId, e);
         }
     }
 

@@ -51,6 +51,8 @@ public class AuditLogService {
     private final GatewayInstanceRepository gatewayInstanceRepository;
     private final StrategyRepository strategyRepository;
     private final AuthPolicyRepository authPolicyRepository;
+    private final com.leoli.gateway.admin.repository.ServiceRepository serviceRepository;
+    private final ServiceService serviceService;
 
     /**
      * Record an audit log entry.
@@ -441,10 +443,17 @@ public class AuditLogService {
         String targetId = auditLog.getTargetId();
 
         try {
+            if ("SERVICE".equals(targetType)) {
+                var target = serviceRepository.findByServiceId(targetId);
+                if (target.isEmpty() || !Objects.equals(auditLog.getInstanceId(), target.get().getInstanceId())) {
+                    return Map.of("success", false, "message", "Service not found in audit log instance");
+                }
+            }
             // Perform rollback based on target type and operation type
             boolean rolledBack = performRollback(targetType, targetId, auditLog.getOldValue(), operationType);
 
             if (!rolledBack) {
+                markRollbackOnly();
                 return Map.of("success", false, "message", "Rollback failed for type: " + targetType);
             }
 
@@ -460,8 +469,15 @@ public class AuditLogService {
             );
 
         } catch (Exception e) {
+            markRollbackOnly();
             log.error("Rollback failed", e);
             return Map.of("success", false, "message", "Rollback failed: " + e.getMessage());
+        }
+    }
+
+    private void markRollbackOnly() {
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            org.springframework.transaction.interceptor.TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
         }
     }
 
@@ -632,9 +648,18 @@ public class AuditLogService {
         return instance.map(GatewayInstanceEntity::getNacosNamespace).orElse(null);
     }
 
-    private boolean rollbackService(String serviceId, String oldValue) {
-        // TODO: Implement service rollback
-        log.info("Service rollback: {}", serviceId);
+    private boolean rollbackService(String serviceId, String oldValue) throws Exception {
+        var entity = serviceRepository.findByServiceId(serviceId)
+                .orElseThrow(() -> new IllegalArgumentException("Service not found: " + serviceId));
+        var previous = objectMapper.readValue(oldValue, com.leoli.gateway.admin.model.ServiceDefinition.class);
+        if (!Objects.equals(entity.getServiceName(), previous.getName())
+                || (previous.getServiceId() != null && !serviceId.equals(previous.getServiceId()))) {
+            throw new IllegalArgumentException("Service snapshot does not match rollback target");
+        }
+        // Reuse the transactional DB + configuration-center update and after-commit cache refresh.
+        // Publication failure must propagate; the caller must never report a successful no-op.
+        serviceService.updateService(entity.getServiceName(), previous);
+        log.info("Service configuration restored: {}", serviceId);
         return true;
     }
 
