@@ -1,0 +1,11 @@
+{
+  "copilot.trace_id_placeholder": "Trace ID",
+  "copilot.trace_action": "Troubleshoot by Trace ID",
+  "copilot.trace_prompt": "Troubleshoot this gateway request by Trace ID: {{traceId}}. First call the trace/chain tools for the actual record (route, status, latency, filter executions, errors), then give rule diagnoses and recommendations; cite the triggering metric and evidence for each recommendation.",
+  "copilot.route_placeholder": "Route to explain",
+  "copilot.explain_action": "Explain configuration",
+  "copilot.explain_prompt": "Explain the configuration of route {{routeId}}: predicates, target service, filters, bound governance policies and authentication. State what is effective, where precedence comes from and the risks, citing configuration evidence.",
+  "copilot.draft_action": "Generate change draft",
+  "copilot.draft_prompt": "Generate a change draft for route {{routeId}} describing the changes, impact and verification; do not execute it and wait for my confirmation.",
+  "copilot.open_route_record": "Open the route record"
+}

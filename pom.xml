@@ -43,7 +43,6 @@
         <module>my-gateway</module>
         <module>gateway-admin</module>
         <module>demo-service</module>
-        <module>seckill-core-engine</module>
     </modules>
 
     <properties>
@@ -87,4 +86,14 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <profiles>
+        <!-- Optional demo engineering: not part of the default gateway build. Build with -Pseckill. -->
+        <profile>
+            <id>seckill</id>
+            <modules>
+                <module>seckill-core-engine</module>
+            </modules>
+        </profile>
+    </profiles>
 </project>

@@ -1,0 +1,11 @@
+{
+  "copilot.trace_id_placeholder": "输入 Trace ID",
+  "copilot.trace_action": "按 Trace ID 排障",
+  "copilot.trace_prompt": "请按 Trace ID 排查这条网关请求：{{traceId}}。先调用追踪/链路工具获取实际记录（路由、状态码、耗时、过滤器执行、异常），再给出规则诊断与建议；每条建议引用触发指标与证据。",
+  "copilot.route_placeholder": "选择要解释的路由",
+  "copilot.explain_action": "解释配置",
+  "copilot.explain_prompt": "请解释路由 {{routeId}} 的配置：断言、目标服务、过滤器、绑定的治理策略与鉴权，说明实际生效项、优先级来源与潜在风险，并引用配置证据。",
+  "copilot.draft_action": "生成修改草稿",
+  "copilot.draft_prompt": "为路由 {{routeId}} 生成一份修改草稿，说明修改点、影响范围和验证方法；不要直接执行，等我确认。",
+  "copilot.open_route_record": "查看实际路由记录"
+}

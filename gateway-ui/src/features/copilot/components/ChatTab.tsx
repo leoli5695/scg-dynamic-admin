@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Empty, Input, Spin, Tooltip, Typography } from 'antd';
+import { Button, Empty, Input, Select, Spin, Tooltip, Typography } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
   ClearOutlined,
@@ -13,7 +13,10 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { clearCopilotChat, executeCopilotAction, getCopilotHistory, sendCopilotChatStream, submitCopilotFeedback } from '../../../api/copilot';
+import { listRoutes } from '../../../api/routes';
+import { useRequest } from '../../../hooks/useRequest';
 import { ApiError, isAbortError } from '../../../api/http';
 import type { CopilotPendingAction } from '../../../types/copilot';
 import AiReportRenderer from '../../../components/ai/AiReportRenderer';
@@ -30,6 +33,8 @@ interface ChatMessage {
   timestamp: Date;
   /** true 仅用于真正来自模型的回答（本地确认/取消提示不算），决定是否显示反馈按钮。 */
   fromAi?: boolean;
+  /** Confirmed write actions link to the record they actually changed. */
+  link?: { href: string; label: string };
 }
 
 interface ChatTabProps {
@@ -41,7 +46,11 @@ interface ChatTabProps {
 const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const sessionKey = copilotSessionStorageKey(user?.username || 'anonymous', instanceId || 'all');
+  const [traceLookupId, setTraceLookupId] = useState('');
+  const [targetRouteId, setTargetRouteId] = useState<string>();
+  const routesRequest = useRequest((signal) => listRoutes({ instanceId }, { signal }), { deps: [instanceId] });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -62,6 +71,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const sendingRef = useRef(false);
   const executingRef = useRef(false);
   const clearingRef = useRef(false);
+  const quickBusy = loading || historyLoading || clearing || executing;
 
   // 按账号与实例保存 sessionId，刷新后恢复该会话的持久化历史。
   useEffect(() => {
@@ -125,21 +135,22 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     if (followBottomRef.current) messagesEndRef.current?.scrollIntoView({ behavior: loading ? 'auto' : 'smooth' });
   }, [messages, streamingContent, loading]);
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (override?: string) => {
+    const content = (override ?? inputMessage).trim();
     if (sendingRef.current || executingRef.current || historyLoading || clearingRef.current || !sessionId) return;
-    if (!inputMessage.trim()) return;
+    if (!content) return;
     sendingRef.current = true;
     followBottomRef.current = true;
     const epoch = ++epochRef.current;
 
     const userMessage: ChatMessage = {
       role: 'user',
-      content: inputMessage.trim(),
+      content,
       timestamp: new Date(),
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
+    if (!override) setInputMessage('');
     setLoading(true);
     setStreamNote(t('copilot.ai_thinking'));
     setStreamingContent('');
@@ -231,12 +242,19 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
         toolName: pendingAction.toolName,
       });
       if (epochRef.current !== epoch) return;
+      const changedRouteId = (result.data as { routeId?: unknown } | null | undefined)?.routeId;
       const assistantMessage: ChatMessage = {
         role: 'assistant',
         content: result.success
           ? `✅ ${result.message || t('copilot.operation_success')}`
           : `❌ ${result.message || t('copilot.operation_failed')}`,
         timestamp: new Date(),
+        link: result.success && typeof changedRouteId === 'string'
+          ? {
+              href: `/instances/${encodeURIComponent(instanceId)}/routes?highlight=${encodeURIComponent(changedRouteId)}`,
+              label: t('copilot.open_route_record'),
+            }
+          : undefined,
       };
       setMessages(prev => [...prev, assistantMessage]);
       if (result.success) {
@@ -380,6 +398,13 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
                 <div style={{ color: 'rgba(255,255,255,0.85)' }}>
                   <AiReportRenderer content={msg.content} />
                 </div>
+                {msg.link && (
+                  <div style={{ marginTop: 8 }}>
+                    <Button size="small" type="link" onClick={() => msg.link && navigate(msg.link.href)}>
+                      {msg.link.label}
+                    </Button>
+                  </div>
+                )}
                 {msg.role === 'assistant' && msg.fromAi && (
                   <div style={{ marginTop: '8px', display: 'flex', gap: '4px', alignItems: 'center' }}>
                     <Tooltip title={t('copilot.feedback_up')}>
@@ -495,6 +520,55 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
         </div>
       )}
 
+      {/* Focused entry points: trace troubleshooting, config explanation, draft generation */}
+      <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <Input
+          size="small"
+          allowClear
+          value={traceLookupId}
+          onChange={e => setTraceLookupId(e.target.value)}
+          placeholder={t('copilot.trace_id_placeholder')}
+          disabled={quickBusy}
+          style={{ width: 190 }}
+        />
+        <Button
+          size="small"
+          disabled={quickBusy || !traceLookupId.trim()}
+          onClick={() => handleSendMessage(t('copilot.trace_prompt', { traceId: traceLookupId.trim() }))}
+        >
+          {t('copilot.trace_action')}
+        </Button>
+        <Select
+          size="small"
+          showSearch
+          allowClear
+          optionFilterProp="label"
+          value={targetRouteId}
+          onChange={setTargetRouteId}
+          placeholder={t('copilot.route_placeholder')}
+          disabled={quickBusy}
+          style={{ width: 220 }}
+          options={(routesRequest.data ?? []).map(route => ({
+            value: route.id,
+            label: `${route.routeName || route.id} (${route.id})`,
+          }))}
+        />
+        <Button
+          size="small"
+          disabled={quickBusy || !targetRouteId}
+          onClick={() => handleSendMessage(t('copilot.explain_prompt', { routeId: targetRouteId }))}
+        >
+          {t('copilot.explain_action')}
+        </Button>
+        <Button
+          size="small"
+          disabled={quickBusy || !targetRouteId}
+          onClick={() => handleSendMessage(t('copilot.draft_prompt', { routeId: targetRouteId }))}
+        >
+          {t('copilot.draft_action')}
+        </Button>
+      </div>
+
       {/* Input Area */}
       <div
         style={{
@@ -527,7 +601,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
         <Button
           type="primary"
           icon={<SendOutlined />}
-          onClick={handleSendMessage}
+          onClick={() => handleSendMessage()}
           loading={loading}
           disabled={historyLoading || clearing || executing || !inputMessage.trim()}
         >
