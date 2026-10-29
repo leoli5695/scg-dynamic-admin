@@ -24,15 +24,16 @@ import {
 } from '../../api/tokenUsage';
 import type { TokenUsageCorrection, TokenUsageEvent } from '../../api/tokenUsage';
 import { useNavigate } from 'react-router-dom';
-import { requestJourneyUrl } from '../request-journey/links';
+import { usageRequestJourneyUrl } from '../request-journey/usageNavigation';
 
 interface Props {
   event: TokenUsageEvent;
   onClose: () => void;
   onApplied: () => void;
+  usageReturnTo?: string;
 }
 
-const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApplied }) => {
+const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApplied, usageReturnTo }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -134,7 +135,7 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
         <Button
           style={{ marginBottom: 16 }}
           onClick={() =>
-            navigate(requestJourneyUrl(event.instanceId!, event.traceId!, event.routeId))
+            navigate(usageRequestJourneyUrl(event.instanceId!, event.traceId!, event.routeId, usageReturnTo ?? ''))
           }
         >
           {t('journey.inspect')}

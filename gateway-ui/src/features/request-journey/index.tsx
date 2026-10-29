@@ -15,14 +15,7 @@ import TraceDetailDrawer from '../trace/components/TraceDetailDrawer';
 import TokenUsageReconciliationDrawer from '../token-usage/TokenUsageReconciliationDrawer';
 import { isUsageUnresolved, usageTokenValue } from '../token-usage/usagePresentation';
 import { requestDiagnosis, routeConfigurationUrl } from './links';
-
-function requestCenterReturnUrl(instanceId: string, returnTo: string | null) {
-  const fallback = `/instances/${encodeURIComponent(instanceId)}/requests`;
-  // Accept only this instance's exact requests path and its query string, never a URL or another route.
-  if (!returnTo || returnTo.includes('\\') || returnTo.includes('#')
-    || Array.from(returnTo).some(char => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127)) return fallback;
-  return returnTo === fallback || returnTo.startsWith(`${fallback}?`) ? returnTo : fallback;
-}
+import { isUsageReturnUrl, journeyUsageUrl, requestCenterReturnUrl } from './usageNavigation';
 
 export default function RequestJourneyPage() {
   const { instanceId = '', traceId = '' } = useParams();
@@ -130,11 +123,12 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
   const diagnosis = requestDiagnosis(evidence?.statusCode, usage, ai, !!accessLog && !trace);
   const stepStatus = (done: boolean) => done ? 'finish' as const : 'wait' as const;
   const statusLabel = (value?: string) => t(`tokenUsage.status.${value ?? 'LEGACY'}`, { defaultValue: value ?? '—' });
+  const returnTo = requestCenterReturnUrl(instanceId, params.get('returnTo'));
   return <div className="console-workspace-page" style={{ display: 'grid', gap: 16 }}>
     <Space wrap style={{ justifyContent: 'space-between' }}>
       <Typography.Title level={3} style={{ margin: 0 }}>{t('journey.title')}</Typography.Title>
       <Space wrap>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(requestCenterReturnUrl(instanceId, params.get('returnTo')))}>{t('journey.backToRequests')}</Button>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(returnTo)}>{t(isUsageReturnUrl(instanceId, returnTo) ? 'journey.backToUsage' : 'journey.backToRequests')}</Button>
         <Button icon={<ReloadOutlined />} loading={request.loading} onClick={request.run}>{t('common.refresh')}</Button>
       </Space>
     </Space>
@@ -165,7 +159,10 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
           <Button disabled={!routeId} onClick={() => navigate(routeConfigurationUrl(instanceId, routeId))}>{t('journey.openConfiguration')}</Button>
           <Button disabled={!routeId} onClick={() => navigate(`/instances/${encodeURIComponent(instanceId)}/routes/${encodeURIComponent(routeId)}/debug`)}>{t('journey.debugAgain')}</Button>
           <Button disabled={!trace} onClick={() => setTraceOpen(true)}>{t('journey.openTrace')}</Button>
-          <Button onClick={() => navigate(`/instances/${encodeURIComponent(instanceId)}/token_usage${routeId ? `?${new URLSearchParams({ routeId })}` : ''}`)}>{t('journey.routeUsage')}</Button>
+          <Button onClick={() => navigate(journeyUsageUrl({
+            instanceId, traceId, routeId, params, traceTime: trace?.traceTime,
+            accessLogTime: accessLog?.timestamp, usageRequestTime: usage[0]?.requestTime,
+          }))}>{t('journey.routeUsage')}</Button>
         </Space>
       </Space>
     </Card>

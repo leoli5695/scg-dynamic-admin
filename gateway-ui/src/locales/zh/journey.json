@@ -1,4 +1,5 @@
 {
+  "journey.backToUsage": "返回 Token 用量",
   "journey.accessLog": "访问日志记录",
   "journey.traceNotCollected": "暂无追踪记录",
   "journey.result.logOnly": "已有访问日志，暂无追踪记录",

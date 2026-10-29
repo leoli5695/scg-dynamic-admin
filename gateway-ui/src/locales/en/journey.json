@@ -1,4 +1,5 @@
 {
+  "journey.backToUsage": "Back to token usage",
   "journey.accessLog": "Access log evidence",
   "journey.traceNotCollected": "No trace record available",
   "journey.result.logOnly": "Access log found; no trace record available",

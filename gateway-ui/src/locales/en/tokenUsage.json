@@ -1,4 +1,5 @@
 {
+  "tokenUsage.backToSource": "Back to source request",
   "tokenUsage.details.action": "Details",
   "tokenUsage.details.title": "Metering details",
   "tokenUsage.details.advanced": "Advanced metering and settlement information",

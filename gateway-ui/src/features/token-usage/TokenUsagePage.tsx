@@ -20,9 +20,10 @@ import {
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { isUsageUnresolved, usageTokenValue } from './usagePresentation';
-import { readUsageQuery, updateUsageQuery } from './usageQuery';
+import { defaultUsageRange, normalizeUsageQuery, readUsageQuery, updateUsageQuery } from './usageQuery';
+import { usageSourceReturnUrl } from '../request-journey/usageNavigation';
 import ReactECharts from 'echarts-for-react';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
@@ -71,14 +72,6 @@ const baseOption = () => ({
   grid: { left: 48, right: 24, top: 32, bottom: 28 },
 });
 
-function useDebouncedFilter(value: string) {
-  const [committed, setCommitted] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setCommitted(value.trim()), 300);
-    return () => clearTimeout(timer);
-  }, [value]);
-  return committed;
-}
 const CHART_OPTIONS = { renderer: 'svg' as const };
 
 const barOption = (rows: { key: string; totalTokens: number }[], horizontal: boolean) => ({
@@ -127,37 +120,36 @@ const TokenUsagePage: React.FC<TokenUsagePageProps> = (props) => (
 
 const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { instanceId, routeId, unresolvedOnly } = useMemo(
-    () => readUsageQuery(searchParams, scopeInstanceId),
+  const normalizedParams = useMemo(
+    () => normalizeUsageQuery(searchParams, scopeInstanceId),
     [searchParams, scopeInstanceId],
   );
-  const setQuery = (patch: Parameters<typeof updateUsageQuery>[1], replace = false) => {
-    setSearchParams((current) => updateUsageQuery(current, patch, scopeInstanceId), { replace });
+  const { instanceId, routeId, unresolvedOnly, from, to, tenantId, model, granularity, page, size } =
+    readUsageQuery(normalizedParams, scopeInstanceId);
+  useEffect(() => {
+    if (normalizedParams.toString() !== searchParams.toString()) {
+      setSearchParams(normalizedParams, { replace: true });
+    }
+  }, [normalizedParams, searchParams, setSearchParams]);
+  const setQuery = (patch: Parameters<typeof updateUsageQuery>[1]) => {
+    const next = updateUsageQuery(normalizedParams, patch, scopeInstanceId);
+    if (next.toString() !== normalizedParams.toString()) setSearchParams(next);
   };
-  const [range, setRange] = useState<[Dayjs, Dayjs]>([dayjs().subtract(24, 'hour'), dayjs()]);
-  const [granularity, setGranularity] = useState<'hour' | 'day'>('hour');
-  const [tenantId, setTenantId] = useState('');
-  const [model, setModel] = useState('');
+  const range: [Dayjs, Dayjs] = [dayjs(from), dayjs(to)];
+  // Text fields hold only unsubmitted drafts. Enter/search commits once; navigation discards drafts.
+  const inputContext = `${location.key}?${normalizedParams}`;
+  const returnTo = usageSourceReturnUrl(instanceId, searchParams.get('returnTo'));
+  const usageUrl = `${location.pathname}?${normalizedParams}`;
   const [reconciling, setReconciling] = useState<TokenUsageEvent | null>(null);
-  const committedModel = useDebouncedFilter(model);
 
   const filters: TokenUsageFilters = useMemo(
-    () => ({
-      from: range[0].format('YYYY-MM-DDTHH:mm:ss'),
-      to: range[1].format('YYYY-MM-DDTHH:mm:ss'),
-      instanceId,
-      tenantId,
-      routeId: routeId.trim(),
-      model: committedModel,
-    }),
-    [range, instanceId, tenantId, routeId, committedModel],
+    () => ({ from, to, instanceId, tenantId, routeId, model }),
+    [from, to, instanceId, tenantId, routeId, model],
   );
-  const pageContext = JSON.stringify([filters, unresolvedOnly]);
-  const [pagination, setPagination] = useState({ context: pageContext, page: 0 });
-  const page = pagination.context === pageContext ? pagination.page : 0;
-  const setPage = (value: number) => setPagination({ context: pageContext, page: value });
-  const deps = [filters, page, unresolvedOnly];
+  const deps = [filters, page, size, unresolvedOnly];
 
   const instancesReq = useRequest((signal) => listInstances({ signal }), {
     immediate: scopeInstanceId === undefined,
@@ -182,7 +174,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
     deps: [filters],
   });
   const eventsReq = useRequest(
-    (signal) => getTokenUsageEvents({ ...filters, unresolvedOnly }, page, 20, { signal }),
+    (signal) => getTokenUsageEvents({ ...filters, unresolvedOnly }, page, size, { signal }),
     {
       deps,
     },
@@ -262,14 +254,10 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
   const refreshing = requests.some((request) => request.loading);
   const requestError = requests.find((request) => request.error)?.error;
   const refresh = () => requests.forEach((request) => request.run());
-  const resetFilters = () => {
-    setRange([dayjs().subtract(24, 'hour'), dayjs()]);
-    setGranularity('hour');
-    setTenantId('');
-    setModel('');
-    setQuery({ instanceId: '', routeId: '', unresolvedOnly: false });
-    setPage(0);
-  };
+  const resetFilters = () => setQuery({
+    ...defaultUsageRange(), instanceId: '', routeId: '', tenantId: '', model: '',
+    unresolvedOnly: false, granularity: 'hour', page: 0, size: 20,
+  });
 
   return (
     <div className="token-usage-page management-page">
@@ -294,13 +282,16 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
         subtitle={t('tokenUsage.subtitle')}
         eyebrow={t('tokenUsage.workspace_label')}
         actions={
-          <Button
-            icon={<ReloadOutlined spin={refreshing} />}
-            onClick={refresh}
-            disabled={refreshing}
-          >
-            {t('common.refresh')}
-          </Button>
+          <Space>
+            {returnTo && <Button onClick={() => navigate(returnTo)}>{t('tokenUsage.backToSource')}</Button>}
+            <Button
+              icon={<ReloadOutlined spin={refreshing} />}
+              onClick={refresh}
+              disabled={refreshing}
+            >
+              {t('common.refresh')}
+            </Button>
+          </Space>
         }
       />
 
@@ -371,11 +362,11 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
             <RangePicker
               aria-label={t('tokenUsage.filter.range')}
               showTime
+              allowClear={false}
               value={range}
               onChange={(v) => {
                 if (v && v[0] && v[1]) {
-                  setRange([v[0], v[1]]);
-                  setPage(0);
+                  setQuery({ from: v[0].format('YYYY-MM-DDTHH:mm:ss'), to: v[1].format('YYYY-MM-DDTHH:mm:ss') });
                 }
               }}
               presets={[
@@ -400,7 +391,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
               aria-label={t('tokenUsage.filter.granularity')}
               style={{ width: 100 }}
               value={granularity}
-              onChange={(v) => setGranularity(v)}
+              onChange={(v) => setQuery({ granularity: v })}
               options={[
                 { value: 'hour', label: t('tokenUsage.filter.granularity.hour') },
                 { value: 'day', label: t('tokenUsage.filter.granularity.day') },
@@ -444,10 +435,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
               showSearch
               placeholder={t('tokenUsage.filter.tenant.all')}
               value={tenantId || undefined}
-              onChange={(v) => {
-                setTenantId(v ?? '');
-                setPage(0);
-              }}
+              onChange={(v) => setQuery({ tenantId: v ?? '' })}
               options={(tenantsReq.data ?? []).map((q) => ({
                 value: q.tenantId,
                 label: q.tenantId,
@@ -456,27 +444,26 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
           </div>
           <div className="token-filter-field">
             <span>{t('tokenUsage.filter.route')}</span>
-            <Input
+            <Input.Search
+              key={`route:${inputContext}`}
               aria-label={t('tokenUsage.filter.route')}
-              style={{ width: 160 }}
+              style={{ width: 180 }}
               allowClear
               placeholder={t('tokenUsage.filter.route.ph')}
-              value={routeId}
-              onChange={(e) => setQuery({ routeId: e.target.value }, true)}
+              defaultValue={routeId}
+              onSearch={(value) => setQuery({ routeId: value.trim() })}
             />
           </div>
           <div className="token-filter-field token-filter-wide">
             <span>{t('tokenUsage.filter.model')}</span>
-            <Input
+            <Input.Search
+              key={`model:${inputContext}`}
               aria-label={t('tokenUsage.filter.model')}
-              style={{ width: 160 }}
+              style={{ width: 180 }}
               allowClear
               placeholder={t('tokenUsage.filter.model.ph')}
-              value={model}
-              onChange={(e) => {
-                setModel(e.target.value);
-                setPage(0);
-              }}
+              defaultValue={model}
+              onSearch={(value) => setQuery({ model: value.trim() })}
             />
           </div>
         </div>
@@ -570,10 +557,11 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
           dataSource={events}
           pagination={{
             current: page + 1,
-            pageSize: 20,
+            pageSize: size,
             total: eventsReq.data?.total ?? 0,
-            showSizeChanger: false,
-            onChange: (p) => setPage(p - 1),
+            showSizeChanger: true,
+            pageSizeOptions: [20, 50, 100],
+            onChange: (p, nextSize) => setQuery({ page: p - 1, size: nextSize }),
           }}
           locale={{
             emptyText: t(unresolvedOnly ? 'tokenUsage.emptyUnresolved' : 'tokenUsage.empty_title'),
@@ -676,6 +664,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
           event={events.find((e) => e.id === reconciling.id) ?? reconciling}
           onClose={() => setReconciling(null)}
           onApplied={refresh}
+          usageReturnTo={usageUrl}
         />
       )}
     </div>

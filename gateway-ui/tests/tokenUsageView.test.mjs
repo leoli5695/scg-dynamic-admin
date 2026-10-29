@@ -6,6 +6,7 @@ import ts from 'typescript';
 import * as React from 'react';
 import * as presentation from '../src/features/token-usage/usagePresentation.ts';
 import * as query from '../src/features/token-usage/usageQuery.ts';
+import * as usageNavigation from '../src/features/request-journey/usageNavigation.ts';
 
 const require = createRequire(import.meta.url);
 const normalEvent = {
@@ -15,22 +16,24 @@ const normalEvent = {
 
 // Exercise component output and callbacks without adding a DOM/test-renderer dependency.
 // Hooks, API responses and Ant components are controlled; production JSX is compiled in memory.
-function harness(file, { search = '', command = null, role = 'ADMIN', overview = {} } = {}) {
+function harness(file, { search = '', command = null, role = 'ADMIN', overview = {}, pathname = '/token-usage' } = {}) {
   let params = new URLSearchParams(search);
   let cursor = 0;
+  let locationKey = 0;
+  let effects = [];
   const states = [];
-  const calls = { confirmations: [], corrections: [], retries: [], requests: [] };
+  const calls = { confirmations: [], corrections: [], retries: [], requests: [], history: [] };
   const form = { validateFields: async () => ({ promptTokens: 1, completionTokens: 2, totalTokens: 3, chargedTokens: 3, monthlyDelta: 0, dailyDelta: 0, reason: 'verified', verified: true }) };
   const components = Object.fromEntries(['Alert', 'Button', 'Card', 'Checkbox', 'Col', 'Descriptions', 'Drawer', 'InputNumber', 'Row', 'Select', 'Space', 'Spin', 'Table', 'Tabs', 'Tag'].map((name) => [name, name]));
   components.DatePicker = { RangePicker: 'RangePicker' };
-  components.Input = Object.assign(() => null, { TextArea: 'TextArea' });
+  components.Input = Object.assign(() => null, { TextArea: 'TextArea', Search: 'Input.Search' });
   components.Form = Object.assign(() => null, { useForm: () => [form], Item: 'Form.Item' });
   components.Modal = { confirm: (options) => calls.confirmations.push(options) };
   const api = {
     listInstances: () => [], getTokenQuotaTenants: () => [],
     getTokenUsageOverview: (filters) => { calls.filters = filters; return { requests: 2, totalTokens: 3, ...overview }; },
-    getTokenUsageTimeseries: () => ({ series: [] }), getTokenUsageBreakdown: () => ({ rows: [] }),
-    getTokenUsageEvents: (filters, page) => { calls.events = { filters, page }; return { content: [normalEvent], total: 80 }; },
+    getTokenUsageTimeseries: (_, granularity) => { calls.granularity = granularity; return { series: [] }; }, getTokenUsageBreakdown: () => ({ rows: [] }),
+    getTokenUsageEvents: (filters, page, size) => { calls.events = { filters, page, size }; return { content: [normalEvent], total: 800 }; },
     getTokenUsageReconciliation: (id) => { calls.requests.push(id); return command; },
     reconcileTokenUsage: async (...args) => { calls.corrections.push(args); return { ...command, status: 'APPLIED' }; },
     retryTokenUsageReconciliation: async (...args) => { calls.retries.push(args); return { ...command, status: 'APPLIED' }; },
@@ -43,12 +46,17 @@ function harness(file, { search = '', command = null, role = 'ADMIN', overview =
         if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
         return [states[index], (value) => { states[index] = typeof value === 'function' ? value(states[index]) : value; }];
       },
-      useMemo: (fn) => fn(), useEffect: () => {},
+      useMemo: (fn) => fn(), useEffect: (effect) => { effects.push(effect); },
     },
     antd: components,
     'react-router-dom': {
+      useLocation: () => ({ pathname, search: `?${params}`, key: String(locationKey) }),
       useNavigate: () => (url) => { calls.navigation = url; },
-      useSearchParams: () => [params, (next) => { params = typeof next === 'function' ? next(params) : next; }],
+      useSearchParams: () => [params, (next, options) => {
+        params = typeof next === 'function' ? next(params) : next;
+        locationKey++;
+        calls.history.push({ search: params.toString(), replace: options?.replace === true });
+      }],
     },
     'react-i18next': { useTranslation: () => ({ t: (key) => key }) },
     '../../hooks/useRequest': { useRequest: (fetcher, options = {}) => ({
@@ -57,7 +65,7 @@ function harness(file, { search = '', command = null, role = 'ADMIN', overview =
     }) },
     '../../api/instances': api, '../../api/tokenUsage': api,
     '../auth/AuthContext': { useAuth: () => ({ user: { role } }) },
-    '../request-journey/links': { requestJourneyUrl: (...args) => args.join('/') },
+    '../request-journey/usageNavigation': usageNavigation,
     './usagePresentation': presentation, './usageQuery': query,
     './TokenUsageReconciliationDrawer': { default: 'ReconciliationDrawer', __esModule: true },
     '../layout/components/ManagementPage': { ManagementMetric: 'ManagementMetric', ManagementPageHeader: 'ManagementPageHeader' },
@@ -71,11 +79,14 @@ function harness(file, { search = '', command = null, role = 'ADMIN', overview =
   return {
     calls, components,
     params: () => params,
-    navigate: (search) => { params = new URLSearchParams(search); },
+    navigate: (search) => { params = new URLSearchParams(search); locationKey++; },
     render: (props = {}) => {
       cursor = 0;
+      effects = [];
       const result = exports.default(props);
-      return typeof result.type === 'function' ? result.type(result.props) : result;
+      const tree = typeof result.type === 'function' ? result.type(result.props) : result;
+      effects.forEach(effect => effect());
+      return tree;
     },
     wrapper: (props) => exports.default(props),
   };
@@ -90,6 +101,80 @@ function nodes(root, type) {
 const button = (tree, key) => nodes(tree, 'Button').find((node) => node.props.children === key);
 const table = (tree) => nodes(tree, 'Table')[0];
 const renderDrawer = (h, event = normalEvent) => h.render({ event, onClose() {}, onApplied() {} });
+
+test('entry replaces defaults once; user searches push once and back/forward restores every field and page', () => {
+  const h = harness('TokenUsagePage.tsx', { search: 'instanceId=gw&routeId=original' });
+  h.render();
+  const initial = h.params().toString();
+  assert.deepEqual(h.calls.history.map(item => item.replace), [true]);
+  h.render();
+  assert.equal(h.calls.history.length, 1);
+  const full = query.normalizeUsageQuery(new URLSearchParams({
+    from: '2026-10-28T12:00:00', to: '2026-10-29T12:00:00', instanceId: 'gw',
+    routeId: '路由/a', tenantId: '租户', model: '模型 +/', granularity: 'day', page: '4', size: '50', unresolvedOnly: 'true',
+  })).toString();
+  h.navigate(full);
+  let tree = h.render();
+  assert.equal(h.calls.events.page, 4);
+  assert.equal(h.calls.events.size, 50);
+  assert.equal(h.calls.granularity, 'day');
+  const search = label => nodes(tree, 'Input.Search').find(node => node.props['aria-label'] === label);
+  const originalInputKey = search('tokenUsage.filter.model').key;
+  assert.equal(search('tokenUsage.filter.model').props.defaultValue, '模型 +/');
+  assert.equal(search('tokenUsage.filter.model').props.onChange, undefined, 'typing does not navigate');
+  search('tokenUsage.filter.model').props.onSearch(' 新模型 ');
+  assert.equal(h.calls.history.length, 2);
+  assert.equal(h.calls.history.at(-1).replace, false);
+  tree = h.render();
+  assert.equal(h.calls.events.page, 0);
+  assert.equal(h.calls.filters.model, '新模型');
+  assert.notEqual(search('tokenUsage.filter.model').key, originalInputKey);
+  const filtered = h.params().toString();
+  search('tokenUsage.filter.model').props.onSearch('新模型');
+  assert.equal(h.calls.history.length, 2, 'duplicate submit does not add a history entry');
+  table(tree).props.pagination.onChange(3, 50);
+  tree = h.render();
+  assert.equal(h.calls.events.page, 2);
+  const paginated = h.params().toString();
+  for (const snapshot of [filtered, full, initial, full, filtered, paginated]) {
+    h.navigate(snapshot);
+    tree = h.render();
+    const expected = query.readUsageQuery(new URLSearchParams(snapshot));
+    assert.equal(h.calls.events.page, expected.page);
+    assert.equal(h.calls.events.size, expected.size);
+    assert.equal(h.calls.granularity, expected.granularity);
+    assert.deepEqual(h.calls.filters, Object.fromEntries(['from', 'to', 'instanceId', 'routeId', 'tenantId', 'model'].map(key => [key, expected[key]])));
+    assert.equal(search('tokenUsage.filter.model').props.defaultValue, expected.model);
+    assert.equal(search('tokenUsage.filter.route').props.defaultValue, expected.routeId);
+    assert.equal(nodes(tree, 'RangePicker')[0].props.value[0].format('YYYY-MM-DDTHH:mm:ss'), expected.from);
+    assert.equal(nodes(tree, 'Select').find(node => node.props['aria-label'] === 'tokenUsage.filter.tenant').props.value, expected.tenantId || undefined);
+  }
+  assert.equal(h.calls.history.length, 3, 'history restoration never writes over the restored snapshot');
+  table(tree).props.pagination.onChange(3, 100);
+  h.render();
+  assert.equal(h.calls.events.size, 100);
+  assert.equal(h.calls.events.page, 0);
+  assert.equal(h.calls.history.length, 4);
+});
+
+test('usage source action and drawer link retain complete safe nested context', () => {
+  const origin = '/instances/gw/trace/request?returnTo=%2Finstances%2Fgw%2Frequests%3Fpage%3D4';
+  const h = harness('TokenUsagePage.tsx', { pathname: '/instances/gw/token_usage', search: new URLSearchParams({ returnTo: origin, page: '3', size: '50' }).toString() });
+  let tree = h.render({ scopeInstanceId: 'gw' });
+  const actions = nodes(tree, 'ManagementPageHeader')[0].props.actions;
+  button(actions, 'tokenUsage.backToSource').props.onClick();
+  assert.equal(h.calls.navigation, origin);
+  button(table(tree).props.columns.at(-1).render(null, normalEvent), 'tokenUsage.details.action').props.onClick();
+  tree = h.render({ scopeInstanceId: 'gw' });
+  const drawerProps = nodes(tree, 'ReconciliationDrawer')[0].props;
+  assert.equal(drawerProps.usageReturnTo, `/instances/gw/token_usage?${h.params()}`);
+  const drawer = harness('TokenUsageReconciliationDrawer.tsx');
+  const details = drawer.render({ ...drawerProps, event: { ...normalEvent, traceId: 'request' } });
+  button(details, 'journey.inspect').props.onClick();
+  const link = new URL(drawer.calls.navigation, 'https://console.test');
+  assert.equal(link.searchParams.get('returnTo'), drawerProps.usageReturnTo);
+  assert.equal(usageNavigation.requestCenterReturnUrl('gw', link.searchParams.get('returnTo')), drawerProps.usageReturnTo);
+});
 
 test('scoped page fixes instance filters on first fetch and reset and has nine daily columns', () => {
   const h = harness('TokenUsagePage.tsx', { search: 'instanceId=other&routeId=route-a&unresolvedOnly=true' });

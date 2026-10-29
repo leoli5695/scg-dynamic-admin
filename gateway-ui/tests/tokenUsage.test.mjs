@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { isUsageUnresolved, usageTokenValue } from '../src/features/token-usage/usagePresentation.ts';
-import { readUsageQuery, updateUsageQuery } from '../src/features/token-usage/usageQuery.ts';
+import { normalizeUsageQuery, readUsageQuery, updateUsageQuery } from '../src/features/token-usage/usageQuery.ts';
 
 const fields = ['promptTokens', 'completionTokens', 'totalTokens'];
 
@@ -41,11 +41,12 @@ test('known zeroes, estimates and legacy measurements retain their numeric value
 });
 
 test('instance scope overrides forged URL filters and survives clear, switch and reset', () => {
-  const params = new URLSearchParams('instanceId=other&routeId=route-a&unresolvedOnly=true&keep=yes');
-  assert.equal(readUsageQuery(params, 'fixed').instanceId, 'fixed');
+  const params = normalizeUsageQuery(new URLSearchParams('instanceId=other&routeId=route-a&unresolvedOnly=true&keep=yes'));
+  const original = readUsageQuery(params, 'fixed');
+  assert.equal(original.instanceId, 'fixed');
   for (const instanceId of ['', 'other']) {
     const next = updateUsageQuery(params, { instanceId, routeId: '', unresolvedOnly: false }, 'fixed');
-    assert.deepEqual(readUsageQuery(next, 'fixed'), { instanceId: 'fixed', routeId: '', unresolvedOnly: false });
+    assert.deepEqual(readUsageQuery(next, 'fixed'), { ...original, routeId: '', unresolvedOnly: false });
     assert.equal(next.get('instanceId'), 'fixed');
     assert.equal(next.get('keep'), 'yes');
   }
@@ -53,12 +54,13 @@ test('instance scope overrides forged URL filters and survives clear, switch and
 });
 
 test('global scope supports all instances and immediate URL back/forward and route changes', () => {
-  const original = new URLSearchParams('instanceId=gw-a&routeId=route-a&unresolvedOnly=true');
+  const original = normalizeUsageQuery(new URLSearchParams('instanceId=gw-a&routeId=route-a&unresolvedOnly=true'));
+  const initial = readUsageQuery(original);
   const next = updateUsageQuery(original, { instanceId: 'gw/b', routeId: 'route&b', unresolvedOnly: false });
-  assert.deepEqual(readUsageQuery(next), { instanceId: 'gw/b', routeId: 'route&b', unresolvedOnly: false });
-  assert.deepEqual(readUsageQuery(original), { instanceId: 'gw-a', routeId: 'route-a', unresolvedOnly: true });
+  assert.deepEqual(readUsageQuery(next), { ...initial, instanceId: 'gw/b', routeId: 'route&b', unresolvedOnly: false });
+  assert.deepEqual(readUsageQuery(original), initial);
   const reset = updateUsageQuery(next, { instanceId: '', routeId: '', unresolvedOnly: false });
-  assert.deepEqual(readUsageQuery(reset), { instanceId: '', routeId: '', unresolvedOnly: false });
+  assert.deepEqual(readUsageQuery(reset), { ...initial, instanceId: '', routeId: '', unresolvedOnly: false });
   assert.equal(readUsageQuery(new URLSearchParams('unresolvedOnly=false')).unresolvedOnly, false);
 });
 

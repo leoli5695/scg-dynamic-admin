@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { requestDiagnosis, routeConfigurationUrl } from '../src/features/request-journey/links.ts';
 import { isUsageUnresolved, usageTokenValue } from '../src/features/token-usage/usagePresentation.ts';
+import * as usageNavigation from '../src/features/request-journey/usageNavigation.ts';
 
 // Exercise the real TSX callbacks and lifecycle without a browser or a development server.
 // UI components are boundaries; DOM/focus behavior remains part of browser verification.
@@ -146,6 +147,7 @@ function journey(overrides = {}) {
     '../token-usage/TokenUsageReconciliationDrawer': defaultComponent('UsageDrawer'),
     '../token-usage/usagePresentation': { isUsageUnresolved, usageTokenValue },
     './links': { requestDiagnosis, routeConfigurationUrl },
+    './usageNavigation': usageNavigation,
   });
   return {
     context, calls, api, retired,
@@ -224,6 +226,25 @@ test('return navigation accepts only the current instance requests path, preserv
   assert.equal(usageUrl.searchParams.get('routeId'), 'route&a');
   button(h.render(), 'journey.debugAgain').props.onClick();
   assert.equal(h.calls.navigate.at(-1), '/instances/gw%2Fa/routes/route%26a/debug');
+  h.unmount();
+});
+
+test('usage navigation carries search time and returns to the complete current detail URL', () => {
+  const h = journey();
+  const origin = '/instances/gw%2Fa/requests?from=2026-10-28T12%3A00%3A00&to=2026-10-29T12%3A00%3A00&source=logs&routeId=route%26a&page=5';
+  h.context.search = new URLSearchParams({ returnTo: origin, routeId: 'route&a' });
+  button(h.render(), 'journey.routeUsage').props.onClick();
+  const url = new URL(h.calls.navigate.at(-1), 'https://console.test');
+  assert.equal(url.searchParams.get('from'), '2026-10-28T12:00:00');
+  assert.equal(url.searchParams.get('to'), '2026-10-29T12:00:00');
+  const detail = new URL(url.searchParams.get('returnTo'), url);
+  assert.equal(detail.pathname, '/instances/gw%2Fa/trace/trace-a');
+  assert.equal(detail.searchParams.toString(), h.context.search.toString());
+  for (const usage of ['/instances/gw%2Fa/token_usage?page=4&size=50', '/token-usage?page=3&size=100']) {
+    h.context.search = new URLSearchParams({ returnTo: usage });
+    button(h.render(), 'journey.backToUsage').props.onClick();
+    assert.equal(h.calls.navigate.at(-1), usage);
+  }
   h.unmount();
 });
 
