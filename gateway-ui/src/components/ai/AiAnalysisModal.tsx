@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Modal, Tabs, Card, Input, Button, Spin, Tag, Space, Divider,
+  Alert, Modal, Tabs, Card, Collapse, Descriptions, Input, Button, Spin, Tag, Space, Divider,
   DatePicker, Radio } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
@@ -17,7 +17,7 @@ import {
 } from '../../api/copilot';
 import { analyzeTimeRange } from '../../api/ai';
 import { ApiError } from '../../api/http';
-import type { AiProvider } from '../../types/copilot';
+import type { AiAnalysisEvidence, AiProvider } from '../../types/copilot';
 import AiReportRenderer from './AiReportRenderer';
 import '../../styles/ai-report.css';
 import './ai-analysis.css';
@@ -39,6 +39,8 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
   const [validated, setValidated] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<string>('');
+  const [evidence, setEvidence] = useState<AiAnalysisEvidence>();
+  const [metricsData, setMetricsData] = useState<string>();
   const [timeRange, setTimeRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);
   const { t } = useTranslation();
 
@@ -142,6 +144,8 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
         language,
       });
       setResult(data?.result || '');
+      setEvidence(data?.evidence);
+      setMetricsData(data?.metricsData);
     } catch (e) {
       message.error(e instanceof ApiError && e.message ? e.message : t('ai.analysis_failed'));
     } finally {
@@ -341,6 +345,61 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
               <Tag color="blue" icon={<CheckCircleOutlined />}>Analysis Complete</Tag>
             </Space>
           </div>
+
+          <Alert type="info" showIcon message={t('ai.evidence_hint')} style={{ marginBottom: 12 }} />
+          {evidence && (
+            <Collapse
+              size="small"
+              style={{ marginBottom: 12 }}
+              items={[{
+                key: 'evidence',
+                label: t('ai.evidence_title', { from: evidence.from, to: evidence.to }),
+                children: (
+                  <>
+                    <Descriptions
+                      size="small"
+                      column={2}
+                      items={[
+                        {
+                          key: 'range',
+                          label: t('ai.evidence_range'),
+                          children: `${evidence.from} → ${evidence.to}`,
+                        },
+                        {
+                          key: 'duration',
+                          label: t('ai.evidence_duration'),
+                          children: `${evidence.durationMinutes} min`,
+                        },
+                        { key: 'step', label: t('ai.evidence_step'), children: evidence.step },
+                        {
+                          key: 'samples',
+                          label: t('ai.evidence_samples'),
+                          children: Object.entries(evidence.samples)
+                            .map(([name, count]) => `${name}: ${count}`)
+                            .join(' · '),
+                        },
+                        {
+                          key: 'missing',
+                          label: t('ai.evidence_missing'),
+                          children: evidence.missing.length
+                            ? evidence.missing.join(', ')
+                            : t('ai.evidence_none'),
+                        },
+                      ]}
+                    />
+                    {metricsData && (
+                      <details style={{ marginTop: 8 }}>
+                        <summary>{t('ai.evidence_raw')}</summary>
+                        <pre style={{ maxHeight: 240, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                          {metricsData}
+                        </pre>
+                      </details>
+                    )}
+                  </>
+                ),
+              }]}
+            />
+          )}
 
           <div className="ai-result-container">
             <div className="ai-result-content">

@@ -143,8 +143,22 @@ export interface AiTimeRangeAnalysisRequest {
 }
 
 /** POST /api/ai/analyze/timerange envelope data. */
+/** Coverage of the queries that produced the report; missing metrics are explicit. */
+export interface AiAnalysisEvidence {
+  from: string;
+  to: string;
+  durationMinutes: number;
+  step: string;
+  samples: Record<string, number>;
+  missing: string[];
+}
+
 export interface AiTimeRangeAnalysisResult {
   result: string;
+  /** Present for reports generated after coverage collection was added. */
+  evidence?: AiAnalysisEvidence;
+  /** Raw metric text sent to the model, for per-suggestion verification. */
+  metricsData?: string;
 }
 
 // ============== Knowledge base (RAG) ==============

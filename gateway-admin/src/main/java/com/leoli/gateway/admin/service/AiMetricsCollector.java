@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -74,6 +75,45 @@ public class AiMetricsCollector {
             return sum;
         } catch (Exception e) {
             log.warn("Failed to get metric sum for query: {}", query);
+            return 0;
+        }
+    }
+
+    /**
+     * Coverage of the exact queries and step used by the analysis prompt.
+     * Missing metrics are reported explicitly instead of being read as zero.
+     */
+    Map<String, Object> collectCoverage(long startTime, long endTime) {
+        long durationMinutes = Math.max(0, (endTime - startTime) / 60);
+        String step = durationMinutes <= 5 ? "15s" : durationMinutes <= 30 ? "1m" : "5m";
+        Map<String, Integer> samples = new LinkedHashMap<>();
+        samples.put("process_cpu_usage", countPoints("process_cpu_usage{application=\"my-gateway\"}", startTime, endTime, step));
+        samples.put("system_cpu_usage", countPoints("system_cpu_usage{application=\"my-gateway\"}", startTime, endTime, step));
+        samples.put("jvm_memory_used_bytes", countPoints("jvm_memory_used_bytes{application=\"my-gateway\",area=\"heap\"}", startTime, endTime, step));
+        samples.put("http_server_requests", countPoints("rate(http_server_requests_seconds_count{application=\"my-gateway\"}[1m])", startTime, endTime, step));
+        samples.put("jvm_gc_pause", countPoints("rate(jvm_gc_pause_seconds_count{application=\"my-gateway\"}[1m])", startTime, endTime, step));
+        List<String> missing = samples.entrySet().stream()
+                .filter(entry -> entry.getValue() == 0)
+                .map(Map.Entry::getKey)
+                .toList();
+
+        Map<String, Object> coverage = new LinkedHashMap<>();
+        coverage.put("from", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(startTime * 1000)));
+        coverage.put("to", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(endTime * 1000)));
+        coverage.put("durationMinutes", durationMinutes);
+        coverage.put("step", step);
+        coverage.put("samples", samples);
+        coverage.put("missing", missing);
+        return coverage;
+    }
+
+    private int countPoints(String query, long startTime, long endTime, String step) {
+        try {
+            List<Map<String, Object>> data = prometheusService.queryRange(query, startTime, endTime, step);
+            if (data == null) return 0;
+            return (int) data.stream().filter(point -> point.get("value") instanceof Number).count();
+        } catch (Exception e) {
+            log.warn("Failed to read coverage for query: {}", query);
             return 0;
         }
     }

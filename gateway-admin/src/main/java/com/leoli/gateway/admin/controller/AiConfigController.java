@@ -55,11 +55,13 @@ public class AiConfigController {
         }
         
         try {
-            String result = aiAnalysisService.analyzeTimeRange(provider, startTime, endTime, language);
-            
+            var analysis = aiAnalysisService.analyzeTimeRange(provider, startTime, endTime, language);
+
             Map<String, Object> data = new HashMap<>();
-            data.put("result", result);
-            
+            data.put("result", analysis.result());
+            data.put("evidence", analysis.evidence());
+            data.put("metricsData", analysis.metricsData());
+
             return ResponseEntity.ok(ApiResponse.success(data, "时间段分析完成"));
         } catch (Exception e) {
             log.error("Time range AI analysis failed", e);

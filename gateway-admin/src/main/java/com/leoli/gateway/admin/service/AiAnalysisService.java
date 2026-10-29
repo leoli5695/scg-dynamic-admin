@@ -597,7 +597,7 @@ public class AiAnalysisService {
      * @param language  语言
      * @return AI分析结果
      */
-    public String analyzeTimeRange(String provider, long startTime, long endTime, String language) {
+    public TimeRangeAnalysis analyzeTimeRange(String provider, long startTime, long endTime, String language) {
         AiConfig config = aiConfigRepository.findByProvider(provider)
                 .orElseThrow(() -> new RuntimeException("Provider not found: " + provider));
 
@@ -605,15 +605,19 @@ public class AiAnalysisService {
             throw new RuntimeException("API Key or Model not configured for provider: " + provider);
         }
 
-        // 收集时间段内的监控数据
+        // 收集时间段内的监控数据与覆盖情况（缺失指标会被明确标注，而不是当作 0）
         String metricsData = aiMetricsCollector.collectTimeRangeMetricsData(startTime, endTime);
+        Map<String, Object> evidence = aiMetricsCollector.collectCoverage(startTime, endTime);
 
         // 构建分析prompt
-        String prompt = aiPromptBuilder.buildTimeRangeAnalysisPrompt(metricsData, startTime, endTime, language);
+        String prompt = aiPromptBuilder.buildTimeRangeAnalysisPrompt(metricsData, evidence, startTime, endTime, language);
 
-        // 调用AI分析
-        return callModelApi(config, prompt);
+        // 调用AI分析；返回报告自身、采集覆盖与原始指标，便于逐条核对依据
+        return new TimeRangeAnalysis(callModelApi(config, prompt), evidence, metricsData);
     }
+
+    /** Report text plus the exact metrics and coverage it was generated from. */
+    public record TimeRangeAnalysis(String result, Map<String, Object> evidence, String metricsData) { }
 
     /**
      * 分析压力测试结果，结合压测数据和 Prometheus 监控数据。

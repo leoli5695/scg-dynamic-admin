@@ -20,68 +20,96 @@ public class AiPromptBuilder {
 
     private final PromptService promptService;
 
+    /** Shared wording rules for every AI report: rules, evidence, no fake precision. */
+    private static final String EVIDENCE_RULES = """
+
+            【表达与依据要求（必须遵守）】
+            1. 基于固定阈值或规则的判断统一称为“规则诊断”，每条必须写出触发指标、观测值、阈值或规则来源；不得把规则判定描述为预测。
+            2. 趋势分析必须写明时间范围、样本量（采样步长与数据点）和数据缺失；数据不足或缺失时明确标注，不得推测补齐。
+            3. 不要输出置信度百分比、预测置信度或“预期性能提升 X%”一类数字；不要编造数据中不存在的数值。
+            4. 每条优化建议必须对应至少一个触发指标或证据，并引用其观测值；没有证据的建议不要输出。
+            """;
+
     /**
      * 构建时间段分析prompt
      */
-    String buildTimeRangeAnalysisPrompt(String metricsData, long startTime, long endTime, String language) {
+    String buildTimeRangeAnalysisPrompt(String metricsData, Map<String, Object> coverage,
+                                        long startTime, long endTime, String language) {
         String langName = "zh".equals(language) ? "中文" : "English";
-        long durationMinutes = (endTime - startTime) / 60;
+        String coverageText = formatCoverage(coverage);
 
         return String.format("""
                 你是一个专业的Java应用运维专家、性能分析师和JVM调优专家。请分析以下Gateway网关在指定时间段内的监控数据。
-                
-                这段时间可能进行了压力测试或遇到了性能问题，请仔细分析各项指标的峰值、平均值和变化趋势。
-                
+
                 请用%s回答。
-                
+
+                【分析范围与数据覆盖（系统采集，不得改写）】
                 %s
-                
+
+                %s
+
+                【表达与依据要求（必须遵守）】
+                1. 基于固定阈值或规则的判断统一称为“规则诊断”，每条必须写出触发指标、观测值、阈值或规则来源；不得把规则判定描述为预测。
+                2. 趋势分析必须写明时间范围、样本量（采样步长与数据点）和数据缺失；数据不足或缺失时明确标注，不得推测补齐。
+                3. 不要输出置信度百分比、预测置信度或“预期性能提升 X%%”一类数字；不要编造数据中不存在的数值。
+                4. 每条优化建议必须对应至少一个触发指标或证据，并引用其观测值；没有证据的建议不要输出。
+
                 请输出详细的分析报告，包含：
-                
-                ## 1. 时间段概览
-                - 分析时间段的基本情况
-                
-                ## 2. 性能分析
-                - 各指标（CPU、内存、请求、响应时间）的峰值和平均值分析
-                - 是否存在性能瓶颈
+
+                ## 1. 时间段与数据完整性
+                - 时间范围、时长、采样步长、各指标样本量
+                - 缺失指标及其对结论的影响
+
+                ## 2. 性能概览
+                - 各指标（CPU、内存、请求、响应时间）的峰值和平均值
                 - 指标之间的关联性（如CPU和请求量的关系）
-                
-                ## 3. JVM内存与GC分析（重点）
-                - **内存区域分析**：分析Eden、Survivor、Old区的使用情况和变化趋势
-                - **GC行为分析**：
-                  - Young GC频率是否合理（正常<10次/分钟）
-                  - Full GC是否发生（正常应极少或无）
-                  - GC平均耗时是否正常（Young GC正常<50ms，Full GC正常<500ms）
-                - **GC开销评估**：GC时间占比是否合理（正常<5%，警告5-10%，严重>10%）
-                - **内存分配速率**：对象创建速度是否过高
-                - **晋升分析**：Old区内存增长是否异常
-                
-                ## 4. GC调优建议（如有问题）
-                根据数据分析结果，给出具体的JVM参数调优建议：
-                - 如果Young GC频繁：建议增大Eden区（-XX:NewSize或调整-XX:SurvivorRatio）
-                - 如果Full GC频繁：建议增大Old区或整个堆（-Xmx），检查是否有大对象直接晋升
-                - 如果GC开销过高：建议增大堆内存或切换GC算法（如G1GC）
-                - 如果Old区持续增长：建议排查内存泄漏或长生命周期对象
-                
-                ## 5. 问题诊断
-                - 发现的异常或问题
-                - 可能的根本原因分析
-                - 对比正常情况，指出异常点
-                
-                ## 6. 性能评估
-                - 系统在此时间段的整体表现评分（1-10分）
-                - 吞吐量评估
-                - 资源利用率评估
-                - JVM健康度评估
-                
-                ## 7. 优化建议
-                - 针对发现的问题提出具体的优化建议
-                - JVM参数调整建议（如有GC问题）
-                - 配置调整建议
-                - 容量规划建议
-                
-                请用Markdown格式输出，要专业、详细、有数据支撑。GC调优建议要具体，包含具体的JVM参数值。
-                """, langName, metricsData);
+
+                ## 3. 规则诊断（阈值判定）
+                - 逐条列出触发的规则（如进程CPU>80%%/95%%、GC开销>5%%/10%%、Full GC次数、内存回落10%%/30%%等）
+                - 每条包含：触发指标、观测值、阈值、结论
+                - 未触发的关键规则可简要标注“正常”
+
+                ## 4. 趋势分析
+                - 基于样本点的变化趋势（上升/下降/波动）
+                - 明确说明样本范围与缺失数据，不做超出数据的预测
+
+                ## 5. JVM内存与GC分析
+                - **内存区域分析**：Eden、Survivor、Old区的使用情况和变化趋势
+                - **GC行为分析**：Young GC频率（规则：<10次/分钟）、Full GC次数、GC平均耗时（规则：Young<50ms，Full<500ms）
+                - **GC开销评估**（规则：<5%%正常，5-10%%警告，>10%%严重）
+                - **内存分配速率**与Old区增长是否异常
+
+                ## 6. 优化建议（按优先级）
+                - 每条建议注明触发指标与观测值，以及建议的验证方法
+                - JVM参数调整建议（如有GC问题），包含具体参数值
+                - 配置调整与容量规划建议
+
+                ## 7. 规则评分
+                - 仅按第3节规则诊断的命中项扣分，写明扣分项与分值；没有命中时说明评分依据
+
+                请用Markdown格式输出，要专业、详细、有数据支撑。
+                """, langName, coverageText, metricsData);
+    }
+
+    private String formatCoverage(Map<String, Object> coverage) {
+        if (coverage == null) return "数据覆盖未知";
+        StringBuilder text = new StringBuilder();
+        text.append("- 分析范围: ").append(coverage.get("from")).append(" 至 ").append(coverage.get("to"))
+                .append("（").append(coverage.get("durationMinutes")).append(" 分钟）\n");
+        text.append("- 采样步长: ").append(coverage.get("step")).append("\n");
+        Object samples = coverage.get("samples");
+        if (samples instanceof Map<?, ?> map) {
+            text.append("- 各指标样本点: ");
+            text.append(map.entrySet().stream()
+                    .map(entry -> entry.getKey() + "=" + entry.getValue())
+                    .reduce((left, right) -> left + ", " + right).orElse("无"));
+            text.append("\n");
+        }
+        Object missing = coverage.get("missing");
+        if (missing instanceof java.util.List<?> list) {
+            text.append("- 缺失指标: ").append(list.isEmpty() ? "无" : String.join(", ", list.stream().map(String::valueOf).toList()));
+        }
+        return text.toString();
     }
 
     /**
@@ -99,7 +127,8 @@ public class AiPromptBuilder {
             return template
                     .replace("{langName}", langName)
                     .replace("{stressTestData}", stressTestData)
-                    .replace("{metricsData}", metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData);
+                    .replace("{metricsData}", metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData)
+                    + EVIDENCE_RULES;
         }
 
         // 默认内联提示词（兜底）- 与数据库模板保持完全一致
@@ -178,9 +207,9 @@ public class AiPromptBuilder {
                                 ### 2. 进程CPU专项分析（必填 - 最高优先级）
 
                 **进程CPU变化趋势**：
-                - 压测前基准：X%
-                - 压测峰值：Y%
-                - 压测后恢复：Z%
+                - 压测前基准：X%%
+                - 压测峰值：Y%%
+                - 压测后恢复：Z%%
 
                 **进程CPU判定**（必须明确输出以下结论之一）：
                 - [ ] 进程CPU < 80%% → ✅ **网关进程正常，无瓶颈**
@@ -192,9 +221,9 @@ public class AiPromptBuilder {
                 ### 3. 系统CPU分析
 
                 **系统CPU变化趋势**：
-                - 压测前基准：X%
-                - 压测峰值：Y%
-                - 压测后恢复：Z%
+                - 压测前基准：X%%
+                - 压测峰值：Y%%
+                - 压测后恢复：Z%%
 
                 **系统CPU判定**：
                 - 如果系统CPU > 95%% 但进程CPU < 80%% → ⚠️ **系统整体负载高，但瓶颈不在网关，可能在其他进程（如压测客户端、数据库、Redis等）**
@@ -287,7 +316,7 @@ public class AiPromptBuilder {
                                 ---
                                 
                                 请用 Markdown 格式输出，分析要**严格、有数据支撑、不回避问题**。如果某些监控数据缺失，请明确标注"数据缺失"并基于已有数据进行分析。
-                                """, langName, stressTestData, metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData);
+                                """, langName, stressTestData, metricsData.isEmpty() ? "【服务器监控数据】\n暂无 Prometheus 监控数据" : metricsData) + EVIDENCE_RULES;
     }
 
     /**
