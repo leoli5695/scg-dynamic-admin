@@ -859,6 +859,7 @@ gateway-admin/
 |   |-- controller/                # REST API Endpoints
 |   |   |-- BaseController.java             # Base controller utilities
 |   |   |-- RouteController.java            # Route management API
+|   |   |-- RouteDebugController.java       # /api/routes/{routeId}/debug[/auth] - SSE route debugger
 |   |   |-- ServiceController.java          # Service management API
 |   |   |-- StrategyController.java         # Strategy config API
 |   |   |-- AuthController.java             # Authentication API
@@ -872,6 +873,7 @@ gateway-admin/
 |   |   |-- EmailConfigController.java      # Email config API
 |   |   |-- AccessLogConfigController.java  # Access log config API
 |   |   |-- RequestTraceController.java     # Request trace API
+|   |   |-- RequestJourneyController.java   # /api/request-journeys/{traceId} - cross-hop request journey
 |   |   |-- AuditLogController.java         # Audit log API
 |   |   |-- AiConfigController.java         # AI analysis config API
 |   |   |-- HealthSyncController.java       # Health sync API

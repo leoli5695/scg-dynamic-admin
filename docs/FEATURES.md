@@ -191,11 +191,14 @@ The tables above index the 36 documents under `docs/features/` (count at commit 
 re-count with `ls docs/features/*.md | wc -l`). The following implemented pieces have
 no standalone feature document yet and are only described in the code / console UI:
 
-**`gateway-admin` REST controllers** (44 in total; the ones not covered above):
+**`gateway-admin` REST controllers** (46 at commit `b45d40a` — re-count with
+`ls gateway-admin/src/main/java/com/leoli/gateway/admin/controller/*.java | wc -l`;
+the ones not covered above):
 `PluginController`, `RoutePluginBindingController`, `LicenseController`,
 `GatewayTokenRevocationController`, `TokenQuotaController`, `TokenUsageController`,
 `TokenUsageReconciliationController`, `ProviderCredentialController`, `ServiceMiddlewareController`,
-`MultiInstanceComparisonController`, `FullChainTraceController`
+`MultiInstanceComparisonController`, `FullChainTraceController`, `RequestJourneyController`
+(`/api/request-journeys/{traceId}`, the cross-hop request journey added with route debugging)
 
 **Maven modules**: `seckill-core-engine` (standalone flash-sale workload engine — Redis Lua rate
 limiting, MQ order delivery/stock release; **not deployed to production**, and it is the only module

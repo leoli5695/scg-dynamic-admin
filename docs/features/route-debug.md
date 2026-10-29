@@ -32,9 +32,10 @@
 
 - `GET /api/routes/{routeId}/debug/auth?instanceId=...`：返回可选鉴权的元数据。
 - `POST /api/routes/{routeId}/debug?instanceId=...`：以 SSE 返回 response、chunk、complete 或 failure 事件。
+- 两个端点都是控制台 API，需带登录 JWT；`POST /api/**` 还要求 ADMIN 权限（`SecurityConfig.java:122`）。前端用 `Authorization: Bearer <控制台 Token>` 直接 fetch（`gateway-ui/src/api/routeDebug.ts`）。
 - 请求包含 method、path、headers、body、timeoutSeconds，以及可选的 authPolicyId、credential、credentialId。
 - 目标地址仅从路由所属实例配置读取，不能由调试请求指定外部地址；不跟随重定向。
 - 超时 1–60 秒；请求体最多 64 KB；最多 64 个请求头；输出最多 256K 字符，超限终止接收并提示截断。
 - admin 使用独立的 4 个工作线程、8 个排队名额，避免调试占满业务线程；流式心跳用于检测浏览器断开并取消上游调用。
 
-部署时需要同时更新 gateway-admin 和 gateway-ui；my-gateway 无需为该功能增加专用接口。
+部署时需要同时更新 gateway-admin、gateway-ui 和 my-gateway。my-gateway 没有为调试新增 HTTP 接口，但自 `3087aa2` 起增加了调试请求识别：admin 用 `gateway.admin.internal-token` 对调试请求做 HMAC-SHA256 签名，附加 `X-Gateway-Debug-Trace` 头（签名绑定 instanceId、方法、路径与查询、时间戳和 nonce，60 秒内有效，允许 5 秒时钟偏差）；网关侧 `DebugTraceVerifier` 验签通过后，`TraceIdGlobalFilter` 打上可信标记并移除该头（不转发给上游），`TraceCaptureGlobalFilter` 据此强制留痕（replayType `DEBUG`）并跳过响应体采样率，仍受响应体字节预算限制。gateway-admin 与 my-gateway 必须配置同一个 internal-token，且签名里的 instanceId 要与网关的 `gateway.instance-id` 一致。未升级 my-gateway 或 token 不匹配时调试请求照常发送，但链路记录退回常规采样，页面上的 Trace ID 可能查不到对应记录。

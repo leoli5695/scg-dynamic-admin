@@ -13,7 +13,9 @@ Nothing in the repository builds, packages or serves this directory:
 - This directory has **no Dockerfile, no nginx.conf and no .dockerignore**.
 - `k8s/`, `scripts/`, `prometheus/`, `README.md`, `DEPLOYMENT.md` and `docs/` contain **zero**
   references to `gateway-ui-2`.
-- There is no CI at all (`.github/` does not exist), so nothing type-checks it on a schedule.
+- CI exists (`.github/workflows/ci.yml`) but its `Frontend (gateway-ui)` job only ever enters
+  `./gateway-ui`; the comment at `ci.yml:157` names this directory as frozen and not deployed.
+  So nothing type-checks, lints or builds `gateway-ui-2` on a schedule.
 
 Every change made here is therefore pure maintenance cost with no user-visible effect.
 
