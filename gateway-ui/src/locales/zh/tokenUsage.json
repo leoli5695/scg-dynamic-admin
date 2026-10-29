@@ -1,4 +1,6 @@
 {
+  "tokenUsage.reconcile.quotaError": "当前配额刷新失败，请重新加载后确认。",
+  "tokenUsage.reconcile.quotaLoading": "正在刷新当前配额",
   "tokenUsage.backToSource": "返回来源请求",
   "tokenUsage.details.action": "详情",
   "tokenUsage.details.title": "计量详情",
@@ -13,6 +15,9 @@
   "tokenUsage.reconcile.retryConfirmTitle": "重试这笔已核实的额度补偿？",
   "tokenUsage.unassignedTenant": "未归属租户",
   "tokenUsage.reconcile.measuredUsage": "采集用量（输入 + 输出 = 总量）",
+  "tokenUsage.reconcile.quotaTitle": "相关配额（当前周期已用 / 上限）",
+  "tokenUsage.reconcile.quotaMonthly": "本月",
+  "tokenUsage.reconcile.quotaDaily": "今日",
   "tokenUsage.reconcile.currentData": "查看当前计量原始数据",
   "tokenUsage.reconcile.noSnapshot": "此核对单未保存核对前的数据快照。",
   "tokenUsage.reconcile.meteringOnly": "本次仅统计 Token，未扣减租户额度，无需额度补偿。",

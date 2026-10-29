@@ -60,6 +60,7 @@
   "instance_nav.services": "服务",
   "instance_nav.routes": "路由",
   "instance_nav.requests": "请求与排障",
+  "instance_nav.diagnostics": "高级诊断",
   "instance_nav.usage": "用量",
   "instance_nav.security": "安全",
   "instance_nav.operations": "变更与运维",

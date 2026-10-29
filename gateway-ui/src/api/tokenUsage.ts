@@ -156,3 +156,22 @@ export interface TokenQuotaTenant {
 }
 export const getTokenQuotaTenants = (options?: RequestOptions) =>
   httpClient.get<TokenQuotaTenant[]>('/api/token-quota', options);
+
+/** Current Redis-backed quota usage for one tenant (absent when the tenant has no quota). */
+export interface TokenQuotaStatus {
+  tenantId: string;
+  enabled?: boolean;
+  monthlyQuota?: number;
+  monthlyUsed?: number;
+  monthlyRemaining?: number;
+  monthlyUsagePercent?: number;
+  dailyQuota?: number;
+  dailyUsed?: number;
+  dailyRemaining?: number;
+  dailyUsagePercent?: number;
+  alertStatus?: string;
+  periodStart?: string;
+  periodEnd?: string;
+}
+export const getTokenQuotaStatus = (tenantId: string, options?: RequestOptions) =>
+  httpClient.get<TokenQuotaStatus>(`/api/token-quota/${encodeURIComponent(tenantId)}/status`, options);

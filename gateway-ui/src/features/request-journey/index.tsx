@@ -159,6 +159,8 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
           <Button disabled={!routeId} onClick={() => navigate(routeConfigurationUrl(instanceId, routeId))}>{t('journey.openConfiguration')}</Button>
           <Button disabled={!routeId} onClick={() => navigate(`/instances/${encodeURIComponent(instanceId)}/routes/${encodeURIComponent(routeId)}/debug`)}>{t('journey.debugAgain')}</Button>
           <Button disabled={!trace} onClick={() => setTraceOpen(true)}>{t('journey.openTrace')}</Button>
+          <Button disabled={!trace} onClick={() => navigate(`/instances/${encodeURIComponent(instanceId)}/trace?${new URLSearchParams({ traceId })}`)}>{t('journey.openTracePage')}</Button>
+          <Button disabled={!evidence} onClick={() => navigate(`/instances/${encodeURIComponent(instanceId)}/filter_chain?${new URLSearchParams({ traceId })}`)}>{t('journey.openFilterChain')}</Button>
           <Button onClick={() => navigate(journeyUsageUrl({
             instanceId, traceId, routeId, params, traceTime: trace?.traceTime,
             accessLogTime: accessLog?.timestamp, usageRequestTime: usage[0]?.requestTime,

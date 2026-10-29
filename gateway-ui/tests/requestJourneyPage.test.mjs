@@ -516,3 +516,18 @@ test('journey copy is complete in both languages and distinguishes HTTP clues fr
   assert.match(zh['journey.replayExecuteError'], /可能已执行/);
   assert.match(en['journey.replayExecuteError'], /may already have executed/);
 });
+
+test('request detail opens advanced evidence with the trace identity already applied', () => {
+  const h = journey();
+  let tree = h.render();
+  button(tree, 'journey.openTracePage').props.onClick();
+  assert.equal(h.calls.navigate.at(-1), '/instances/gw%2Fa/trace?traceId=trace-a');
+  button(h.render(), 'journey.openFilterChain').props.onClick();
+  assert.equal(h.calls.navigate.at(-1), '/instances/gw%2Fa/filter_chain?traceId=trace-a');
+  h.context.request.data.trace = null;
+  h.context.request.data.accessLog = { routeId: 'r', method: 'GET', path: '/x', statusCode: 500, durationMs: 1 };
+  tree = h.render();
+  assert.equal(button(tree, 'journey.openTracePage').props.disabled, true);
+  assert.equal(button(tree, 'journey.openFilterChain').props.disabled, false);
+  h.unmount();
+});

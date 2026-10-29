@@ -12,8 +12,9 @@ import type { ColumnsType } from 'antd/es/table';
 import { DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { parseServerTime } from '../../utils/serverTime';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { deleteAllTraces, getTracesByTimeRange } from '../../api/traces';
+import { deleteAllTraces, getTraceByTraceId, getTracesByTimeRange } from '../../api/traces';
 import { executeReplay as executeReplayApi, prepareReplay } from '../../api/replay';
 import { ApiError } from '../../api/http';
 import type { RequestTrace } from '../../types/trace';
@@ -60,6 +61,8 @@ const RequestReplayPage: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [traces, setTraces] = useState<RequestTrace[]>([]);
+  const [searchParams] = useSearchParams();
+  const deepTraceId = searchParams.get('traceId')?.trim() ?? '';
 
   // Time range state
   const [timeRange, setTimeRange] = useState<number>(60);
@@ -134,6 +137,33 @@ const RequestReplayPage: React.FC = () => {
       message.error(e instanceof ApiError && e.message ? e.message : t('replay.prepare_error'));
     }
   }, [t]);
+
+  // A request detail supplies the trace identity, so replay needs no retyping.
+  useEffect(() => {
+    // Invalidate the previous editor whenever the URL's request identity changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReplayableRequest(null);
+    setEditModalVisible(false);
+    const controller = new AbortController();
+    if (!deepTraceId) return () => controller.abort();
+    (async () => {
+      try {
+        const detail = await getTraceByTraceId(deepTraceId, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (detail.instanceId !== instanceId) {
+          message.error(t('replay.instanceMismatch'));
+          return;
+        }
+        const request = await prepareReplay(detail.id, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setReplayableRequest(request);
+        setEditModalVisible(true);
+      } catch (e) {
+        if (!controller.signal.aborted) message.error(e instanceof ApiError && e.message ? e.message : t('replay.prepare_error'));
+      }
+    })();
+    return () => controller.abort();
+  }, [instanceId, deepTraceId, t]);
 
   const handleExecute = async (quick: boolean, options: ReplayOptions) => {
     if (!replayableRequest) return;

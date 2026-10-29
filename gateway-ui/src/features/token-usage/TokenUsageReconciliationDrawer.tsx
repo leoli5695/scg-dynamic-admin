@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -18,11 +18,12 @@ import { useAuth } from '../auth/AuthContext';
 import { isUsageUnresolved, usageTokenValue } from './usagePresentation';
 import { useRequest } from '../../hooks/useRequest';
 import {
+  getTokenQuotaStatus,
   getTokenUsageReconciliation,
   reconcileTokenUsage,
   retryTokenUsageReconciliation,
 } from '../../api/tokenUsage';
-import type { TokenUsageCorrection, TokenUsageEvent } from '../../api/tokenUsage';
+import type { TokenUsageCorrection, TokenUsageEvent, TokenUsageReconciliation } from '../../api/tokenUsage';
 import { useNavigate } from 'react-router-dom';
 import { usageRequestJourneyUrl } from '../request-journey/usageNavigation';
 
@@ -33,7 +34,7 @@ interface Props {
   usageReturnTo?: string;
 }
 
-const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApplied, usageReturnTo }) => {
+const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, onClose, onApplied, usageReturnTo }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -41,10 +42,39 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
   const [form] = Form.useForm<TokenUsageCorrection & { verified: boolean }>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const request = useRequest((signal) => getTokenUsageReconciliation(event.id, { signal }), {
-    deps: [event.id],
+  const syncedCommand = useRef<string | null>(null);
+  const request = useRequest((signal) => getTokenUsageReconciliation(sourceEvent.id, { signal }), {
+    deps: [sourceEvent.id],
+    onSuccess: (result) => syncApplied(result),
   });
   const command = request.data;
+  // The applied command is the source of truth. The parent list drops reconciled rows, so
+  // falling back to the stale snapshot would otherwise show "unknown" next to "applied".
+  const event = command?.status === 'APPLIED' ? {
+    ...sourceEvent,
+    usageStatus: 'RECONCILED' as const,
+    settlementStatus: 'APPLIED',
+    promptTokens: Number(command.prompt_tokens),
+    completionTokens: Number(command.completion_tokens),
+    totalTokens: Number(command.total_tokens),
+    chargedTokens: Number(command.charged_tokens),
+  } : sourceEvent;
+  const quota = useRequest((signal) => getTokenQuotaStatus(event.tenantId, { signal }), {
+    // Only events that used a quota bucket have a related quota to show.
+    immediate: !!event.tenantId && event.tenantId !== '__unassigned__' && !!event.quotaPeriod,
+    deps: [event.tenantId, event.quotaPeriod],
+  });
+  // GET after a lost response is just as authoritative as a successful POST.
+  const syncApplied = (result: TokenUsageReconciliation | null) => {
+    if (result?.status !== 'APPLIED') return;
+    const key = `${sourceEvent.id}:${result.id}`;
+    if (syncedCommand.current === key) return;
+    syncedCommand.current = key;
+    setError('');
+    if (event.tenantId && event.tenantId !== '__unassigned__') quota.run();
+    onApplied();
+  };
+  const applying = useRef(false);
   const ledgerPending = !!event.quotaLedgerId && event.quotaLedgerState !== 'READY';
   const unresolved = isUsageUnresolved(event);
   const hasPeriod = !!event.quotaMonth && !!event.quotaDay;
@@ -79,47 +109,59 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
     } catch {
       return;
     }
-    Modal.confirm({
+    const confirm = Modal.confirm({
       title: t('tokenUsage.reconcile.confirmTitle'),
       content: t('tokenUsage.reconcile.confirmDeltas', {
         monthly: values.monthlyDelta,
         daily: values.dailyDelta,
       }),
+      onCancel: () => confirm.destroy(),
       onOk: async () => {
+        if (applying.current) return;
+        applying.current = true;
         setSaving(true);
         setError('');
         try {
           const result = await reconcileTokenUsage(event.id, values);
           request.mutate(result);
-          onApplied();
+          syncApplied(result);
         } catch (failure) {
           setError(failure instanceof Error ? failure.message : String(failure));
           // A response may be lost after intent was committed. Reload before allowing another submission.
           request.run();
         } finally {
+          applying.current = false;
           setSaving(false);
+          confirm.destroy();
         }
       },
     });
   };
   const retry = () => {
     if (!canWrite || !command || command.status === 'APPLIED' || saving) return;
-    Modal.confirm({
+    const confirm = Modal.confirm({
       title: t('tokenUsage.reconcile.retryConfirmTitle'),
       content: t('tokenUsage.reconcile.confirmDeltas', {
         monthly: command.monthly_delta,
         daily: command.daily_delta,
       }),
+      onCancel: () => confirm.destroy(),
       onOk: async () => {
+        if (applying.current) return;
+        applying.current = true;
         setSaving(true);
         setError('');
         try {
-          request.mutate(await retryTokenUsageReconciliation(event.id));
-          onApplied();
+          const result = await retryTokenUsageReconciliation(event.id);
+          request.mutate(result);
+          syncApplied(result);
         } catch (failure) {
           setError(failure instanceof Error ? failure.message : String(failure));
+          request.run();
         } finally {
+          applying.current = false;
           setSaving(false);
+          confirm.destroy();
         }
       },
     });
@@ -191,6 +233,41 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event, onClose, onApp
           },
         ]}
       />
+      {quota.loading ? (
+        <Spin tip={t('tokenUsage.reconcile.quotaLoading')}><div style={{ minHeight: 48 }} /></Spin>
+      ) : quota.error ? (
+        <Alert
+          type="warning"
+          showIcon
+          message={t('tokenUsage.reconcile.quotaError')}
+          description={quota.error.message}
+          action={<Button onClick={quota.run}>{t('tokenUsage.reconcile.refresh')}</Button>}
+          style={{ marginTop: 16 }}
+        />
+      ) : quota.data && (quota.data.monthlyQuota !== undefined || quota.data.dailyQuota !== undefined) && (
+        <Descriptions
+          column={1}
+          size="small"
+          title={t('tokenUsage.reconcile.quotaTitle')}
+          style={{ marginTop: 16 }}
+          items={[
+            ...(quota.data.monthlyQuota !== undefined
+              ? [{
+                  key: 'quotaMonthly',
+                  label: t('tokenUsage.reconcile.quotaMonthly'),
+                  children: `${quota.data.monthlyUsed ?? 0} / ${quota.data.monthlyQuota}`,
+                }]
+              : []),
+            ...(quota.data.dailyQuota !== undefined
+              ? [{
+                  key: 'quotaDaily',
+                  label: t('tokenUsage.reconcile.quotaDaily'),
+                  children: `${quota.data.dailyUsed ?? 0} / ${quota.data.dailyQuota}`,
+                }]
+              : []),
+          ]}
+        />
+      )}
       <details style={{ marginTop: 16 }}>
         <summary>{t('tokenUsage.details.advanced')}</summary>
         <Descriptions

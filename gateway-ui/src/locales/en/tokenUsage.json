@@ -1,4 +1,6 @@
 {
+  "tokenUsage.reconcile.quotaError": "Current quota could not be refreshed. Reload to verify the latest usage.",
+  "tokenUsage.reconcile.quotaLoading": "Refreshing current quota",
   "tokenUsage.backToSource": "Back to source request",
   "tokenUsage.details.action": "Details",
   "tokenUsage.details.title": "Metering details",
@@ -13,6 +15,9 @@
   "tokenUsage.reconcile.retryConfirmTitle": "Retry this verified quota correction?",
   "tokenUsage.unassignedTenant": "Unassigned tenant",
   "tokenUsage.reconcile.measuredUsage": "Measured usage (input + output = total)",
+  "tokenUsage.reconcile.quotaTitle": "Related quota (used / limit this period)",
+  "tokenUsage.reconcile.quotaMonthly": "This month",
+  "tokenUsage.reconcile.quotaDaily": "Today",
   "tokenUsage.reconcile.currentData": "View current raw metering data",
   "tokenUsage.reconcile.noSnapshot": "This reconciliation has no saved snapshot of the original data.",
   "tokenUsage.reconcile.meteringOnly": "Tokens are recorded without deducting tenant quota. No quota compensation is needed.",

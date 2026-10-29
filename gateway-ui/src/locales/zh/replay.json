@@ -1,4 +1,5 @@
 {
+  "replay.instanceMismatch": "该请求不属于当前实例，无法在此回放。",
   "replay.title": "请求回放调试器",
   "replay.load_error": "加载追踪记录失败",
   "replay.prepare_error": "准备回放失败",

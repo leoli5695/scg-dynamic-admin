@@ -1,4 +1,5 @@
 {
+  "replay.instanceMismatch": "This request belongs to another instance and cannot be replayed here.",
   "replay.title": "Request Replay Debugger",
   "replay.load_error": "Failed to load traces",
   "replay.prepare_error": "Failed to prepare replay",

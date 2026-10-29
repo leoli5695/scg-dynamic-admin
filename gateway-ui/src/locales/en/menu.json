@@ -60,6 +60,7 @@
   "instance_nav.services": "Services",
   "instance_nav.routes": "Routes",
   "instance_nav.requests": "Requests & troubleshooting",
+  "instance_nav.diagnostics": "Advanced diagnostics",
   "instance_nav.usage": "Usage",
   "instance_nav.security": "Security",
   "instance_nav.operations": "Changes & operations",

@@ -17,6 +17,7 @@ import {
   SettingOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import {
   clearFilterChainStats, getFilterChainHistorical, getFilterChainRecords,
@@ -40,9 +41,32 @@ const FilterChainPage: React.FC = () => {
   const [filterStats, setFilterStats] = useState<FilterStats[]>([]);
   const [records, setRecords] = useState<FilterChainRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [searchTraceId, setSearchTraceId] = useState('');
+  const [searchParams] = useSearchParams();
+  const deepTraceId = searchParams.get('traceId')?.trim() ?? '';
+  const [searchTraceId, setSearchTraceId] = useState(deepTraceId);
   const [selectedRecord, setSelectedRecord] = useState<FilterChainRecord | null>(null);
   const { t } = useTranslation();
+
+  // A request detail supplies the trace identity so evidence needs no retyping.
+  useEffect(() => {
+    if (!deepTraceId) return undefined;
+    // Synchronize the search field with browser back/forward navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearchTraceId(deepTraceId);
+    let active = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const record = await getFilterChainTrace(instanceId, deepTraceId);
+        if (active && record) setSelectedRecord(record);
+      } catch (e) {
+        if (active) setError(e instanceof Error ? e.message : 'Trace not found');
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [instanceId, deepTraceId]);
 
   // Auto refresh
   const [autoRefresh, setAutoRefresh] = useState(false);

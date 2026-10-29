@@ -32,6 +32,8 @@
   "journey.openConfiguration": "查看路由配置",
   "journey.debugAgain": "路由调试（新请求）",
   "journey.openTrace": "高级追踪详情",
+  "journey.openTracePage": "在追踪页打开此请求",
+  "journey.openFilterChain": "查看 Filter 链",
   "journey.routeUsage": "查看该路由用量",
   "journey.routeMismatch": "请求实际命中的路由与来源页面选择的路由不同，请检查路径、方法与路由优先级。",
   "journey.routeUnavailable": "当前路由配置暂不可用或已删除，已有追踪和计量记录仍可查看。",

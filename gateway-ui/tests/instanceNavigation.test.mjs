@@ -10,15 +10,18 @@ const legacyPages = [
   'request_replay', 'copilot', 'stress_test', 'events', 'resources', 'middleware',
 ];
 
-test('seven task-oriented groups plus extensions retain all pages exactly once', () => {
+test('task-oriented groups keep request search primary and evidence in advanced diagnostics', () => {
   const groups = getInstanceNavigation(false);
   assert.deepEqual(groups.map(group => group.key), [
-    'overview', 'services', 'routes', 'requests', 'usage', 'security', 'operations', 'tools',
+    'overview', 'services', 'routes', 'requests', 'diagnostics', 'usage', 'security', 'operations', 'tools',
   ]);
   const pages = groups.flatMap(group => group.pages);
   assert.equal(new Set(pages).size, pages.length);
   assert.deepEqual([...pages].sort(), [...legacyPages, 'requests', 'token_usage'].sort());
-  assert.equal(groups.find(group => group.key === 'requests').pages[0], 'requests');
+  assert.deepEqual(groups.find(group => group.key === 'requests').pages, ['requests', 'access_log']);
+  assert.deepEqual(groups.find(group => group.key === 'diagnostics').pages, [
+    'trace', 'filter_chain', 'request_replay', 'topology', 'diagnostic',
+  ]);
   assert.ok(groups.find(group => group.key === 'tools').pages.includes('plugins'));
 });
 

@@ -178,8 +178,8 @@ const InstanceDetailLayout: React.FC = () => {
   const activeGroup = navigation.find((group) => group.pages.some((page) => page === activeTab));
   const groupIcons = {
     overview: CloudServerOutlined, services: AppstoreOutlined, routes: DeploymentUnitOutlined,
-    requests: SearchOutlined, usage: FundOutlined, security: SafetyOutlined,
-    operations: HistoryOutlined, tools: ThunderboltOutlined,
+    requests: SearchOutlined, diagnostics: MedicineBoxOutlined, usage: FundOutlined,
+    security: SafetyOutlined, operations: HistoryOutlined, tools: ThunderboltOutlined,
   };
   const tools = navigation.find(group => group.key === 'tools')!;
 

@@ -32,6 +32,8 @@
   "journey.openConfiguration": "Route configuration",
   "journey.debugAgain": "Route debugger (new request)",
   "journey.openTrace": "Advanced trace details",
+  "journey.openTracePage": "Open this request in trace search",
+  "journey.openFilterChain": "View filter chain",
   "journey.routeUsage": "Route token usage",
   "journey.routeMismatch": "The request matched a different route. Check the path, method and route priority.",
   "journey.routeUnavailable": "The current route is unavailable or deleted. Existing request evidence remains available.",

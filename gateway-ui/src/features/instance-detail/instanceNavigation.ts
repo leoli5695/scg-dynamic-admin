@@ -2,7 +2,9 @@ export const INSTANCE_NAV_GROUPS = [
   { key: 'overview', pages: ['overview', 'monitor'] },
   { key: 'services', pages: ['services'] },
   { key: 'routes', pages: ['routes', 'strategies'] },
-  { key: 'requests', pages: ['requests', 'trace', 'access_log', 'diagnostic', 'topology', 'filter_chain', 'request_replay'] },
+  { key: 'requests', pages: ['requests', 'access_log'] },
+  // Advanced evidence views stay reachable by their old URLs, but the primary path is a request.
+  { key: 'diagnostics', pages: ['trace', 'filter_chain', 'request_replay', 'topology', 'diagnostic'] },
   { key: 'usage', pages: ['token_usage'] },
   { key: 'security', pages: ['authentication', 'token_revocation', 'certificates'] },
   { key: 'operations', pages: ['audit_logs', 'alerts', 'events', 'resources'] },

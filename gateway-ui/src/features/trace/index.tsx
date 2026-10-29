@@ -20,11 +20,11 @@ import {
 import dayjs from 'dayjs';
 import { parseServerTime } from '../../utils/serverTime';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useRequest } from '../../hooks/useRequest';
 import {
   deleteAllTraces, deleteOldTraces, getErrorTraces, getSlowTraces,
-  getTraceConfig, getTraceStats,
+  getTraceByTraceId, getTraceConfig, getTraceStats,
 } from '../../api/traces';
 import type { RequestTrace, TraceStats } from '../../types/trace';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
@@ -54,13 +54,16 @@ const TracePage: React.FC = () => {
   const instanceId = instance.instanceId;
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  // A request detail links straight to its evidence; the filters start from that identity.
+  const deepTraceId = searchParams.get('traceId')?.trim() ?? '';
 
   const [activeTab, setActiveTab] = useState<'errors' | 'slow' | 'distributed'>('errors');
   const [timeRange, setTimeRange] = useState<number>(60); // minutes
   const [customTimeRange, setCustomTimeRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
-  const [filters, setFilters] = useState<TraceFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<TraceFilters>(() => ({ ...EMPTY_FILTERS, traceId: deepTraceId }));
   // Filters committed via the Search button (or reset on tab change).
-  const [appliedFilters, setAppliedFilters] = useState<TraceFilters>(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<TraceFilters>(() => ({ ...EMPTY_FILTERS, traceId: deepTraceId }));
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
   const [traces, setTraces] = useState<RequestTrace[]>([]);
   const [stats, setStats] = useState<TraceStats | null>(null);
@@ -134,6 +137,41 @@ const TracePage: React.FC = () => {
     })();
     return () => controller.abort();
   }, [instanceId, activeTab, timeRange, customTimeRange, appliedFilters, page, pageSize, reloadKey, t]);
+
+  // A new deep link (e.g. back/forward) replaces the trace filter without a remount.
+  useEffect(() => {
+    if (!deepTraceId) return;
+    // Synchronize editable filters when browser history changes the URL.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilters(previous => (previous.traceId === deepTraceId ? previous : { ...previous, traceId: deepTraceId }));
+    setAppliedFilters(previous => (previous.traceId === deepTraceId ? previous : { ...previous, traceId: deepTraceId }));
+  }, [deepTraceId]);
+
+  // Deep-linked evidence opens even when the trace falls outside the current table window.
+  useEffect(() => {
+    // Clear evidence belonging to the previous URL before resolving the new identity.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDetailTrace(null);
+    setDetailVisible(false);
+    if (!deepTraceId) return undefined;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const detail = await getTraceByTraceId(deepTraceId, { signal: controller.signal });
+        if (!controller.signal.aborted && detail) {
+          if (detail.instanceId !== instanceId) {
+            message.error(t('trace.instanceMismatch'));
+            return;
+          }
+          setDetailTrace(detail);
+          setDetailVisible(true);
+        }
+      } catch {
+        // The filtered table remains the fallback when no trace row exists.
+      }
+    })();
+    return () => controller.abort();
+  }, [instanceId, deepTraceId, t]);
 
   // Time filtering is server-side now; the fetched page is already range-bounded and
   // path/method/statusCode were applied inside the effect above.

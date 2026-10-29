@@ -1,4 +1,5 @@
 {
+  "trace.instanceMismatch": "This trace belongs to another instance and cannot be opened here.",
   "trace.title": "Request Tracing",
   "trace.total": "Total Traces",
   "trace.errors_today": "Errors Today",
