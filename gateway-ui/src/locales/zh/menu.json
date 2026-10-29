@@ -34,6 +34,7 @@
   "app.console_title": "API 网关控制台",
   "menu.token_usage": "用量",
   "menu.platform": "平台管理",
+  "menu.feature_settings": "功能开关",
   "menu.requests": "请求查询",
   "requestSearch.subtitle": "先查一次请求，再查看路由配置、响应、耗时和用量。查询条件随地址保留。",
   "requestSearch.range": "时间范围（浏览器本地时间）",

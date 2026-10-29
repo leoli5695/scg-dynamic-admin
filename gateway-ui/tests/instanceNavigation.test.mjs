@@ -42,3 +42,17 @@ test('all legacy URLs and both workflow URLs remain registered', () => {
     assert.ok(app.includes(`path="${path}"`));
   }
 });
+
+test('feature switches remove disabled tools from navigation without changing URLs', () => {
+  const pages = getInstanceNavigation(false, { stressTest: false, middleware: false, plugins: false })
+    .flatMap(group => group.pages);
+  for (const page of ['stress_test', 'middleware', 'plugins', 'plugin_bindings']) {
+    assert.ok(!pages.includes(page), `${page} should be hidden`);
+  }
+  assert.ok(pages.includes('copilot') && pages.includes('routes') && pages.includes('requests'));
+
+  const defaults = getInstanceNavigation(false, {}).flatMap(group => group.pages);
+  for (const page of ['stress_test', 'middleware', 'plugins', 'plugin_bindings']) {
+    assert.ok(defaults.includes(page), `${page} stays enabled by default`);
+  }
+});

@@ -8,11 +8,12 @@ import {
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
-  CloudServerOutlined, ClusterOutlined, KeyOutlined, FundOutlined,
+  CloudServerOutlined, ClusterOutlined, ControlOutlined, KeyOutlined, FundOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useSystemSettings } from '../settings/SystemSettingsContext';
 import GatewayLogo from './components/GatewayLogo';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import UserMenu from './UserMenu';
@@ -31,6 +32,7 @@ const getItem = (
 const selectedKeyFromPath = (pathname: string): string => {
   if (pathname.startsWith('/kubernetes')) return 'kubernetes';
   if (pathname.startsWith('/license')) return 'license';
+  if (pathname.startsWith('/settings')) return 'settings';
   if (pathname.startsWith('/token-usage')) return 'token-usage';
   return 'instances';
 };
@@ -40,6 +42,10 @@ const AppShell: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+  const { settings, ready, hasClusterDeployment } = useSystemSettings();
+  // Kubernetes is a deployment-shaped capability: switched on AND at least one cluster instance.
+  const kubernetesVisible = !ready || !settings
+    || (settings.kubernetesEnabled && hasClusterDeployment);
 
   const menuItems: MenuItem[] = useMemo(() => [
     getItem(t('menu.instances'), 'instances', <CloudServerOutlined />),
@@ -47,11 +53,12 @@ const AppShell: React.FC = () => {
     {
       key: 'platform', label: t('menu.platform'), icon: <SettingOutlined />,
       children: [
-        getItem(t('menu.kubernetes'), 'kubernetes', <ClusterOutlined />),
+        ...(kubernetesVisible ? [getItem(t('menu.kubernetes'), 'kubernetes', <ClusterOutlined />)] : []),
         getItem('License', 'license', <KeyOutlined />),
+        getItem(t('menu.feature_settings'), 'settings', <ControlOutlined />),
       ],
     },
-  ], [t]);
+  ], [t, kubernetesVisible]);
 
   const selectedKey = selectedKeyFromPath(location.pathname);
   // The instance console owns its own header; hide the main one there.
@@ -137,7 +144,7 @@ const AppShell: React.FC = () => {
           </Header>
         )}
 
-        <Content className={`main-content${isInstanceDetail ? ' instance-console-content' : ''}${['/token-usage', '/kubernetes', '/license'].includes(location.pathname) ? ' management-content' : ''}${location.pathname === '/instances' ? ' instances-content' : ''}`} style={{ overflow: 'auto' }}>
+        <Content className={`main-content${isInstanceDetail ? ' instance-console-content' : ''}${['/token-usage', '/kubernetes', '/license', '/settings'].includes(location.pathname) ? ' management-content' : ''}${location.pathname === '/instances' ? ' instances-content' : ''}`} style={{ overflow: 'auto' }}>
           <React.Suspense
             fallback={(
               <div style={{

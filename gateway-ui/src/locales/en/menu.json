@@ -34,6 +34,7 @@
   "app.console_title": "API Gateway Console",
   "menu.token_usage": "Usage",
   "menu.platform": "Platform management",
+  "menu.feature_settings": "Feature switches",
   "menu.requests": "Request search",
   "requestSearch.subtitle": "Find a request, then inspect its configuration, response, timing and usage. Filters are retained in the URL.",
   "requestSearch.range": "Time range (browser local time)",

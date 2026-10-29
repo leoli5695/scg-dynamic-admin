@@ -16,6 +16,8 @@ import customTheme from './theme';
 import './i18n';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import AppShell from './features/layout/AppShell';
+import { SystemSettingsProvider } from './features/settings/SystemSettingsContext';
+import FeatureGate from './features/settings/FeatureGate';
 import OverviewTab from './features/instance-detail/tabs/OverviewTab';
 import EventsTab from './features/instance-detail/tabs/EventsTab';
 import ResourcesTab from './features/instance-detail/tabs/ResourcesTab';
@@ -43,6 +45,7 @@ const KubernetesPage = lazy(() => import('./features/kubernetes'));
 const LicensePage = lazy(() => import('./features/license'));
 const StressTestSharePage = lazy(() => import('./features/stress-test/SharePage'));
 const MiddlewareDetailPage = lazy(() => import('./features/middleware-detail'));
+const SystemSettingsPage = lazy(() => import('./features/settings'));
 
 const PageLoadingFallback: React.FC = () => (
   <div style={{
@@ -91,7 +94,7 @@ const AppRoutes: React.FC = () => (
     <Routes>
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/share/:shareId" element={<SharePageRoute />} />
-      <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+      <Route element={<RequireAuth><SystemSettingsProvider><AppShell /></SystemSettingsProvider></RequireAuth>}>
         <Route path="/" element={<Navigate to="/instances" replace />} />
         <Route path="/instances" element={<InstancesListPage />} />
         <Route path="/instances/create" element={<InstanceCreatePage />} />
@@ -104,8 +107,8 @@ const AppRoutes: React.FC = () => (
           <Route path="trace/:traceId" element={<RequestJourneyPage />} />
           <Route path="requests" element={<RequestQueryPage />} />
           <Route path="token_usage" element={<TokenUsageTab />} />
-          <Route path="plugins" element={<PluginsTab />} />
-          <Route path="plugin_bindings" element={<PluginBindingsTab />} />
+          <Route path="plugins" element={<FeatureGate feature="pluginsEnabled"><PluginsTab /></FeatureGate>} />
+          <Route path="plugin_bindings" element={<FeatureGate feature="pluginsEnabled"><PluginBindingsTab /></FeatureGate>} />
           <Route path="strategies" element={<StrategiesTab />} />
           <Route path="authentication" element={<AuthenticationTab />} />
           <Route path="token_revocation" element={<TokenRevocationTab />} />
@@ -120,14 +123,15 @@ const AppRoutes: React.FC = () => (
           <Route path="filter_chain" element={<FilterChainTab />} />
           <Route path="request_replay" element={<RequestReplayTab />} />
           <Route path="copilot" element={<CopilotTab />} />
-          <Route path="stress_test" element={<StressTestTab />} />
+          <Route path="stress_test" element={<FeatureGate feature="stressTestEnabled"><StressTestTab /></FeatureGate>} />
           <Route path="events" element={<EventsTab />} />
           <Route path="resources" element={<ResourcesTab />} />
-          <Route path="middleware" element={<MiddlewareTab />} />
+          <Route path="middleware" element={<FeatureGate feature="middlewareEnabled"><MiddlewareTab /></FeatureGate>} />
         </Route>
-        <Route path="/kubernetes" element={<KubernetesPage />} />
+        <Route path="/kubernetes" element={<FeatureGate feature="kubernetesEnabled" requiresCluster><KubernetesPage /></FeatureGate>} />
         <Route path="/license" element={<LicensePage />} />
-        <Route path="/middleware-detail" element={<MiddlewareDetailPage />} />
+        <Route path="/settings" element={<SystemSettingsPage />} />
+        <Route path="/middleware-detail" element={<FeatureGate feature="middlewareEnabled"><MiddlewareDetailPage /></FeatureGate>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

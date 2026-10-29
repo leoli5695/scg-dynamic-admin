@@ -27,6 +27,7 @@ import UserMenu from '../layout/UserMenu';
 import { InstanceDetailProvider } from './InstanceDetailContext';
 import ScaleModal from './ScaleModal';
 import { getInstanceNavigation } from './instanceNavigation';
+import { useSystemSettings } from '../settings/SystemSettingsContext';
 import './instance-detail.css';
 import './console-ui.css';
 import './operations-ui.css';
@@ -80,6 +81,7 @@ const InstanceDetailLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+  const { settings } = useSystemSettings();
   const [scaleModalOpen, setScaleModalOpen] = useState(false);
 
   const instanceRequest = useRequest(
@@ -174,7 +176,11 @@ const InstanceDetailLayout: React.FC = () => {
    */
   const isExternal = instance.clusterId == null;
 
-  const navigation = getInstanceNavigation(isExternal);
+  const navigation = getInstanceNavigation(isExternal, {
+    stressTest: settings?.stressTestEnabled !== false,
+    middleware: settings?.middlewareEnabled !== false,
+    plugins: settings?.pluginsEnabled !== false,
+  });
   const activeGroup = navigation.find((group) => group.pages.some((page) => page === activeTab));
   const groupIcons = {
     overview: CloudServerOutlined, services: AppstoreOutlined, routes: DeploymentUnitOutlined,

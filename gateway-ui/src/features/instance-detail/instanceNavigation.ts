@@ -13,9 +13,23 @@ export const INSTANCE_NAV_GROUPS = [
 
 export type InstancePageKey = typeof INSTANCE_NAV_GROUPS[number]['pages'][number];
 
-export function getInstanceNavigation(isExternal: boolean) {
+export interface FeatureVisibility {
+  stressTest?: boolean;
+  middleware?: boolean;
+  plugins?: boolean;
+}
+
+/** Pages stay registered; switched-off features simply disappear from the console nav. */
+export function getInstanceNavigation(isExternal: boolean, features: FeatureVisibility = {}) {
+  const enabled = { stressTest: true, middleware: true, plugins: true, ...features };
   return INSTANCE_NAV_GROUPS.map((group) => ({
     key: group.key,
-    pages: group.pages.filter((page) => !isExternal || (page !== 'events' && page !== 'resources')),
+    pages: group.pages.filter((page) => {
+      if (isExternal && (page === 'events' || page === 'resources')) return false;
+      if (!enabled.stressTest && page === 'stress_test') return false;
+      if (!enabled.middleware && page === 'middleware') return false;
+      if (!enabled.plugins && (page === 'plugins' || page === 'plugin_bindings')) return false;
+      return true;
+    }),
   }));
 }
