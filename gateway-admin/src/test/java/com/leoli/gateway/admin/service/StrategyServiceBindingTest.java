@@ -34,6 +34,8 @@ class StrategyServiceBindingTest {
     @Mock RouteRepository routeRepository;
     @Mock GatewayInstanceRepository gatewayInstanceRepository;
     @Mock jakarta.persistence.EntityManager entityManager;
+    @Mock AuditLogService auditLogService;
+    @Mock org.springframework.beans.factory.ObjectProvider<AuditLogService> auditLogServiceProvider;
     @Spy ObjectMapper objectMapper = new ObjectMapper();
     @InjectMocks StrategyService service;
     private StrategyEntity entity;
@@ -41,6 +43,7 @@ class StrategyServiceBindingTest {
     @BeforeEach
     void setUp() throws Exception {
         entity = entity("shared", "ROUTE", "instance-a", true);
+        lenient().when(auditLogServiceProvider.getObject()).thenReturn(auditLogService);
         lenient().when(strategyRepository.findByStrategyIdForUpdate("shared")).thenReturn(entity);
         lenient().when(strategyRepository.findByStrategyId("shared")).thenReturn(entity);
         lenient().when(strategyRepository.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
@@ -59,7 +62,10 @@ class StrategyServiceBindingTest {
         assertEquals(Map.of("sentinel", Map.of("nested", 42)), result.getConfig());
         assertEquals(result.getBoundRouteIds(), objectMapper.readValue(entity.getMetadata(), StrategyDefinition.class).getBoundRouteIds());
         assertFalse(entity.getMetadata().contains("boundRouteIds"));
-        verify(strategyRepository).findByStrategyIdForUpdate("shared");
+        assertTrue(service.hasPendingBindingPublication(entity));
+        verifyNoInteractions(configCenterService);
+        service.retryBindingPublication("shared");
+        verify(strategyRepository, times(2)).findByStrategyIdForUpdate("shared");
         verify(configCenterService).publishConfig(eq("config.gateway.strategy-shared"), isNull(), eq(result));
     }
 
@@ -216,7 +222,8 @@ class StrategyServiceBindingTest {
 
     @Test void controllerReturnsLatestDefinitionsAndCompactImpactEnvelope() throws Exception {
         var controller = new com.leoli.gateway.admin.controller.StrategyController(service, mock(AuditLogService.class), objectMapper);
-        var bound = controller.bindRoute("shared", "r2");
+        var request = new org.springframework.mock.web.MockHttpServletRequest();
+        var bound = controller.bindRoute("shared", "r2", request);
         assertEquals(200, bound.getStatusCode().value());
         assertEquals(Set.of("r1", "r2"), bound.getBody().getData().getBoundRouteIds());
         when(routeRepository.findByInstanceId("instance-a")).thenReturn(List.of(route("r1", "instance-a", true), route("r2", "instance-a", false)));
@@ -227,8 +234,8 @@ class StrategyServiceBindingTest {
         assertEquals("r1", json.get("id").asText());
         assertEquals("route-r1", json.get("routeName").asText());
         assertEquals("instance-a", json.get("instanceId").asText());
-        assertEquals(Set.of("r2"), controller.unbindRoute("shared", "r1").getBody().getData().getBoundRouteIds());
-        assertEquals(400, controller.bindRoute("shared", "foreign").getStatusCode().value());
+        assertEquals(Set.of("r2"), controller.unbindRoute("shared", "r1", request).getBody().getData().getBoundRouteIds());
+        assertEquals(400, controller.bindRoute("shared", "foreign", request).getStatusCode().value());
         assertEquals(404, controller.getStrategyRoutes("missing").getStatusCode().value());
     }
 
@@ -252,8 +259,95 @@ class StrategyServiceBindingTest {
     @Test void publicationFailureStillPersistsConfigurationWithoutClaimingConvergence() {
         when(configCenterService.publishConfig(anyString(), any(), any())).thenReturn(false);
         assertEquals(Set.of("r1", "r2"), service.bindRoute("shared", "r2").getBoundRouteIds());
+        service.retryBindingPublication("shared");
         assertEquals(Set.of("r1", "r2"), service.getStrategy("shared").getBoundRouteIds());
         verify(strategyRepository).saveAndFlush(entity);
+        assertTrue(service.hasPendingBindingPublication(entity));
+    }
+
+    @Test void recoveryAfterRestartPublishesLatestConfigurationAndClearsOnlyAfterIndexSuccess() {
+        when(configCenterService.publishConfig(anyString(), any(), any())).thenReturn(false);
+        service.bindRoute("shared", "r2", "alice", "127.0.0.1");
+        service.retryBindingPublication("shared");
+        assertTrue(service.hasPendingBindingPublication(entity));
+        var latest = service.getStrategy("shared");
+        latest.setConfig(Map.of("latest", 42));
+        service.updateStrategy("shared", latest);
+        assertTrue(service.hasPendingBindingPublication(entity));
+        service.bindRoute("shared", "r2", "alice", "127.0.0.1"); // No duplicate audit or discarded intent.
+        when(strategyRepository.findByMetadataContaining("\"_bindingPublicationPending\"")).thenReturn(List.of(entity));
+        when(configCenterService.publishConfig(anyString(), any(), any())).thenReturn(true);
+        var restarted = new StrategyService();
+        org.springframework.test.util.ReflectionTestUtils.setField(restarted, "strategyRepository", strategyRepository);
+        org.springframework.test.util.ReflectionTestUtils.setField(restarted, "gatewayInstanceRepository", gatewayInstanceRepository);
+        org.springframework.test.util.ReflectionTestUtils.setField(restarted, "entityManager", entityManager);
+        org.springframework.test.util.ReflectionTestUtils.setField(restarted, "objectMapper", objectMapper);
+        org.springframework.test.util.ReflectionTestUtils.setField(restarted, "configCenterService", configCenterService);
+        new com.leoli.gateway.admin.schedule.StrategyBindingPublicationRetry(strategyRepository, restarted).retry();
+        assertFalse(restarted.hasPendingBindingPublication(entity));
+        var payload = org.mockito.ArgumentCaptor.forClass(StrategyDefinition.class);
+        verify(configCenterService, atLeastOnce()).publishConfig(eq("config.gateway.strategy-shared"), any(), payload.capture());
+        assertEquals(Map.of("latest", 42), payload.getValue().getConfig());
+        assertEquals(Set.of("r1", "r2"), payload.getValue().getBoundRouteIds());
+        assertFalse(objectMapper.valueToTree(payload.getValue()).has("_bindingPublicationPending"));
+        verify(auditLogService, times(1)).recordAuditLog(eq("instance-a"), eq("alice"), eq("BIND"), eq("ROUTE"), eq("r2"), anyString(), anyString(), anyString(), eq("127.0.0.1"));
+    }
+
+    @Test void failedIndexPublicationKeepsIntentAndHealthyPassesDoNotRepublish() {
+        service.bindRoute("shared", "r2");
+        when(configCenterService.publishConfig(eq("config.gateway.metadata.strategies-index"), any(), any())).thenReturn(false);
+        service.retryBindingPublication("shared");
+        assertTrue(service.hasPendingBindingPublication(entity));
+        when(configCenterService.publishConfig(eq("config.gateway.metadata.strategies-index"), any(), any())).thenReturn(true);
+        service.retryBindingPublication("shared");
+        assertFalse(service.hasPendingBindingPublication(entity));
+        clearInvocations(configCenterService);
+        service.retryBindingPublication("shared");
+        verifyNoInteractions(configCenterService);
+    }
+
+    @Test void disabledPendingStrategyIsRemovedInsteadOfRepublished() {
+        service.bindRoute("shared", "r2");
+        entity.setEnabled(false);
+        when(configCenterService.removeConfig(anyString(), any())).thenReturn(true);
+        service.retryBindingPublication("shared");
+        assertFalse(service.hasPendingBindingPublication(entity));
+        verify(configCenterService).removeConfig(eq("config.gateway.strategy-shared"), any());
+        verify(configCenterService, never()).publishConfig(eq("config.gateway.strategy-shared"), any(), any());
+    }
+
+    @Test void auditsEachActualChangeWithActorAndSnapshotsAndBlocksChangeIfAuditFails() throws Exception {
+        service.bindRoute("shared", "r2", "alice", "192.0.2.1");
+        service.bindRoute("shared", "r2", "alice", "192.0.2.1");
+        service.unbindRoute("shared", "r2", "bob", "192.0.2.2");
+        service.unbindRoute("shared", "r2", "bob", "192.0.2.2");
+        var before = org.mockito.ArgumentCaptor.forClass(String.class);
+        var after = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(auditLogService).recordAuditLog(eq("instance-a"), eq("alice"), eq("BIND"), eq("ROUTE"), eq("r2"), anyString(), before.capture(), after.capture(), eq("192.0.2.1"));
+        assertEquals(1, objectMapper.readTree(before.getValue()).get("boundRouteIds").size());
+        assertEquals(2, objectMapper.readTree(after.getValue()).get("boundRouteIds").size());
+        assertEquals("shared", objectMapper.readTree(after.getValue()).get("strategyId").asText());
+        assertFalse(after.getValue().contains("sentinel"));
+        verify(auditLogService).recordAuditLog(eq("instance-a"), eq("bob"), eq("UNBIND"), eq("ROUTE"), eq("r2"), anyString(), anyString(), anyString(), eq("192.0.2.2"));
+        verifyNoMoreInteractions(auditLogService);
+        doThrow(new IllegalStateException("audit unavailable")).when(auditLogService).recordAuditLog(any(), eq("blocked"), any(), any(), any(), any(), any(), any(), any());
+        assertThrows(IllegalStateException.class, () -> service.bindRoute("shared", "r2", "blocked", "ip"));
+        assertEquals(Set.of("r1"), service.getStrategy("shared").getBoundRouteIds());
+        verifyNoInteractions(configCenterService);
+    }
+
+    @Test void controllerUsesAuthenticatedOperatorAndTrustedRemoteAddress() {
+        var request = new org.springframework.mock.web.MockHttpServletRequest();
+        request.setRemoteAddr("192.0.2.9");
+        request.addHeader("X-Forwarded-For", "spoofed");
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.TestingAuthenticationToken("operator", "secret", "ADMIN"));
+        try {
+            var controller = new com.leoli.gateway.admin.controller.StrategyController(service, auditLogService, objectMapper);
+            controller.bindRoute("shared", "r2", request);
+            verify(auditLogService).recordAuditLog(eq("instance-a"), eq("operator"), eq("BIND"), eq("ROUTE"), eq("r2"),
+                    anyString(), anyString(), anyString(), eq("192.0.2.9"));
+        } finally { org.springframework.security.core.context.SecurityContextHolder.clearContext(); }
     }
 
     private StrategyEntity entity(String id, String scope, String instance, boolean enabled) throws Exception {

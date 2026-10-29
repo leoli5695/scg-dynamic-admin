@@ -243,7 +243,7 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
           <Tooltip title={t('audit.view_diff')} placement="top">
             <Button type="link" size="small" icon={<DiffOutlined />} onClick={() => onShowDiff(record.id)} />
           </Tooltip>
-          {record.oldValue && (
+          {record.oldValue && !['BIND', 'UNBIND'].includes(record.operationType) && (
             <Tooltip title={t('audit.rollback')} placement="top">
               <Popconfirm
                 title={t('audit.rollback_confirm')}
@@ -357,6 +357,8 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
             <Select.Option value="ENABLE">{t('audit.op_enable')}</Select.Option>
             <Select.Option value="DISABLE">{t('audit.op_disable')}</Select.Option>
             <Select.Option value="ROLLBACK">{t('audit.op_rollback')}</Select.Option>
+            <Select.Option value="BIND">{t('audit.op_bind')}</Select.Option>
+            <Select.Option value="UNBIND">{t('audit.op_unbind')}</Select.Option>
           </Select>
           <Input
             placeholder={t('audit.target_id')}

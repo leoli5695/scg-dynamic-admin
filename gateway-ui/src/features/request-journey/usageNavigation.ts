@@ -12,33 +12,49 @@ const queryOf = (value: string) => new URLSearchParams(value.includes('?') ? val
 const hasCompatibleScope = (params: URLSearchParams, instanceId: string) =>
   params.getAll('instanceId').every(value => !value || value === instanceId);
 
+function targetKind(instanceId: string, value: string): 'requests' | 'usage' | 'detail' | undefined {
+  if (hasExactPath(value, `${instancePath(instanceId)}/requests`)) return 'requests';
+  if (hasExactPath(value, `${instancePath(instanceId)}/token_usage`) || hasExactPath(value, '/token-usage')) return 'usage';
+  const prefix = `${instancePath(instanceId)}/trace/`;
+  const path = value.split('?')[0];
+  if (!path.startsWith(prefix)) return undefined;
+  const segment = path.slice(prefix.length);
+  try {
+    const id = decodeURIComponent(segment);
+    if (id && id !== '.' && id !== '..' && isLocalTarget(id) && encodeURIComponent(id) === segment) return 'detail';
+  } catch { /* Malformed URL encoding is not a navigation target. */ }
+  return undefined;
+}
+
+/** Allow usage -> detail -> original search/usage, but validate every layer and bound depth. */
+function safeTarget(instanceId: string, value: string | null, depth = 2): value is string {
+  if (!instanceId || !isLocalTarget(value)) return false;
+  const kind = targetKind(instanceId, value);
+  const params = queryOf(value);
+  if (!kind || !hasCompatibleScope(params, instanceId)) return false;
+  const nested = params.getAll('returnTo');
+  if (!nested.length) return true;
+  if (nested.length !== 1 || depth === 0 || kind === 'requests') return false;
+  const nestedKind = targetKind(instanceId, nested[0]);
+  if (kind === 'usage' ? nestedKind !== 'detail' : nestedKind !== 'requests' && nestedKind !== 'usage') return false;
+  return safeTarget(instanceId, nested[0], depth - 1);
+}
+
 /** Global usage can contain this instance's event only when unscoped or filtered to this instance. */
 export function isUsageReturnUrl(instanceId: string, returnTo: string | null): returnTo is string {
-  return !!instanceId && isLocalTarget(returnTo)
-    && (hasExactPath(returnTo, `${instancePath(instanceId)}/token_usage`) || hasExactPath(returnTo, '/token-usage'))
-    && hasCompatibleScope(queryOf(returnTo), instanceId);
+  return safeTarget(instanceId, returnTo) && targetKind(instanceId, returnTo) === 'usage';
 }
 
 export function requestCenterReturnUrl(instanceId: string, returnTo: string | null): string {
   const fallback = `${instancePath(instanceId)}/requests`;
-  if (!isLocalTarget(returnTo)) return fallback;
-  if (hasExactPath(returnTo, fallback) && hasCompatibleScope(queryOf(returnTo), instanceId)) return returnTo;
+  if (!safeTarget(instanceId, returnTo)) return fallback;
+  if (targetKind(instanceId, returnTo) === 'requests') return returnTo;
   return isUsageReturnUrl(instanceId, returnTo) ? returnTo : fallback;
 }
 
 /** Usage may return only to a request detail in its effective instance, never a different console route. */
 export function usageSourceReturnUrl(instanceId: string, returnTo: string | null): string | undefined {
-  if (!instanceId || !isLocalTarget(returnTo)) return undefined;
-  const path = returnTo.split('?')[0];
-  const prefix = `${instancePath(instanceId)}/trace/`;
-  if (!path.startsWith(prefix)) return undefined;
-  const segment = path.slice(prefix.length);
-  try {
-    const traceId = decodeURIComponent(segment);
-    if (!traceId || traceId === '.' || traceId === '..' || !isLocalTarget(traceId)
-      || encodeURIComponent(traceId) !== segment) return undefined;
-  } catch { return undefined; }
-  return hasCompatibleScope(queryOf(returnTo), instanceId) ? returnTo : undefined;
+  return safeTarget(instanceId, returnTo, 3) && targetKind(instanceId, returnTo) === 'detail' ? returnTo : undefined;
 }
 
 export function usageRequestJourneyUrl(instanceId: string, traceId: string, routeId: string | null | undefined, usageUrl: string): string {
@@ -62,6 +78,11 @@ export function journeyUsageUrl(context: JourneyUsageContext, now = new Date()):
   const { instanceId, traceId, routeId, params } = context;
   const safeOrigin = requestCenterReturnUrl(instanceId, params.get('returnTo'));
   const originParams = queryOf(safeOrigin);
+  // This route's usage view already exists. Reuse it, including its exact filters,
+  // page and source link, instead of creating another returnTo wrapper on every visit.
+  if (isUsageReturnUrl(instanceId, safeOrigin)
+      && hasExactPath(safeOrigin, `${instancePath(instanceId)}/token_usage`)
+      && originParams.get('routeId') === routeId) return safeOrigin;
   // Request search URLs already contain local wall clocks (including source=logs); do not ISO-convert them.
   const requestQuery = readRequestQuery(originParams, now);
   let range = originParams.has('from') && originParams.has('to') && requestQuery.error !== 'range'
@@ -80,7 +101,12 @@ export function journeyUsageUrl(context: JourneyUsageContext, now = new Date()):
     } : defaultUsageRange(now);
   }
   const detailParams = new URLSearchParams(params);
-  if (detailParams.has('returnTo')) detailParams.set('returnTo', safeOrigin);
+  if (detailParams.has('returnTo')) {
+    // A new route/global-to-scoped transition needs a new pair, not the old pair's history.
+    if (isUsageReturnUrl(instanceId, safeOrigin)) originParams.delete('returnTo');
+    const origin = `${safeOrigin.split('?')[0]}${originParams.size ? `?${originParams}` : ''}`;
+    detailParams.set('returnTo', origin);
+  }
   const detailPath = requestJourneyUrl(instanceId, traceId);
   const returnTo = `${detailPath}${detailParams.size ? `?${detailParams}` : ''}`;
   const query = normalizeUsageQuery(new URLSearchParams({ ...range, routeId, returnTo }), instanceId, now);

@@ -106,7 +106,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
       onClose={onClose}
       closeIcon={<CloseOutlined />}
       extra={
-        diff && diff.oldValue !== null && (
+        diff && diff.oldValue !== null && !['BIND', 'UNBIND'].includes(diff.operationType) && (
           <Tooltip title={t('audit.rollback')}>
             <Popconfirm
               title={t('audit.rollback_confirm')}

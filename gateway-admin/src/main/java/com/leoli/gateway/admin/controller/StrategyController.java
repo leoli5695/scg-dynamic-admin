@@ -65,9 +65,9 @@ public class StrategyController extends BaseController {
 
     @PutMapping("/{strategyId}/routes/{routeId}")
     public ResponseEntity<ApiResponse<StrategyDefinition>> bindRoute(
-            @PathVariable String strategyId, @PathVariable String routeId) {
+            @PathVariable String strategyId, @PathVariable String routeId, HttpServletRequest request) {
         try {
-            return ResponseEntity.ok(ApiResponse.success(strategyService.bindRoute(strategyId, routeId),
+            return ResponseEntity.ok(ApiResponse.success(strategyService.bindRoute(strategyId, routeId, getOperator(), getIpAddress(request)),
                     "Binding saved; runtime convergence is asynchronous"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
@@ -76,9 +76,9 @@ public class StrategyController extends BaseController {
 
     @DeleteMapping("/{strategyId}/routes/{routeId}")
     public ResponseEntity<ApiResponse<StrategyDefinition>> unbindRoute(
-            @PathVariable String strategyId, @PathVariable String routeId) {
+            @PathVariable String strategyId, @PathVariable String routeId, HttpServletRequest request) {
         try {
-            return ResponseEntity.ok(ApiResponse.success(strategyService.unbindRoute(strategyId, routeId),
+            return ResponseEntity.ok(ApiResponse.success(strategyService.unbindRoute(strategyId, routeId, getOperator(), getIpAddress(request)),
                     "Binding removed; runtime convergence is asynchronous"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));

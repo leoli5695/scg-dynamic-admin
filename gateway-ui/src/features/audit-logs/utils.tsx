@@ -23,6 +23,8 @@ export const getOperationTag = (t: TFunction, type: string) => {
     ROLLBACK: { color: 'warning', labelKey: 'audit.op_rollback', icon: <RollbackOutlined /> },
     ENABLE: { color: 'cyan', labelKey: 'audit.op_enable', icon: <CheckCircleOutlined /> },
     DISABLE: { color: 'orange', labelKey: 'audit.op_disable', icon: <StopOutlined /> },
+    BIND: { color: 'blue', labelKey: 'audit.op_bind' },
+    UNBIND: { color: 'orange', labelKey: 'audit.op_unbind' },
     ADD_INSTANCE: { color: 'lime', labelKey: 'audit.op_add_instance' },
     REMOVE_INSTANCE: { color: 'magenta', labelKey: 'audit.op_remove_instance' },
     UPDATE_INSTANCE: { color: 'gold', labelKey: 'audit.op_update_instance' },

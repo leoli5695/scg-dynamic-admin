@@ -1,4 +1,6 @@
 {
+  "audit.op_bind": "Bind policy",
+  "audit.op_unbind": "Unbind policy",
   "audit.title": "Audit Logs",
   "audit.operation_type": "Operation Type",
   "audit.target_type": "Target Type",

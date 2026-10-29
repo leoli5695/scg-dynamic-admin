@@ -58,6 +58,9 @@ public class StrategyService {
     private EntityManager entityManager;
 
     @Autowired
+    private org.springframework.beans.factory.ObjectProvider<AuditLogService> auditLogServiceProvider;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @Autowired
@@ -397,6 +400,20 @@ public class StrategyService {
     }
 
     private StrategyDefinition changeRouteBinding(String strategyId, String routeId, boolean bind) {
+        return changeRouteBinding(strategyId, routeId, bind, "SYSTEM", null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public StrategyDefinition bindRoute(String strategyId, String routeId, String operator, String ipAddress) {
+        return changeRouteBinding(strategyId, routeId, true, operator, ipAddress);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public StrategyDefinition unbindRoute(String strategyId, String routeId, String operator, String ipAddress) {
+        return changeRouteBinding(strategyId, routeId, false, operator, ipAddress);
+    }
+
+    private StrategyDefinition changeRouteBinding(String strategyId, String routeId, boolean bind, String operator, String ipAddress) {
         StrategyEntity entity = requireLockedStrategy(strategyId);
         StrategyDefinition strategy = toDefinition(entity, true);
         if (!StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope())) {
@@ -410,9 +427,19 @@ public class StrategyService {
             throw new IllegalArgumentException("Strategy and route must belong to the same instance");
         }
         Set<String> bindings = strategy.getBoundRouteIds();
+        Set<String> before = new java.util.LinkedHashSet<>(bindings);
         boolean changed = bind ? bindings.add(routeId) : bindings.remove(routeId);
         if (changed) {
             setBindings(strategy, bindings);
+            try {
+                // Only binding evidence, never the strategy's credentials/config payload.
+                String oldValue = objectMapper.writeValueAsString(Map.of("strategyId", strategyId, "routeId", routeId, "boundRouteIds", before));
+                String newValue = objectMapper.writeValueAsString(Map.of("strategyId", strategyId, "routeId", routeId, "boundRouteIds", bindings));
+                auditLogServiceProvider.getObject().recordAuditLog(entity.getInstanceId(), operator, bind ? "BIND" : "UNBIND",
+                        "ROUTE", routeId, route.getRouteName(), oldValue, newValue, ipAddress);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+                throw new IllegalStateException("Failed to serialize binding audit", error);
+            }
             saveBindings(entity, strategy);
         }
         return strategy;
@@ -431,16 +458,49 @@ public class StrategyService {
     private void saveBindings(StrategyEntity entity, StrategyDefinition strategy) {
         entity.setRouteId(strategy.getRouteId());
         try {
-            entity.setMetadata(objectMapper.writeValueAsString(strategy));
+            var metadata = objectMapper.valueToTree(strategy);
+            ((com.fasterxml.jackson.databind.node.ObjectNode) metadata).put("_bindingPublicationPending", true);
+            entity.setMetadata(objectMapper.writeValueAsString(metadata));
         } catch (Exception e) {
             throw new IllegalStateException("Failed to serialize strategy bindings", e);
         }
         strategyRepository.saveAndFlush(entity);
+        // No network side effect before this transaction commits. The scheduled
+        // publisher sees only committed intents, including after a process restart.
+    }
+
+    public boolean hasPendingBindingPublication(StrategyEntity entity) {
+        try { return entity.getMetadata() != null && objectMapper.readTree(entity.getMetadata()).path("_bindingPublicationPending").asBoolean(false); }
+        catch (Exception error) { return false; } // Unreadable rows are not overwritten by recovery.
+    }
+
+    /** Scheduled recovery always re-reads the latest row under the same mutation lock. */
+    @Transactional(rollbackFor = Exception.class)
+    public void retryBindingPublication(String strategyId) {
+        StrategyEntity entity = strategyRepository.findByStrategyIdForUpdate(strategyId);
+        if (entity == null) return; // Deleted while waiting for this recovery pass.
+        entityManager.refresh(entity);
+        if (hasPendingBindingPublication(entity)) publishPendingBinding(entity, toDefinition(entity, true));
+    }
+
+    private void publishPendingBinding(StrategyEntity entity, StrategyDefinition strategy) {
         String dataId = STRATEGY_PREFIX + entity.getStrategyId();
-        String namespace = getNacosNamespace(entity.getInstanceId());
-        if (strategy.isEnabled()) publishStrategyToNacos(dataId, namespace, strategy, false);
-        else removeStrategyFromNacos(dataId, namespace, false);
-        updateStrategiesIndexForStrategy(strategy, entity.getInstanceId());
+        List<String> namespaces = strategy.isGlobal() ? getAllGatewayNamespaces()
+                : java.util.Collections.singletonList(getNacosNamespace(entity.getInstanceId()));
+        boolean complete = !namespaces.isEmpty();
+        for (String namespace : namespaces) {
+            boolean published = strategy.isEnabled()
+                    ? publishToNamespaceResilient(dataId, namespace, strategy)
+                    : removeFromNamespaceResilient(dataId, namespace);
+            // Both body and index must converge before clearing the durable intent.
+            boolean indexed = updateStrategiesIndex(namespace, getEnabledStrategyIdsForNamespace(namespace));
+            complete &= published && indexed;
+        }
+        if (complete) {
+            try { entity.setMetadata(objectMapper.writeValueAsString(strategy)); }
+            catch (Exception error) { throw new IllegalStateException("Failed to clear binding publication intent", error); }
+            strategyRepository.saveAndFlush(entity);
+        }
     }
 
     /**
@@ -626,6 +686,7 @@ public class StrategyService {
 
         StrategyEntity entity = requireLockedStrategy(strategyId);
         StrategyDefinition persisted = toDefinition(entity, true);
+        boolean pendingBindingPublication = hasPendingBindingPublication(entity);
         // Bindings are edited through the dedicated endpoints, not a stale configuration form.
         // Preserving both fields under the same lock prevents a config update losing a recent bind.
         if (StrategyDefinition.SCOPE_ROUTE.equals(entity.getScope())
@@ -674,6 +735,11 @@ public class StrategyService {
         // Store config as JSON
         try {
             String configJson = objectMapper.writeValueAsString(strategy);
+            if (pendingBindingPublication) {
+                var pendingMetadata = (com.fasterxml.jackson.databind.node.ObjectNode) objectMapper.readTree(configJson);
+                pendingMetadata.put("_bindingPublicationPending", true);
+                configJson = objectMapper.writeValueAsString(pendingMetadata);
+            }
             entity.setMetadata(configJson);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to serialize strategy config", e);
@@ -1063,13 +1129,15 @@ public class StrategyService {
     /**
      * Update strategies index in Nacos for a specific namespace.
      */
-    private void updateStrategiesIndex(String nacosNamespace, List<String> strategyIds) {
+    private boolean updateStrategiesIndex(String nacosNamespace, List<String> strategyIds) {
         try {
-            configCenterService.publishConfig(STRATEGIES_INDEX, nacosNamespace, strategyIds);
+            if (!configCenterService.publishConfig(STRATEGIES_INDEX, nacosNamespace, strategyIds)) return false;
             log.debug("Strategies index updated for namespace {}: {} strategies",
                     nacosNamespace == null ? "public" : nacosNamespace, strategyIds.size());
+            return true;
         } catch (Exception e) {
             log.error("Failed to update strategies index", e);
+            return false;
         }
     }
 

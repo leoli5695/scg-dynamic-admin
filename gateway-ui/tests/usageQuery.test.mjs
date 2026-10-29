@@ -13,6 +13,54 @@ const context = { instanceId: '网关/a', traceId: '请求/一', routeId: '路�
 const requestPath = '/instances/%E7%BD%91%E5%85%B3%2Fa/requests';
 const usagePath = '/instances/%E7%BD%91%E5%85%B3%2Fa/token_usage';
 
+test('repeated usage-list -> request -> route-usage navigation stays bounded and retains filters', () => {
+  let usage = `${usagePath}?${normalizeUsageQuery(serialize(full))}`;
+  const lengths = [];
+  for (let i = 0; i < 50; i++) {
+    const detail = parse(usageRequestJourneyUrl(context.instanceId, 'trace', context.routeId, usage));
+    const origin = detail.searchParams.get('returnTo');
+    assert.deepEqual(readUsageQuery(parse(origin).searchParams), i === 0 ? full : {
+      ...readUsageQuery(parse(usage).searchParams),
+    });
+    assert.ok(origin.length < 2500);
+    usage = journeyUsageUrl({ ...context, traceId: 'trace', params: detail.searchParams }, now);
+    lengths.push(usage.length);
+    assert.ok(usageSourceReturnUrl(context.instanceId, parse(usage).searchParams.get('returnTo')));
+  }
+  assert.equal(lengths[49], lengths[1]);
+});
+
+test('every nested return destination is validated and excessive depth is rejected', () => {
+  const external = 'https://evil.test';
+  const badDetail = `${requestPath.replace('/requests', '/trace/id')}?${serialize({ returnTo: external })}`;
+  const badUsage = `${usagePath}?${serialize({ returnTo: badDetail })}`;
+  assert.equal(isUsageReturnUrl(context.instanceId, badUsage), false);
+  assert.equal(usageSourceReturnUrl(context.instanceId, badDetail), undefined);
+  let nested = requestPath;
+  for (let i = 0; i < 4; i++) {
+    nested = i % 2 === 0
+      ? `${requestPath.replace('/requests', '/trace/id')}?${serialize({ returnTo: nested })}`
+      : `${usagePath}?${serialize({ returnTo: nested })}`;
+  }
+  assert.equal(isUsageReturnUrl(context.instanceId, nested), false);
+  assert.equal(requestCenterReturnUrl(context.instanceId, nested), requestPath);
+});
+
+test('switching routes starts a bounded new navigation pair instead of retaining older pairs', () => {
+  let usage = '/token-usage?' + normalizeUsageQuery(serialize({ ...range, instanceId: 'gw' }));
+  const lengths = [];
+  for (let i = 0; i < 30; i++) {
+    const routeId = i % 2 === 0 ? 'r1' : 'r2';
+    const detail = parse(usageRequestJourneyUrl('gw', 'trace', routeId, usage));
+    usage = journeyUsageUrl({ instanceId: 'gw', traceId: 'trace', routeId, params: detail.searchParams }, now);
+    assert.ok(isUsageReturnUrl('gw', usage));
+    assert.ok(usageSourceReturnUrl('gw', parse(usage).searchParams.get('returnTo')));
+    lengths.push(usage.length);
+  }
+  assert.ok(Math.max(...lengths) < 1500);
+  assert.equal(lengths[29], lengths[3]);
+});
+
 test('all usage fields round-trip including Unicode, reserved characters and complete return context', () => {
   const source = serialize({ ...full, returnTo: `${requestPath}?${serialize({ ...range, page: 7, routeId: full.routeId })}` });
   const before = source.toString();

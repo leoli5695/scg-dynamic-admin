@@ -179,7 +179,9 @@ public class AuditLogController extends BaseController {
                 Map.of("value", "CREATE", "label", "创建"),
                 Map.of("value", "UPDATE", "label", "更新"),
                 Map.of("value", "DELETE", "label", "删除"),
-                Map.of("value", "ROLLBACK", "label", "回滚")
+                Map.of("value", "ROLLBACK", "label", "回滚"),
+                Map.of("value", "BIND", "label", "绑定策略"),
+                Map.of("value", "UNBIND", "label", "解绑策略")
         );
 
         return ResponseEntity.ok(ApiResponse.success(types));

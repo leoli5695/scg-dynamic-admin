@@ -1,4 +1,6 @@
 {
+  "audit.op_bind": "绑定策略",
+  "audit.op_unbind": "解绑策略",
   "audit.title": "审计日志",
   "audit.operation_type": "操作类型",
   "audit.target_type": "目标类型",

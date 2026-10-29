@@ -27,6 +27,9 @@ public interface StrategyRepository extends JpaRepository<StrategyEntity, Long> 
     @Query("SELECT s FROM strategies s WHERE s.strategyId = :strategyId")
     StrategyEntity findByStrategyIdForUpdate(@Param("strategyId") String strategyId);
 
+    /** Fetch only marked intents; recovery rechecks the parsed flag under a row lock. */
+    List<StrategyEntity> findByMetadataContaining(String marker);
+
     @Query("SELECT s FROM strategies s WHERE s.scope = 'GLOBAL' OR s.scope IS NULL")
     List<StrategyEntity> findAllGlobalStrategies();
 
