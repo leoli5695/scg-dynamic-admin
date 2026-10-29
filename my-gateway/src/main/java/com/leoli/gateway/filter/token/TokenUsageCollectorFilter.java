@@ -180,10 +180,18 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                     // FIX (dead headers): X-Token-Usage-* were added in doFinally,
                     // AFTER the response was committed, so they were never sent.
                     // For JSON responses aggregate the body first, parse usage and
-                    // set the headers BEFORE writing. Known-oversized bodies fall
-                    // back to plain streaming (no headers) to keep memory bounded.
+                    // set the headers BEFORE writing - but only when the upstream
+                    // declared a length that fits within the bound.
                     long contentLength = getHeaders().getContentLength();
-                    if (contentLength < 0 || contentLength <= maxBodySize) {
+                    // FIX (metering must never destroy the answer): a chunked response
+                    // has no Content-Length, and it used to take the join() path below.
+                    // DataBufferUtils.join releases the buffers it has already consumed
+                    // when maxBodySize trips, so the body was unrecoverable and the only
+                    // honest-looking option was a 502 - which discarded an answer the
+                    // upstream had already produced in full. Chunked transfer is normal
+                    // for LLM providers and intermediate proxies, so this was the common
+                    // case, not an edge case.
+                    if (contentLength >= 0 && contentLength <= maxBodySize) {
                         return DataBufferUtils.join(flux, maxBodySize)
                                 .flatMap(dataBuffer -> {
                                     byte[] bytes = new byte[dataBuffer.readableByteCount()];
@@ -205,10 +213,11 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                             exchange.getResponse().bufferFactory().wrap(bytes)));
                                 })
                                 .onErrorResume(DataBufferLimitException.class, e -> {
-                                    // Chunked body exceeded maxBodySize mid-stream; the body is
-                                    // already consumed, so report the misconfiguration.
-                                    log.warn("Response body exceeded max-body-size {} during token usage collection, routeId: {}",
-                                            maxBodySize, routeId);
+                                    // Reachable only when the upstream understated Content-Length,
+                                    // i.e. the response is already corrupt. join() has released the
+                                    // buffers it consumed, so there is nothing left to forward.
+                                    log.warn("Response body exceeded max-body-size {} despite Content-Length {}, routeId: {}",
+                                            maxBodySize, contentLength, routeId);
                                     exchange.getResponse().setStatusCode(org.springframework.http.HttpStatus.BAD_GATEWAY);
                                     exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
                                     byte[] err = "{\"code\":502,\"message\":\"Response too large for token usage collection\"}"
@@ -217,8 +226,23 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                             exchange.getResponse().bufferFactory().wrap(err)));
                                 });
                     }
-                    // Known oversized body: stream through without usage headers
-                    return super.writeWith(flux);
+                    // Unknown or oversized length: stream through untouched and parse usage from a
+                    // bounded side-copy. The client always receives the complete body. If it exceeded
+                    // the bound the buffered JSON is truncated, processJsonUsage finds no usage, and
+                    // the settlement records UNKNOWN - which keeps the pre-deduction for manual
+                    // review rather than billing 0. X-Token-Usage-* cannot be set here because the
+                    // response is already committed; that is the same trade-off the known-oversized
+                    // case has always made.
+                    return super.writeWith(flux.doOnNext(dataBuffer -> {
+                        int position = dataBuffer.readPosition();
+                        try {
+                            byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                            dataBuffer.read(bytes);
+                            handleJsonChunk(new String(bytes, StandardCharsets.UTF_8), buffer, bufferedChars);
+                        } finally {
+                            dataBuffer.readPosition(position);
+                        }
+                    }));
                 }
 
                 return super.writeWith(flux.doOnNext(dataBuffer -> {
