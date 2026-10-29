@@ -51,6 +51,8 @@ class AiSemanticCacheFilterTest {
     private GatewayEmbeddingClient embeddingClient;
     @Mock
     private GatewayFilterChain chain;
+    @Mock
+    private AiStatisticsRecorder statisticsRecorder;
 
     private final ObjectMapper objectMapper = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -64,7 +66,7 @@ class AiSemanticCacheFilterTest {
         bufferFactory = new DefaultDataBufferFactory();
         store = new SemanticCacheStore();
         ReflectionTestUtils.setField(store, "maxEntries", 100);
-        filter = new AiSemanticCacheFilter(strategyManager, objectMapper, embeddingClient, store);
+        filter = new AiSemanticCacheFilter(strategyManager, objectMapper, embeddingClient, store, statisticsRecorder);
     }
 
     private MockServerWebExchange post(String body) {
@@ -123,6 +125,17 @@ class AiSemanticCacheFilterTest {
         String written = ((org.springframework.mock.http.server.reactive.MockServerHttpResponse) exchange.getResponse())
                 .getBodyAsString().block();
         assertEquals("{\"cached\":true}", written);
+        // A hit short-circuits the chain, so AiStatisticsFilter (-43) never runs on its own.
+        // Without this call the hit is invisible: no ai.* metrics, no ai_log line, no hit rate.
+        // timeout() because the hit path hops to Schedulers.parallel() and Reactor runs a doFinally
+        // callback after propagating the terminal signal, so verifyComplete() can return first -
+        // the same reason AiUsageLifecycleTest verifies the reporter with a timeout.
+        verify(statisticsRecorder, timeout(2000)).recordShortCircuited(exchange);
+        // AiProviderRoutingFilter (10005) never runs either, so the model has to be attributed
+        // here or every hit is logged as model=none.
+        assertEquals("qwen-plus", exchange.getAttribute(AiProviderRoutingFilter.AI_MODEL_ATTR));
+        assertNotNull(exchange.getAttribute(AiStatisticsFilter.ATTR_START_NS),
+                "record() returns early without a start time");
     }
 
     @Test
@@ -138,6 +151,9 @@ class AiSemanticCacheFilterTest {
 
         verify(chain).filter(any());
         assertEquals("MISS", exchange.getResponse().getHeaders().getFirst(AiSemanticCacheFilter.CACHE_HEADER));
+        // On a miss the chain continues, so AiStatisticsFilter records in its own post-phase.
+        // Recording here as well would double-count the request.
+        verify(statisticsRecorder, never()).recordShortCircuited(any());
     }
 
     @Test

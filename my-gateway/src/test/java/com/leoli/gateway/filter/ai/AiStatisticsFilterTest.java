@@ -145,6 +145,69 @@ class AiStatisticsFilterTest {
         assertEquals(0, meterRegistry.find("ai.llm.first.byte.duration").timers().size());
     }
 
+    /**
+     * The test above drives a hit through {@code filter()}, which is not what happens in production:
+     * a real hit short-circuits at -242 so this filter never runs, and the cache filter calls
+     * {@link AiStatisticsRecorder#recordShortCircuited} instead. These three cover that real path.
+     */
+    @Test
+    @DisplayName("A short-circuited cache hit is recorded as NOT_BILLED with zero tokens")
+    void shortCircuitedCacheHitIsRecorded() {
+        stubConfig(enabled());
+        AiStatisticsRecorder recorder =
+                new AiStatisticsRecorder(strategyManager, objectMapper, meterRegistry, null);
+        MockServerWebExchange exchange = exchange();
+        exchange.getAttributes().put(AiStatisticsRecorder.ATTR_START_NS, System.nanoTime() - 5_000_000L);
+        exchange.getAttributes().put(AiSemanticCacheFilter.AI_CACHE_HIT_ATTR, Boolean.TRUE);
+        exchange.getAttributes().put(AiProviderRoutingFilter.AI_MODEL_ATTR, "qwen-plus");
+
+        recorder.recordShortCircuited(exchange);
+
+        // status=NOT_BILLED is what makes the hit rate measurable: it is set only when cacheHit is
+        // true, so hits / sum(ai.usage.requests) is the hit ratio.
+        assertEquals(1.0, meterRegistry.get("ai.usage.requests")
+                .tag("status", "NOT_BILLED").counter().count());
+        assertEquals(0.0, meterRegistry.get("ai.tokens.input").tag("model", "qwen-plus").counter().count(),
+                "a cached answer consumed no provider tokens");
+        assertEquals(0.0, meterRegistry.get("ai.tokens.output").tag("model", "qwen-plus").counter().count());
+        assertEquals(1, meterRegistry.get("ai.llm.service.duration").timer().count());
+        assertEquals(0, meterRegistry.find("ai.llm.first.byte.duration").timers().size(),
+                "no upstream was called, so there is no first-byte instant");
+    }
+
+    @Test
+    @DisplayName("Short-circuit recording respects a disabled AI_STATISTICS strategy")
+    void shortCircuitIsNoOpWhenStatisticsDisabled() {
+        AiStatisticsConfig disabled = new AiStatisticsConfig();
+        disabled.setEnabled(false);
+        stubConfig(disabled);
+        AiStatisticsRecorder recorder =
+                new AiStatisticsRecorder(strategyManager, objectMapper, meterRegistry, null);
+        MockServerWebExchange exchange = exchange();
+        exchange.getAttributes().put(AiStatisticsRecorder.ATTR_START_NS, System.nanoTime());
+        exchange.getAttributes().put(AiSemanticCacheFilter.AI_CACHE_HIT_ATTR, Boolean.TRUE);
+
+        recorder.recordShortCircuited(exchange);
+
+        assertEquals(0, meterRegistry.find("ai.usage.requests").counters().size());
+    }
+
+    @Test
+    @DisplayName("Short-circuit recording without a start time records nothing")
+    void shortCircuitWithoutStartTimeIsNoOp() {
+        stubConfig(enabled());
+        AiStatisticsRecorder recorder =
+                new AiStatisticsRecorder(strategyManager, objectMapper, meterRegistry, null);
+        MockServerWebExchange exchange = exchange();
+        exchange.getAttributes().put(AiSemanticCacheFilter.AI_CACHE_HIT_ATTR, Boolean.TRUE);
+
+        recorder.recordShortCircuited(exchange);
+
+        // Documents the precondition: record() returns early without ATTR_START_NS, which is why
+        // AiSemanticCacheFilter stamps it before doing any cache work.
+        assertEquals(0, meterRegistry.find("ai.usage.requests").counters().size());
+    }
+
     @Test
     @DisplayName("Response body passes through untouched (no buffering, no rewrite)")
     void bodyPassesThrough() {

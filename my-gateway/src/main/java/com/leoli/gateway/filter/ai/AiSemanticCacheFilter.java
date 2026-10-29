@@ -72,6 +72,14 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
     private final ObjectMapper objectMapper;
     private final GatewayEmbeddingClient embeddingClient;
     private final SemanticCacheStore cacheStore;
+    /**
+     * Nullable: a hit short-circuits the chain, so {@link AiStatisticsFilter} (-43) never runs and
+     * recording has to be triggered from here. This is the recorder rather than the filter because
+     * {@code GlobalFilterTrackingPostProcessor} replaces every {@code GlobalFilter} bean with a
+     * {@code TrackedGlobalFilter} that does not expose its delegate - injecting the filter by its
+     * concrete type fails at startup. Absent only in unit tests that build this filter by hand.
+     */
+    private final AiStatisticsRecorder statisticsRecorder;
     private final com.leoli.gateway.util.ByteBudget storeBudget = new com.leoli.gateway.util.ByteBudget();
     private final com.leoli.gateway.util.BodyWorkPool storePool = new com.leoli.gateway.util.BodyWorkPool("gateway-cache-store", 2, 16);
     @jakarta.annotation.PreDestroy
@@ -81,11 +89,13 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
     public AiSemanticCacheFilter(StrategyManager strategyManager,
                                  ObjectMapper objectMapper,
                                  GatewayEmbeddingClient embeddingClient,
-                                 SemanticCacheStore cacheStore) {
+                                 SemanticCacheStore cacheStore,
+                                 @org.springframework.lang.Nullable AiStatisticsRecorder statisticsRecorder) {
         this.strategyManager = strategyManager;
         this.objectMapper = objectMapper;
         this.embeddingClient = embeddingClient;
         this.cacheStore = cacheStore;
+        this.statisticsRecorder = statisticsRecorder;
     }
 
     @Override
@@ -103,6 +113,12 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
 
         long maxBodySize = Math.max(1024, config.getMaxBodySize());
         ServerHttpResponse response = exchange.getResponse();
+
+        // AiStatisticsFilter normally stamps this in its own pre-phase, but a hit short-circuits
+        // before -43 ever runs and its record() returns early without a start time. Stamp it here
+        // so a hit can be timed over the embedding call plus the store lookup. On a miss the
+        // statistics filter overwrites it with put(), leaving miss timings exactly as before.
+        exchange.getAttributes().computeIfAbsent(AiStatisticsRecorder.ATTR_START_NS, ignored -> System.nanoTime());
 
         return com.leoli.gateway.util.RequestBodyCache.read(exchange, (int) Math.min(maxBodySize, Integer.MAX_VALUE))
                 .flatMap(bytes -> {
@@ -166,7 +182,20 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
                                         .flatMap(hit -> {
                                             if (hit.isPresent()) {
                                                 log.info("AI cache HIT on route {} scope={}", routeId, scope);
-                                                return writeCached(exchange, hit.get());
+                                                // AiProviderRoutingFilter (10005) never runs on a hit, so without
+                                                // this every hit would land in ai_log as model=none and the hit
+                                                // rate could not be broken down per model.
+                                                if (model != null) {
+                                                    exchange.getAttributes().putIfAbsent(
+                                                            AiProviderRoutingFilter.AI_MODEL_ATTR, model);
+                                                }
+                                                Mono<Void> written = writeCached(exchange, hit.get());
+                                                // A hit short-circuits the chain, so the statistics filter at -43
+                                                // never runs. Invoke the recorder here or the hit is invisible: no
+                                                // ai.* metrics, no ai_log line, and no way to measure the hit rate.
+                                                return statisticsRecorder == null ? written
+                                                        : written.doFinally(signal ->
+                                                                statisticsRecorder.recordShortCircuited(exchange));
                                             }
                                             log.debug("AI cache MISS on route {} scope={}", routeId, scope);
                                             ServerWebExchange decorated = exchange.mutate()
