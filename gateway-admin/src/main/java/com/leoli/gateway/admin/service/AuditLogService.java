@@ -52,7 +52,9 @@ public class AuditLogService {
     private final StrategyRepository strategyRepository;
     private final AuthPolicyRepository authPolicyRepository;
     private final com.leoli.gateway.admin.repository.ServiceRepository serviceRepository;
-    private final ServiceService serviceService;
+    // Service updates audit credential changes themselves. Resolve only when a
+    // rollback is invoked, avoiding Audit -> Service -> Credential -> Audit at startup.
+    private final org.springframework.beans.factory.ObjectProvider<ServiceService> serviceServiceProvider;
 
     /**
      * Record an audit log entry.
@@ -658,7 +660,7 @@ public class AuditLogService {
         }
         // Reuse the transactional DB + configuration-center update and after-commit cache refresh.
         // Publication failure must propagate; the caller must never report a successful no-op.
-        serviceService.updateService(entity.getServiceName(), previous);
+        serviceServiceProvider.getObject().updateService(entity.getServiceName(), previous);
         log.info("Service configuration restored: {}", serviceId);
         return true;
     }

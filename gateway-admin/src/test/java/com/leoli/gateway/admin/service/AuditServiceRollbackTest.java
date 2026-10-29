@@ -18,6 +18,7 @@ class AuditServiceRollbackTest {
     @Mock AuditLogRepository logs;
     @Mock ServiceRepository services;
     @Mock ServiceService serviceService;
+    @Mock org.springframework.beans.factory.ObjectProvider<ServiceService> serviceServiceProvider;
     @Spy ObjectMapper mapper = new ObjectMapper();
     @InjectMocks AuditLogService audit;
     AuditLogEntity entry;
@@ -31,6 +32,7 @@ class AuditServiceRollbackTest {
         entity = new ServiceEntity(); entity.setServiceId("s1"); entity.setServiceName("llm"); entity.setInstanceId("i1");
         when(logs.findById(1L)).thenReturn(Optional.of(entry));
         when(services.findByServiceId("s1")).thenReturn(Optional.of(entity));
+        lenient().when(serviceServiceProvider.getObject()).thenReturn(serviceService);
     }
 
     @Test void restoresAiSnapshotThroughRealUpdatePath() {
