@@ -15,17 +15,22 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { RouteResponse, RouteServiceBinding } from '../../../types/route';
+import type { ServiceDefinition } from '../../../types/service';
 import { routeChangesUrl, routeRequestsUrl, routeUsageUrl } from '../../request-journey/links';
+import RouteConfigurationPanel from './RouteConfigurationPanel';
 
 interface RouteDetailDrawerProps {
   route: RouteResponse;
+  routes: RouteResponse[];
+  services: ServiceDefinition[];
+  onRefresh: () => void;
   onClose: () => void;
   onEdit: (route: RouteResponse) => void;
   onDelete: (route: RouteResponse) => void;
 }
 
 const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
-  route, onClose, onEdit, onDelete,
+  route, routes, services, onRefresh, onClose, onEdit, onDelete,
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -45,7 +50,7 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
   return (
     <Drawer
       placement="right"
-      styles={{ wrapper: { width: 520 } }}
+      styles={{ wrapper: { width: 'min(760px, 100vw)' } }}
       open
       closable={false}
       onClose={onClose}
@@ -93,7 +98,7 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
             {route.category === 'AI' && <Button onClick={() => navigate(routeUsageUrl(instanceId ?? '', route.id))}>{t('routes.usage')}</Button>}
             <Button onClick={() => navigate(routeChangesUrl(instanceId ?? '', route.id))}>{t('routes.changes')}</Button>
           </Space>
-          <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>{t('routes.configurationHint')}</Typography.Paragraph>
+          <Button style={{ marginTop: 12 }} icon={<EditOutlined />} onClick={() => onEdit(route)}>{t('routes.workbench.editTarget')}</Button>
         </div>
 
         {route.category === 'AI' && route.aiUpstreams && (
@@ -102,6 +107,9 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
             {route.aiUpstreams.map((upstream, index) => <div key={`${upstream.provider}-${index}`}>
               <Typography.Text code>{upstream.provider}</Typography.Text>
               <Tag>{t('services.weight')}: {upstream.weight ?? 100}</Tag>
+              {services.filter(s => s.name === upstream.provider || s.serviceId === upstream.provider).map(s => <div key={s.name}>
+                <Typography.Text>{s.name} · {s.providerType} · {s.baseUrl || t('routes.workbench.providerDefault')}</Typography.Text>
+              </div>)}
             </div>)}
           </div>
         )}
@@ -167,6 +175,19 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
             </div>
           </div>
         )}
+
+        {services.filter(service => [route.serviceId, route.uri?.replace(/^(static|lb):\/\//, ''),
+          ...(route.services ?? []).map(s => s.serviceId)].some(id => id && (id === service.serviceId || id === service.name)) && service.category !== 'AI')
+          .map(service => <div className="drawer-section" key={service.serviceId || service.name}>
+            <div className="section-title">{service.name}</div>
+            <Typography.Text type="secondary">{service.loadBalancer}</Typography.Text>
+            {service.instances?.map(node => <div key={node.instanceId || `${node.ip}:${node.port}`}>
+              <Typography.Text code>{node.ip}:{node.port}</Typography.Text>
+              <Tag>{t(node.enabled === false ? 'common.disabled' : 'common.enabled')}</Tag>
+            </div>)}
+          </div>)}
+
+        <RouteConfigurationPanel route={route} routes={routes} instanceId={instanceId ?? ''} onRefresh={onRefresh} />
 
         {route.grayRules?.enabled && route.grayRules?.rules && route.grayRules.rules.length > 0 && (
           <div className="drawer-section">

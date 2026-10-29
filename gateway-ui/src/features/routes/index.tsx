@@ -193,8 +193,6 @@ const RoutesPage: React.FC = () => {
   }, [refreshRoutes, t]);
 
   const openEditModal = useCallback((record: RouteResponse) => {
-    // Close the drawer first, then open the edit modal.
-    setSelectedRoute(null);
     setEditingRoute(record);
   }, []);
 
@@ -280,7 +278,11 @@ const RoutesPage: React.FC = () => {
       {/* Detail drawer */}
       {selectedRoute && (
         <RouteDetailDrawer
-          route={selectedRoute}
+          key={`${instanceId}:${selectedRoute.id}`}
+          route={routes.find(route => route.id === selectedRoute.id) ?? selectedRoute}
+          routes={routes}
+          services={services}
+          onRefresh={refreshRoutes}
           onClose={() => setSelectedRoute(null)}
           onEdit={openEditModal}
           onDelete={handleDelete}

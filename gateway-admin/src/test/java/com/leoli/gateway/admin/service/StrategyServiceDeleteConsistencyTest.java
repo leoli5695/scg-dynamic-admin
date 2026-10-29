@@ -38,6 +38,9 @@ class StrategyServiceDeleteConsistencyTest {
     private StrategyRepository strategyRepository;
 
     @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
+    @Mock
     private ObjectMapper objectMapper;
 
     @Mock
@@ -60,7 +63,7 @@ class StrategyServiceDeleteConsistencyTest {
         // Null instance -> default namespace, so no gateway instance lookup is performed.
         entity.setInstanceId(null);
 
-        when(strategyRepository.findByStrategyId("strategy-123")).thenReturn(entity);
+        when(strategyRepository.findByStrategyIdForUpdate("strategy-123")).thenReturn(entity);
         // removeFromNamespaceResilient retries twice; both attempts return false -> overall failure.
         when(configCenterService.removeConfig(anyString(), any())).thenReturn(false);
 

@@ -22,8 +22,8 @@ export interface StrategyDefinition {
   /** typeCode referencing the strategy_types table. */
   strategyType: string;
   scope: StrategyScope;
-  /** Required when scope is ROUTE. */
   routeId?: string;
+  routeIds?: string[];
   /** Higher = evaluated first. Backend default: 100. */
   priority: number;
   enabled: boolean;

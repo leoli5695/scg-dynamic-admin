@@ -77,6 +77,9 @@ class RouteServiceTest {
     @Mock
     private AiRouteProjector aiRouteProjector;
 
+    @Mock
+    private StrategyService strategyService;
+
     @InjectMocks
     private RouteService routeService;
 
@@ -447,7 +450,9 @@ class RouteServiceTest {
             routeService.deleteRouteByRouteId(ROUTE_ID);
 
             // Then
-            verify(routeRepository).delete(entity);
+            var order = inOrder(strategyService, routeRepository);
+            order.verify(strategyService).deleteStrategiesForRoute(ROUTE_ID);
+            order.verify(routeRepository).delete(entity);
             verify(configCenterService).removeConfig(anyString(), isNull());
         }
 

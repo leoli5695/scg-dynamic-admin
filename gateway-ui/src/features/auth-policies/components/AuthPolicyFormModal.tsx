@@ -8,11 +8,13 @@
  */
 import React, { useMemo } from 'react';
 import ResourceEditor from '../../instance-detail/ResourceEditor';
-import { Col, Form, Input, InputNumber, Row, Select, Switch } from 'antd';
+import { Alert, Button, Col, Form, Input, InputNumber, Row, Select, Switch } from 'antd';
 import { EditOutlined, PlusOutlined, SafetyOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { AuthPolicyDefinition, AuthType } from '../../../types/authPolicy';
 import { AUTH_CONFIG_FIELDS, AUTH_TYPES, AUTH_TYPE_DEFAULTS, getAuthTypeLabel } from '../utils';
+import { listBindingsForPolicy } from '../../../api/authPolicies';
+import { useRequest } from '../../../hooks/useRequest';
 
 interface AuthPolicyFormModalProps {
   mode: 'create' | 'edit';
@@ -32,6 +34,10 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
   const isEdit = mode === 'edit';
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = React.useState(false);
+  const impact = useRequest(signal => listBindingsForPolicy(policy!.policyId!, { signal }), {
+    immediate: isEdit, deps: [policy?.policyId],
+  });
+  const impactBlocked = isEdit && (impact.loading || !!impact.error || !impact.data);
 
   const initialValues = useMemo<Partial<AuthPolicyDefinition>>(
     () => (isEdit && policy ? policy : { enabled: true }),
@@ -46,6 +52,7 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
   };
 
   const handleFinish = async (values: AuthPolicyDefinition) => {
+    if (impactBlocked) return;
     const body: AuthPolicyDefinition =
       isEdit && policy ? { ...policy, ...values, policyId: policy.policyId } : values;
     setSubmitting(true);
@@ -204,6 +211,7 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
       form={form}
       initialValues={initialValues}
       submitting={submitting}
+      disabled={impactBlocked}
       onCancel={onCancel}
       onFinish={handleFinish}
       submitLabel={t(isEdit ? 'common.update' : 'common.create')}
@@ -213,6 +221,15 @@ const AuthPolicyFormModal: React.FC<AuthPolicyFormModalProps> = ({
           fields: ['policyName', 'authType'],
           content: (
             <>
+              {isEdit && <Alert showIcon type={impactBlocked ? 'warning' : 'info'}
+                title={t('routes.workbench.impact')}
+                description={<><p>{t('routes.workbench.impactHint')}</p>
+                  {impact.loading ? t('common.loading') : impact.error
+                    ? <Button disabled={false} onClick={impact.run}>{t('common.retry')}</Button>
+                    : <div style={{ maxHeight: 140, overflow: 'auto' }}>{impact.data?.length
+                      ? [...new Set(impact.data.map(binding => binding.routeId))].map(id => <div key={id}>{id}</div>)
+                      : t('routes.workbench.noBindings')}</div>}
+                </>} style={{ marginBottom: 16 }} />}
               <div className="form-section-modern">
                 <Form.Item
                   name="policyName"

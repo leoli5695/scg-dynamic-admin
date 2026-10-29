@@ -137,13 +137,13 @@ public class CacheGlobalFilter implements GlobalFilter, Ordered {
                 && !StrategyDefinition.TYPE_CORS.equals(strategy.getStrategyType())) {
             return;
         }
-        if (strategy.getRouteId() != null) {
-            RouteCache cache = routeCaches.remove(strategy.getRouteId());
-            if (cache != null) {
-                cache.invalidate();
+        if (StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope())) {
+            for (String routeId : strategy.getBoundRouteIds()) {
+                RouteCache cache = routeCaches.remove(routeId);
+                if (cache != null) cache.invalidate();
+                log.debug("Invalidated route cache instance for route: {}", routeId);
             }
-            log.debug("Invalidated route cache instance for route: {}", strategy.getRouteId());
-        } else {
+        } else if (strategy.isGlobal()) {
             // Global strategy: rebuild all route cache instances with new settings
             routeCaches.values().forEach(RouteCache::invalidate);
             routeCaches.clear();

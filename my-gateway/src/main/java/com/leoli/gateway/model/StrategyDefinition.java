@@ -6,6 +6,9 @@ import lombok.Data;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 /**
  * Strategy definition model for gateway runtime.
@@ -21,6 +24,8 @@ public class StrategyDefinition {
     private String strategyType;
     private String scope = "GLOBAL";
     private String routeId;
+    /** Additional shared ROUTE bindings; routeId remains the primary binding. */
+    private List<String> routeIds;
     private int priority = 100;
     private boolean enabled = true;
     private Map<String, Object> config = new HashMap<>();
@@ -80,6 +85,17 @@ public class StrategyDefinition {
      */
     @JsonIgnore
     public boolean isRouteBound() {
-        return SCOPE_ROUTE.equals(scope) && routeId != null && !routeId.isEmpty();
+        return SCOPE_ROUTE.equals(scope) && !getBoundRouteIds().isEmpty();
+    }
+
+    /** Ordered, detached union of primary and shared bindings. Empty never implies GLOBAL. */
+    @JsonIgnore
+    public Set<String> getBoundRouteIds() {
+        Set<String> bindings = new LinkedHashSet<>();
+        if (routeId != null && !routeId.isBlank()) bindings.add(routeId);
+        if (routeIds != null) {
+            routeIds.stream().filter(id -> id != null && !id.isBlank()).forEach(bindings::add);
+        }
+        return bindings;
     }
 }

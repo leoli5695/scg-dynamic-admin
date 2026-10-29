@@ -11,6 +11,25 @@ import type { StrategyDefinition, StrategyTypeInfo } from '../types/strategy';
 const BASE = '/api/strategies';
 const TYPES_BASE = '/api/strategy-types';
 
+export const listAvailableStrategies = (instanceId: string, options?: RequestOptions) =>
+  httpClient.get<StrategyDefinition[]>(`${BASE}/available`, { ...options, params: { instanceId } });
+
+export interface StrategyAffectedRoute {
+  id: string;
+  routeName?: string;
+  enabled?: boolean;
+  instanceId?: string;
+}
+
+export const getStrategyRoutes = (id: string, options?: RequestOptions) =>
+  httpClient.get<StrategyAffectedRoute[]>(`${BASE}/${encodeURIComponent(id)}/routes`, options);
+
+export const bindStrategyRoute = (id: string, routeId: string) =>
+  httpClient.put<StrategyDefinition>(`${BASE}/${encodeURIComponent(id)}/routes/${encodeURIComponent(routeId)}`);
+
+export const unbindStrategyRoute = (id: string, routeId: string) =>
+  httpClient.delete<StrategyDefinition>(`${BASE}/${encodeURIComponent(id)}/routes/${encodeURIComponent(routeId)}`);
+
 /** GET /api/strategies — optionally filtered by gateway instance UUID. */
 export const listStrategies = (
   params?: { instanceId?: string },

@@ -21,6 +21,7 @@ interface ResourceEditorProps<Values extends object> {
   initialValues: Partial<Values>;
   sections: EditorSection[];
   submitting?: boolean;
+  disabled?: boolean;
   onCancel: () => void;
   onFinish: (values: Values) => Promise<unknown>;
   submitLabel: string;
@@ -36,6 +37,7 @@ export default function ResourceEditor<Values extends object>({
   initialValues,
   sections,
   submitting,
+  disabled = false,
   onCancel,
   onFinish,
   submitLabel,
@@ -69,8 +71,9 @@ export default function ResourceEditor<Values extends object>({
         form={form}
         layout="vertical"
         initialValues={initialValues}
-        disabled={busy}
+        disabled={busy || disabled}
         onFinish={async (values) => {
+          if (disabled || busy) return;
           setSaving(true);
           try {
             await onFinish(values);
@@ -135,7 +138,7 @@ export default function ResourceEditor<Values extends object>({
           ) : (
             <React.Fragment key="submit-actions">
               {footerExtra}
-              <Button key="submit" type="primary" htmlType="submit" loading={busy}>
+              <Button key="submit" type="primary" htmlType="submit" loading={busy} disabled={disabled}>
                 {submitLabel}
               </Button>
             </React.Fragment>

@@ -84,6 +84,9 @@ public class RouteService {
     private AiRouteProjector aiRouteProjector;
 
     @Autowired
+    private StrategyService strategyService;
+
+    @Autowired
     private CacheManager cacheManager;
 
     @PostConstruct
@@ -482,6 +485,9 @@ public class RouteService {
             String routeDataId = ROUTE_PREFIX + entity.getRouteId();
             removeRouteOrThrow(routeDataId, nacosNamespace);
             log.info("Route removed from Nacos: {} (namespace: {})", routeDataId, nacosNamespace);
+
+            // Detach this route before deleting it; shared policies retain their other bindings.
+            strategyService.deleteStrategiesForRoute(routeId);
 
             // Delete from database
             routeRepository.delete(entity);

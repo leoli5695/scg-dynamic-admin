@@ -6,17 +6,24 @@ import com.leoli.gateway.admin.model.GatewayInstanceEntity;
 import com.leoli.gateway.admin.model.StrategyConfig;
 import com.leoli.gateway.admin.model.StrategyDefinition;
 import com.leoli.gateway.admin.model.StrategyEntity;
+import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.properties.GatewayAdminProperties;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.StrategyRepository;
+import com.leoli.gateway.admin.repository.RouteRepository;
 import jakarta.annotation.PostConstruct;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -43,6 +50,12 @@ public class StrategyService {
 
     @Autowired
     private StrategyRepository strategyRepository;
+
+    @Autowired
+    private RouteRepository routeRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -311,12 +324,123 @@ public class StrategyService {
      * Get strategies for a route (both global and route-bound).
      */
     public List<StrategyDefinition> getStrategiesForRoute(String routeId) {
-        List<StrategyEntity> entities = strategyRepository.findByScopeOrRouteId(
-                StrategyDefinition.SCOPE_GLOBAL, routeId);
-        return entities.stream()
-                .filter(StrategyEntity::getEnabled)
-                .map(this::toDefinition)
+        RouteEntity route = requireRoute(routeId);
+        return getAvailableStrategies(route.getInstanceId()).stream()
+                .filter(StrategyDefinition::isEnabled)
+                .filter(strategy -> strategy.isGlobal() || strategy.getBoundRouteIds().contains(routeId))
                 .collect(Collectors.toList());
+    }
+
+    /** Includes disabled policies. GLOBAL is broadcast across instances, not instance-local. */
+    public List<StrategyDefinition> getAvailableStrategies(String instanceId) {
+        List<StrategyDefinition> strategies = new ArrayList<>(strategyRepository
+                .findByScopeAndInstanceId(StrategyDefinition.SCOPE_ROUTE, instanceId).stream()
+                .map(this::toDefinition).toList());
+        strategyRepository.findAllGlobalStrategies().stream().map(this::toDefinition).forEach(strategies::add);
+        return strategies;
+    }
+
+    /** Conservative configured impact, not a claim that a policy wins runtime resolution. */
+    public record RouteImpact(String id, String routeName, Boolean enabled, String instanceId) { }
+
+    public List<RouteImpact> getStrategyRoutes(String strategyId) {
+        StrategyEntity entity = strategyRepository.findByStrategyId(strategyId);
+        if (entity == null) throw new IllegalArgumentException("Strategy not found: " + strategyId);
+        StrategyDefinition strategy = toDefinition(entity);
+        List<RouteEntity> routes = isGlobalStrategyEntity(entity)
+                ? routeRepository.findAll() : routeRepository.findByInstanceId(entity.getInstanceId());
+        Set<String> bindings = strategy.getBoundRouteIds();
+        return routes.stream()
+                .filter(route -> isGlobalStrategyEntity(entity)
+                        || (StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope())
+                        && bindings.contains(route.getRouteId())))
+                .map(route -> new RouteImpact(route.getRouteId(), route.getRouteName(),
+                        route.getEnabled(), route.getInstanceId()))
+                .toList();
+    }
+
+    private RouteEntity requireRoute(String routeId) {
+        return routeRepository.findById(routeId)
+                .orElseThrow(() -> new IllegalArgumentException("Route not found: " + routeId));
+    }
+
+    private StrategyEntity requireLockedStrategy(String strategyId) {
+        StrategyEntity entity = strategyRepository.findByStrategyIdForUpdate(strategyId);
+        if (entity == null) throw new IllegalArgumentException("Strategy not found: " + strategyId);
+        // Audit reads / cascade scans may have loaded this row before acquiring the lock.
+        // Refresh the first-level cache under the lock rather than modifying that stale instance.
+        entityManager.refresh(entity);
+        return entity;
+    }
+
+    private void validateSharedBindings(StrategyDefinition strategy, String instanceId) {
+        if (strategy.getRouteIds() == null || strategy.getRouteIds().isEmpty()) return;
+        if (!StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope())
+                || StrategyDefinition.TYPE_AI_PROXY.equals(strategy.getStrategyType())) {
+            throw new IllegalArgumentException("Only non-AI_PROXY ROUTE strategies support shared bindings");
+        }
+        for (String routeId : strategy.getBoundRouteIds()) {
+            if (!Objects.equals(instanceId, requireRoute(routeId).getInstanceId())) {
+                throw new IllegalArgumentException("Strategy and route must belong to the same instance");
+            }
+        }
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public StrategyDefinition bindRoute(String strategyId, String routeId) {
+        return changeRouteBinding(strategyId, routeId, true);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public StrategyDefinition unbindRoute(String strategyId, String routeId) {
+        return changeRouteBinding(strategyId, routeId, false);
+    }
+
+    private StrategyDefinition changeRouteBinding(String strategyId, String routeId, boolean bind) {
+        StrategyEntity entity = requireLockedStrategy(strategyId);
+        StrategyDefinition strategy = toDefinition(entity, true);
+        if (!StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope())) {
+            throw new IllegalArgumentException("Only ROUTE strategies support route bindings");
+        }
+        if (StrategyDefinition.TYPE_AI_PROXY.equals(strategy.getStrategyType())) {
+            throw new IllegalArgumentException("AI_PROXY bindings are owned by route projection");
+        }
+        RouteEntity route = requireRoute(routeId);
+        if (!Objects.equals(entity.getInstanceId(), route.getInstanceId())) {
+            throw new IllegalArgumentException("Strategy and route must belong to the same instance");
+        }
+        Set<String> bindings = strategy.getBoundRouteIds();
+        boolean changed = bind ? bindings.add(routeId) : bindings.remove(routeId);
+        if (changed) {
+            setBindings(strategy, bindings);
+            saveBindings(entity, strategy);
+        }
+        return strategy;
+    }
+
+    private void setBindings(StrategyDefinition strategy, Set<String> bindings) {
+        String primary = strategy.getRouteId();
+        if (!bindings.contains(primary)) primary = bindings.stream().findFirst().orElse(null);
+        strategy.setRouteId(primary);
+        List<String> additional = new ArrayList<>(bindings);
+        additional.remove(primary);
+        strategy.setRouteIds(additional);
+        // Scope is deliberately untouched, including when the final route is detached.
+    }
+
+    private void saveBindings(StrategyEntity entity, StrategyDefinition strategy) {
+        entity.setRouteId(strategy.getRouteId());
+        try {
+            entity.setMetadata(objectMapper.writeValueAsString(strategy));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize strategy bindings", e);
+        }
+        strategyRepository.saveAndFlush(entity);
+        String dataId = STRATEGY_PREFIX + entity.getStrategyId();
+        String namespace = getNacosNamespace(entity.getInstanceId());
+        if (strategy.isEnabled()) publishStrategyToNacos(dataId, namespace, strategy, false);
+        else removeStrategyFromNacos(dataId, namespace, false);
+        updateStrategiesIndexForStrategy(strategy, entity.getInstanceId());
     }
 
     /**
@@ -334,10 +458,17 @@ public class StrategyService {
      * Get strategies bound to a route.
      */
     public List<StrategyDefinition> getRouteStrategies(String routeId) {
-        List<StrategyEntity> entities = strategyRepository.findByRouteIdAndEnabledTrue(routeId);
-        return entities.stream()
+        return getBoundStrategiesForRoute(routeId).stream()
+                .filter(StrategyEntity::getEnabled)
                 .map(this::toDefinition)
                 .collect(Collectors.toList());
+    }
+
+    private List<StrategyEntity> getBoundStrategiesForRoute(String routeId) {
+        RouteEntity route = requireRoute(routeId);
+        return strategyRepository.findByScopeAndInstanceId(StrategyDefinition.SCOPE_ROUTE, route.getInstanceId())
+                .stream().filter(entity -> toDefinition(entity).getBoundRouteIds().contains(routeId))
+                .toList();
     }
 
     /**
@@ -361,6 +492,7 @@ public class StrategyService {
 
         // Validate strategy configuration
         validateStrategyConfig(strategy);
+        validateSharedBindings(strategy, instanceId);
 
         // Check if name already exists (within instance scope if instanceId provided)
         StrategyEntity existing;
@@ -492,13 +624,17 @@ public class StrategyService {
             throw new IllegalArgumentException("Invalid strategy definition or ID");
         }
 
-        // Validate strategy configuration
-        validateStrategyConfig(strategy);
-
-        StrategyEntity entity = strategyRepository.findByStrategyId(strategyId);
-        if (entity == null) {
-            throw new IllegalArgumentException("Strategy not found: " + strategyId);
+        StrategyEntity entity = requireLockedStrategy(strategyId);
+        StrategyDefinition persisted = toDefinition(entity, true);
+        // Bindings are edited through the dedicated endpoints, not a stale configuration form.
+        // Preserving both fields under the same lock prevents a config update losing a recent bind.
+        if (StrategyDefinition.SCOPE_ROUTE.equals(entity.getScope())
+                && StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope())) {
+            strategy.setRouteId(persisted.getRouteId());
+            strategy.setRouteIds(persisted.getRouteIds());
         }
+        validateStrategyConfig(strategy);
+        validateSharedBindings(strategy, entity.getInstanceId());
 
         // Get Nacos namespace from instance
         String nacosNamespace = getNacosNamespace(entity.getInstanceId());
@@ -517,10 +653,9 @@ public class StrategyService {
         // Only reset when config changes require it (not for increases)
         boolean shouldResetCounters = false;
         String resetReason = null;
-        StrategyDefinition oldStrategy = toDefinition(entity);
 
         if (isRateLimiterStrategy(strategy) && strategy.isEnabled()) {
-            resetReason = shouldResetRateLimitCounters(oldStrategy, strategy);
+            resetReason = shouldResetRateLimitCounters(persisted, strategy);
             if (resetReason != null) {
                 shouldResetCounters = true;
                 log.info("Rate limiter config change requires counter reset: {} for strategy: {}", resetReason, strategyId);
@@ -541,7 +676,7 @@ public class StrategyService {
             String configJson = objectMapper.writeValueAsString(strategy);
             entity.setMetadata(configJson);
         } catch (Exception e) {
-            log.warn("Failed to serialize strategy config", e);
+            throw new IllegalStateException("Failed to serialize strategy config", e);
         }
 
         entity = strategyRepository.save(entity);
@@ -685,10 +820,7 @@ public class StrategyService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteStrategy(String strategyId) {
-        StrategyEntity entity = strategyRepository.findByStrategyId(strategyId);
-        if (entity == null) {
-            throw new IllegalArgumentException("Strategy not found: " + strategyId);
-        }
+        StrategyEntity entity = requireLockedStrategy(strategyId);
 
         log.info("Deleting strategy: {} (ID: {})", entity.getStrategyName(), strategyId);
 
@@ -739,10 +871,7 @@ public class StrategyService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void enableStrategy(String strategyId) {
-        StrategyEntity entity = strategyRepository.findByStrategyId(strategyId);
-        if (entity == null) {
-            throw new IllegalArgumentException("Strategy not found: " + strategyId);
-        }
+        StrategyEntity entity = requireLockedStrategy(strategyId);
 
         if (entity.getEnabled()) {
             log.warn("Strategy is already enabled: {}", strategyId);
@@ -799,10 +928,7 @@ public class StrategyService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void disableStrategy(String strategyId) {
-        StrategyEntity entity = strategyRepository.findByStrategyId(strategyId);
-        if (entity == null) {
-            throw new IllegalArgumentException("Strategy not found: " + strategyId);
-        }
+        StrategyEntity entity = requireLockedStrategy(strategyId);
 
         if (!entity.getEnabled()) {
             log.warn("Strategy is already disabled: {}", strategyId);
@@ -870,8 +996,17 @@ public class StrategyService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteStrategiesForRoute(String routeId) {
-        List<StrategyEntity> entities = strategyRepository.findByRouteId(routeId);
-        for (StrategyEntity entity : entities) {
+        List<StrategyEntity> entities = getBoundStrategiesForRoute(routeId);
+        for (StrategyEntity candidate : entities) {
+            StrategyEntity entity = requireLockedStrategy(candidate.getStrategyId());
+            StrategyDefinition strategy = toDefinition(entity, true);
+            Set<String> bindings = strategy.getBoundRouteIds();
+            if (!StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope()) || !bindings.remove(routeId)) continue;
+            if (!bindings.isEmpty()) {
+                setBindings(strategy, bindings);
+                saveBindings(entity, strategy);
+                continue;
+            }
             String strategyDataId = STRATEGY_PREFIX + entity.getStrategyId();
             String nacosNamespace = getNacosNamespace(entity.getInstanceId());
             // Namespace-aware removal (the old single-arg call always targeted the default
@@ -942,6 +1077,10 @@ public class StrategyService {
      * Convert entity to definition.
      */
     private StrategyDefinition toDefinition(StrategyEntity entity) {
+        return toDefinition(entity, false);
+    }
+
+    private StrategyDefinition toDefinition(StrategyEntity entity, boolean requireIntactMetadata) {
         if (entity.getMetadata() != null && !entity.getMetadata().isEmpty()) {
             try {
                 StrategyDefinition strategy = objectMapper.readValue(entity.getMetadata(), StrategyDefinition.class);
@@ -949,9 +1088,15 @@ public class StrategyService {
                     // Ensure fields are synced
                     strategy.setStrategyId(entity.getStrategyId());
                     strategy.setEnabled(entity.getEnabled());
+                    strategy.setScope(isGlobalStrategyEntity(entity) ? StrategyDefinition.SCOPE_GLOBAL : entity.getScope());
+                    strategy.setRouteId(entity.getRouteId());
                     return strategy;
                 }
+                if (requireIntactMetadata) throw new IllegalStateException("Strategy metadata is null");
             } catch (Exception e) {
+                if (requireIntactMetadata) {
+                    throw new IllegalStateException("Cannot modify bindings with unreadable strategy metadata", e);
+                }
                 log.warn("Failed to deserialize strategy config", e);
             }
         }
@@ -961,7 +1106,7 @@ public class StrategyService {
         strategy.setStrategyId(entity.getStrategyId());
         strategy.setStrategyName(entity.getStrategyName());
         strategy.setStrategyType(entity.getStrategyType());
-        strategy.setScope(entity.getScope());
+        strategy.setScope(isGlobalStrategyEntity(entity) ? StrategyDefinition.SCOPE_GLOBAL : entity.getScope());
         strategy.setRouteId(entity.getRouteId());
         strategy.setPriority(entity.getPriority() != null ? entity.getPriority() : 100);
         strategy.setEnabled(entity.getEnabled());

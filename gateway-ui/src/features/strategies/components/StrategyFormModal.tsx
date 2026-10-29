@@ -48,6 +48,9 @@ import DynamicConfigFields, {
 import { TokenRateLimiterFields } from './TokenRateLimiterFields';
 import { AiProxyFields } from './AiProxyFields';
 import { AiSecurityFields } from './AiSecurityFields';
+import { getStrategyRoutes } from '../../../api/strategies';
+import { listRoutes } from '../../../api/routes';
+import { useRequest } from '../../../hooks/useRequest';
 
 const { Text } = Typography;
 
@@ -89,6 +92,8 @@ interface StrategyFormModalProps {
   /** Create mode: existing GLOBAL strategy of this type (uniqueness guard). */
   existingGlobal?: StrategyDefinition;
   submitting?: boolean;
+  lockBinding?: boolean;
+  initialRouteId?: string;
   onCancel: () => void;
   onBackToTypeSelect?: () => void;
   onSubmit: (body: StrategyDefinition) => Promise<void>;
@@ -209,6 +214,8 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
   routes,
   existingGlobal,
   submitting = false,
+  lockBinding = false,
+  initialRouteId,
   onCancel,
   onBackToTypeSelect,
   onSubmit,
@@ -217,6 +224,21 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
   const [form] = Form.useForm();
   const isEdit = mode === 'edit';
   const strategyTypeCode = strategy?.strategyType ?? typeInfo.typeCode;
+  const scope = Form.useWatch('scope', form) ?? strategy?.scope;
+  const routeId = Form.useWatch('routeId', form) ?? strategy?.routeId;
+  const impact = useRequest(signal => getStrategyRoutes(strategy!.strategyId, { signal }), {
+    immediate: isEdit, deps: [strategy?.strategyId],
+  });
+  const globalImpact = useRequest(signal => listRoutes(undefined, { signal }), {
+    immediate: isEdit && scope === 'GLOBAL' && strategy?.scope !== 'GLOBAL', deps: [scope],
+  });
+  const expandingGlobal = isEdit && scope === 'GLOBAL' && strategy?.scope !== 'GLOBAL';
+  const impactBlocked = isEdit && (!impact.data || !!impact.error || impact.loading
+    || (expandingGlobal && (!globalImpact.data || !!globalImpact.error || globalImpact.loading)));
+  const affectedRoutes = [...new Map([
+    ...(impact.data ?? []), ...(expandingGlobal ? globalImpact.data ?? [] : []),
+    ...(scope === 'ROUTE' && routeId ? [routes.find(r => r.id === routeId) ?? { id: String(routeId), routeName: '' }] : []),
+  ].map(r => [r.id, r])).values()];
 
   const initialValues = useMemo<StrategyFormValues>(() => {
     if (isEdit && strategy) {
@@ -224,21 +246,24 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
     }
     return {
       strategyType: typeInfo.typeCode,
-      scope: existingGlobal ? 'ROUTE' : 'GLOBAL',
+      scope: initialRouteId || existingGlobal ? 'ROUTE' : 'GLOBAL',
+      routeId: initialRouteId,
       priority: 100,
       enabled: true,
     };
-  }, [isEdit, strategy, typeInfo.typeCode, existingGlobal]);
+  }, [isEdit, strategy, typeInfo.typeCode, existingGlobal, initialRouteId]);
 
   const globalLocked = !isEdit && !!existingGlobal && requiresGlobalUniqueness(typeInfo.typeCode);
 
   const handleFinish = async (values: StrategyFormValues) => {
+    if (impactBlocked) return;
     const body: StrategyDefinition = {
       strategyId: strategy?.strategyId ?? '',
       strategyName: String(values.strategyName ?? ''),
       strategyType: strategyTypeCode,
       scope: values.scope === 'ROUTE' ? 'ROUTE' : 'GLOBAL',
       routeId: values.scope === 'ROUTE' ? String(values.routeId ?? '') : undefined,
+      routeIds: values.scope === 'ROUTE' ? strategy?.routeIds ?? [] : [],
       priority: typeof values.priority === 'number' ? values.priority : 100,
       enabled: values.enabled !== false,
       config: buildStrategyConfig(strategyTypeCode === 'AI_PROXY'
@@ -262,12 +287,14 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
           <Form.Item
             name="routeId"
             label={t('strategy.route_id')}
-            rules={[{ required: true }]}
-            extra={isAiStrategy ? t('strategy.route_id_ai_helper') : t('strategy.route_id_helper')}
+            rules={[{ required: !isEdit }]}
+            extra={isEdit && strategy?.scope === 'ROUTE' ? t('routes.workbench.editBindingsHint')
+              : isAiStrategy ? t('strategy.route_id_ai_helper') : t('strategy.route_id_helper')}
           >
             <Select
               placeholder={t('strategy.route_id_placeholder')}
               size="large"
+              disabled={lockBinding || (isEdit && strategy?.scope === 'ROUTE')}
               showSearch
               optionFilterProp="children"
             >
@@ -320,6 +347,7 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
       form={form}
       initialValues={initialValues}
       submitting={submitting}
+      disabled={impactBlocked}
       onCancel={onCancel}
       onFinish={handleFinish}
       submitLabel={t(isEdit ? 'common.update' : 'common.create')}
@@ -329,7 +357,16 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
           fields: ['strategyName', 'strategyType', 'scope', 'routeId'],
           content: (
             <>
-              {/* Basic Info Section */}
+              {isEdit && <Alert type={impactBlocked ? 'warning' : 'info'} showIcon
+                title={t('routes.workbench.impact')}
+                description={<>
+                  <p>{t('routes.workbench.impactHint')}</p>
+                  {impact.loading || globalImpact.loading ? t('common.loading') : impact.error || globalImpact.error
+                    ? <Button disabled={false} onClick={() => { impact.run(); if (expandingGlobal) globalImpact.run(); }}>{t('common.retry')}</Button>
+                    : <div style={{ maxHeight: 140, overflow: 'auto' }}>{affectedRoutes.length
+                      ? affectedRoutes.map(r => <div key={r.id}>{r.routeName || r.id} <Text type="secondary">{r.id}</Text></div>)
+                      : t('routes.workbench.noBindings')}</div>}
+                </>} style={{ marginBottom: 16 }} />}
               <div className="form-section-modern">
                 <div className="section-header">
                   <ThunderboltOutlined className="section-icon" />
@@ -354,7 +391,7 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
                           label={t('strategy.scope')}
                           extra={t('strategy.scope_helper')}
                         >
-                          <Radio.Group size="large">
+                          <Radio.Group size="large" disabled={lockBinding}>
                             <Radio.Button value="GLOBAL">
                               <GlobalOutlined /> {t('strategy.scope_global')}
                             </Radio.Button>
@@ -397,8 +434,8 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
                               : t('strategy.scope_helper')
                           }
                         >
-                          <Radio.Group size="large">
-                            <Radio.Button value="GLOBAL" disabled={globalLocked}>
+                          <Radio.Group size="large" disabled={lockBinding}>
+                            <Radio.Button value="GLOBAL" disabled={globalLocked || lockBinding}>
                               <GlobalOutlined /> {t('strategy.scope_global')}
                             </Radio.Button>
                             <Radio.Button value="ROUTE">

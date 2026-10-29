@@ -55,6 +55,51 @@ class CacheSecurityRegressionTest {
     }
 
     @Test
+    void updatingSharedCachePolicyInvalidatesEveryBoundRouteButNotUnrelatedRoutes() {
+        var manager = new StrategyManager(new ObjectMapper());
+        var global = new StrategyDefinition();
+        global.setStrategyId("global"); global.setStrategyType("CACHE");
+        global.setConfig(Map.of("enabled", true));
+        manager.putStrategy("global", global);
+        var shared = new StrategyDefinition();
+        shared.setStrategyId("shared"); shared.setStrategyType("CACHE"); shared.setScope("ROUTE");
+        shared.setRouteId("r1"); shared.setRouteIds(java.util.List.of("r2"));
+        shared.setConfig(Map.of("enabled", true));
+        manager.putStrategy("shared", shared);
+        var filter = new CacheGlobalFilter(manager);
+        filter.initCacheInvalidation();
+        for (String id : java.util.List.of("r1", "r2", "other")) {
+            filter.filter(requestForRoute(id), e -> respond(e, "old")).block();
+            filter.filter(requestForRoute(id), e -> Mono.error(new AssertionError("expected cached response"))).block();
+        }
+        var updated = new ObjectMapper().convertValue(shared, StrategyDefinition.class);
+        updated.setConfig(Map.of("enabled", true, "ttl", 30));
+        manager.putStrategy("shared", updated);
+        for (String id : java.util.List.of("r1", "r2")) {
+            var exchange = requestForRoute(id);
+            filter.filter(exchange, e -> respond(e, "new")).block();
+            assertEquals("new", exchange.getResponse().getBodyAsString().block());
+        }
+        filter.filter(requestForRoute("other"), e -> Mono.error(new AssertionError("unrelated cache invalidated"))).block();
+        updated = new ObjectMapper().convertValue(updated, StrategyDefinition.class);
+        updated.setRouteId(null); updated.setRouteIds(java.util.List.of());
+        manager.putStrategy("shared", updated);
+        filter.filter(requestForRoute("other"), e -> Mono.error(new AssertionError("empty ROUTE treated as GLOBAL"))).block();
+        for (String id : java.util.List.of("r1", "r2")) {
+            var exchange = requestForRoute(id);
+            filter.filter(exchange, e -> respond(e, "detached")).block();
+            assertEquals("detached", exchange.getResponse().getBodyAsString().block());
+        }
+    }
+
+    private MockServerWebExchange requestForRoute(String routeId) {
+        var exchange = request("/shared", null, null);
+        exchange.getAttributes().put(GATEWAY_ROUTE_ATTR, Route.async().id(routeId)
+                .uri("http://localhost").predicate(ignored -> true).build());
+        return exchange;
+    }
+
+    @Test
     void publicResponsesStillHitCache() {
         var filter = filter();
         filter.filter(request("/public", null, null), e -> respond(e, "cached")).block();

@@ -47,6 +47,44 @@ public class StrategyController extends BaseController {
         return ResponseEntity.ok(ApiResponse.success(strategies));
     }
 
+    /** Instance ROUTE policies and broadcast GLOBAL policies, including disabled entries. */
+    @GetMapping("/available")
+    public ResponseEntity<ApiResponse<List<StrategyDefinition>>> getAvailableStrategies(@RequestParam String instanceId) {
+        return ResponseEntity.ok(ApiResponse.success(strategyService.getAvailableStrategies(instanceId)));
+    }
+
+    /** Configured impact only: disabled routes/policies are included; runtime precedence may narrow it. */
+    @GetMapping("/{strategyId}/routes")
+    public ResponseEntity<ApiResponse<List<StrategyService.RouteImpact>>> getStrategyRoutes(@PathVariable String strategyId) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success(strategyService.getStrategyRoutes(strategyId)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(ApiResponse.notFound(e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{strategyId}/routes/{routeId}")
+    public ResponseEntity<ApiResponse<StrategyDefinition>> bindRoute(
+            @PathVariable String strategyId, @PathVariable String routeId) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success(strategyService.bindRoute(strategyId, routeId),
+                    "Binding saved; runtime convergence is asynchronous"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{strategyId}/routes/{routeId}")
+    public ResponseEntity<ApiResponse<StrategyDefinition>> unbindRoute(
+            @PathVariable String strategyId, @PathVariable String routeId) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success(strategyService.unbindRoute(strategyId, routeId),
+                    "Binding removed; runtime convergence is asynchronous"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
+        }
+    }
+
     /**
      * Get strategy by ID.
      */

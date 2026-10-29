@@ -138,11 +138,12 @@ public class StrategyManager {
         // validate its actual binding, so the new index cannot expose the old policy.
         addToIndexes(strategy, strategyId);
         strategyCache.put(strategyId, strategy);
-        boolean sameIndex = old != null && ((old.isRouteBound() && strategy.isRouteBound()
-                && Objects.equals(old.getRouteId(), strategy.getRouteId()))
+        boolean sameIndex = old != null && ((StrategyDefinition.SCOPE_ROUTE.equals(old.getScope())
+                && StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope())
+                && old.getBoundRouteIds().equals(strategy.getBoundRouteIds()))
                 || (old.isGlobal() && strategy.isGlobal()
                 && Objects.equals(old.getStrategyType(), strategy.getStrategyType())));
-        if (old != null && !sameIndex) removeFromIndexes(old, strategyId);
+        if (old != null && !sameIndex) removeObsoleteIndexes(old, strategy, strategyId);
         if (old != null && (!sameIndex || !Objects.equals(old.getStrategyType(), strategy.getStrategyType()))) {
             notifyRemoved(old); // Invalidate filters' caches for the previous route/type.
         }
@@ -156,8 +157,9 @@ public class StrategyManager {
      */
     private void addToIndexes(StrategyDefinition strategy, String strategyId) {
         if (strategy.isRouteBound()) {
-            routeStrategyIndex.computeIfAbsent(strategy.getRouteId(), k -> ConcurrentHashMap.newKeySet())
-                    .add(strategyId);
+            for (String routeId : strategy.getBoundRouteIds()) {
+                routeStrategyIndex.computeIfAbsent(routeId, k -> ConcurrentHashMap.newKeySet()).add(strategyId);
+            }
         } else if (strategy.isGlobal()) {
             globalStrategiesByType.computeIfAbsent(strategy.getStrategyType(), k -> ConcurrentHashMap.newKeySet())
                     .add(strategyId);
@@ -168,16 +170,24 @@ public class StrategyManager {
      * Remove a strategy from the route/global indexes.
      */
     private void removeFromIndexes(StrategyDefinition strategy, String strategyId) {
-        if (strategy.isRouteBound() && strategy.getRouteId() != null) {
-            Set<String> routeStrategies = routeStrategyIndex.get(strategy.getRouteId());
-            if (routeStrategies != null) {
-                routeStrategies.remove(strategyId);
+        removeObsoleteIndexes(strategy, null, strategyId);
+    }
+
+    /** Remove only old-minus-new membership: never remove the routes in the intersection. */
+    private void removeObsoleteIndexes(StrategyDefinition old, StrategyDefinition updated, String strategyId) {
+        if (old.isRouteBound()) {
+            Set<String> retained = updated != null && updated.isRouteBound()
+                    ? updated.getBoundRouteIds() : Collections.emptySet();
+            for (String routeId : old.getBoundRouteIds()) {
+                if (!retained.contains(routeId)) {
+                    Set<String> routeStrategies = routeStrategyIndex.get(routeId);
+                    if (routeStrategies != null) routeStrategies.remove(strategyId);
+                }
             }
-        } else if (strategy.isGlobal()) {
-            Set<String> globalStrategies = globalStrategiesByType.get(strategy.getStrategyType());
-            if (globalStrategies != null) {
-                globalStrategies.remove(strategyId);
-            }
+        } else if (old.isGlobal() && (updated == null || !updated.isGlobal()
+                || !Objects.equals(old.getStrategyType(), updated.getStrategyType()))) {
+            Set<String> globalStrategies = globalStrategiesByType.get(old.getStrategyType());
+            if (globalStrategies != null) globalStrategies.remove(strategyId);
         }
     }
 
@@ -234,7 +244,7 @@ public class StrategyManager {
             for (String strategyId : routeStrategies) {
                 StrategyDefinition strategy = strategyCache.get(strategyId);
                 if (strategy != null && strategy.isEnabled() && strategy.isRouteBound()
-                        && Objects.equals(routeId, strategy.getRouteId())) {
+                        && strategy.getBoundRouteIds().contains(routeId)) {
                     result.add(strategy);
                 }
             }
@@ -257,7 +267,7 @@ public class StrategyManager {
             for (String strategyId : routeStrategies) {
                 StrategyDefinition strategy = strategyCache.get(strategyId);
                 if (strategy != null && strategy.isEnabled() && strategy.isRouteBound()
-                        && Objects.equals(routeId, strategy.getRouteId()) && strategyType.equals(strategy.getStrategyType())) {
+                        && strategy.getBoundRouteIds().contains(routeId) && strategyType.equals(strategy.getStrategyType())) {
                     best = prefer(best, strategy);
                 }
             }
@@ -311,16 +321,29 @@ public class StrategyManager {
      * Remove all strategies for a route.
      */
     public synchronized void removeStrategiesForRoute(String routeId) {
-        Set<String> routeStrategies = routeStrategyIndex.remove(routeId);
+        Set<String> routeStrategies = routeStrategyIndex.get(routeId);
         if (routeStrategies != null) {
-            for (String strategyId : routeStrategies) {
-                StrategyDefinition removed = strategyCache.remove(strategyId);
-                if (removed != null) {
-                    notifyRemoved(removed);
+            for (String strategyId : new HashSet<>(routeStrategies)) {
+                StrategyDefinition strategy = strategyCache.get(strategyId);
+                if (strategy == null || !strategy.isRouteBound()) continue;
+                Set<String> remaining = strategy.getBoundRouteIds();
+                if (!remaining.remove(routeId)) continue;
+                if (remaining.isEmpty()) {
+                    removeStrategy(strategyId);
+                } else {
+                    // Install a detached definition, preserving snapshot and typed-cache identity semantics.
+                    StrategyDefinition updated = objectMapper.convertValue(strategy, StrategyDefinition.class);
+                    String primary = remaining.contains(strategy.getRouteId())
+                            ? strategy.getRouteId() : remaining.iterator().next();
+                    updated.setRouteId(primary);
+                    remaining.remove(primary);
+                    updated.setRouteIds(new ArrayList<>(remaining));
+                    putStrategy(strategyId, updated);
                 }
             }
         }
-        log.debug("Removed all strategies for route: {}", routeId);
+        routeStrategyIndex.remove(routeId);
+        log.debug("Removed all strategy bindings for route: {}", routeId);
     }
 
     /**
@@ -505,7 +528,7 @@ public class StrategyManager {
         StrategyDefinition best = null;
         // Check route-bound in snapshot
         for (StrategyDefinition strategy : strategySnapshot.values()) {
-            if (strategy.isRouteBound() && routeId.equals(strategy.getRouteId())
+            if (strategy.isRouteBound() && strategy.getBoundRouteIds().contains(routeId)
                     && strategyType.equals(strategy.getStrategyType()) && strategy.isEnabled()) {
                 best = prefer(best, strategy);
             }

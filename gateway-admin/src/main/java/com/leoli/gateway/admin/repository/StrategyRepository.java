@@ -1,8 +1,11 @@
 package com.leoli.gateway.admin.repository;
 
 import com.leoli.gateway.admin.model.StrategyEntity;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -19,6 +22,13 @@ public interface StrategyRepository extends JpaRepository<StrategyEntity, Long> 
      * Find strategy by strategy ID (UUID).
      */
     StrategyEntity findByStrategyId(String strategyId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM strategies s WHERE s.strategyId = :strategyId")
+    StrategyEntity findByStrategyIdForUpdate(@Param("strategyId") String strategyId);
+
+    @Query("SELECT s FROM strategies s WHERE s.scope = 'GLOBAL' OR s.scope IS NULL")
+    List<StrategyEntity> findAllGlobalStrategies();
 
     /**
      * Find strategy by business strategy name.

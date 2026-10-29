@@ -67,6 +67,31 @@ class RetryGlobalFilterTest {
         ));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void sharedPolicyUpdatesAndDetachInvalidateAllRetryConfigBindings() {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var manager = new StrategyManager(mapper);
+        var retry = new RetryGlobalFilter(manager, new RetryProperties());
+        retry.initConfigInvalidation();
+        var shared = new StrategyDefinition();
+        shared.setStrategyId("shared"); shared.setStrategyType("RETRY"); shared.setScope("ROUTE");
+        shared.setRouteId("r1"); shared.setRouteIds(List.of("r2"));
+        manager.putStrategy("shared", shared);
+        Map<String, Object> cache = (Map<String, Object>) org.springframework.test.util.ReflectionTestUtils.getField(retry, "configCache");
+        assertNotNull(cache);
+        cache.put("r1", new Object()); cache.put("r2", new Object()); cache.put("other", new Object());
+        var updated = mapper.convertValue(shared, StrategyDefinition.class);
+        updated.setConfig(Map.of("maxAttempts", 2));
+        manager.putStrategy("shared", updated);
+        assertEquals(Set.of("other"), cache.keySet());
+        cache.put("r1", new Object()); cache.put("r2", new Object());
+        var detached = mapper.convertValue(updated, StrategyDefinition.class);
+        detached.setRouteId(null); detached.setRouteIds(List.of());
+        manager.putStrategy("shared", detached);
+        assertEquals(Set.of("other"), cache.keySet());
+    }
+
     @Nested
     @DisplayName("Basic Filter Tests")
     class BasicFilterTests {

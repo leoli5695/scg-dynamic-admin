@@ -85,10 +85,12 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         if (!StrategyDefinition.TYPE_RETRY.equals(strategy.getStrategyType())) {
             return;
         }
-        if (strategy.getRouteId() != null) {
-            configCache.remove(strategy.getRouteId());
-            log.debug("Invalidated cached retry config for route: {}", strategy.getRouteId());
-        } else {
+        if (StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope())) {
+            for (String routeId : strategy.getBoundRouteIds()) {
+                configCache.remove(routeId);
+                log.debug("Invalidated cached retry config for route: {}", routeId);
+            }
+        } else if (strategy.isGlobal()) {
             // Global strategy affects all routes
             configCache.clear();
             log.debug("Invalidated all cached retry configs (global strategy changed)");

@@ -8,12 +8,10 @@ import com.leoli.gateway.admin.model.AuditLogQuery;
 import com.leoli.gateway.admin.model.AuditLogStats;
 import com.leoli.gateway.admin.model.RouteEntity;
 import com.leoli.gateway.admin.model.GatewayInstanceEntity;
-import com.leoli.gateway.admin.model.StrategyEntity;
 import com.leoli.gateway.admin.model.AuthPolicyEntity;
 import com.leoli.gateway.admin.repository.AuditLogRepository;
 import com.leoli.gateway.admin.repository.RouteRepository;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
-import com.leoli.gateway.admin.repository.StrategyRepository;
 import com.leoli.gateway.admin.repository.AuthPolicyRepository;
 import com.leoli.gateway.admin.util.SensitiveDataMasker;
 import jakarta.persistence.criteria.Predicate;
@@ -49,7 +47,6 @@ public class AuditLogService {
     private final RouteService routeService;
     private final StrategyService strategyService;
     private final GatewayInstanceRepository gatewayInstanceRepository;
-    private final StrategyRepository strategyRepository;
     private final AuthPolicyRepository authPolicyRepository;
     private final com.leoli.gateway.admin.repository.ServiceRepository serviceRepository;
     // Service updates audit credential changes themselves. Resolve only when a
@@ -665,36 +662,14 @@ public class AuditLogService {
         return true;
     }
 
-    private boolean rollbackStrategy(String strategyId, String oldValue) {
-        StrategyEntity strategy = strategyRepository.findByStrategyId(strategyId);
-        if (strategy == null) {
-            log.warn("Strategy not found for rollback: {}", strategyId);
-            return false;
+    private boolean rollbackStrategy(String strategyId, String oldValue) throws Exception {
+        var previous = objectMapper.readValue(oldValue, com.leoli.gateway.admin.model.StrategyDefinition.class);
+        if (previous.getStrategyId() != null && !strategyId.equals(previous.getStrategyId())) {
+            throw new IllegalArgumentException("Strategy snapshot does not match rollback target");
         }
-
-        strategy.setMetadata(oldValue);
-        strategyRepository.save(strategy);
-
-        // Get namespace from instance
-        String nacosNamespace = getNacosNamespace(strategy.getInstanceId());
-
-        // Parse oldValue to JsonNode to avoid double serialization
-        JsonNode jsonNode = null;
-        try {
-            jsonNode = objectMapper.readTree(oldValue);
-        } catch (Exception e) {
-            log.warn("Failed to parse strategy oldValue as JSON: {}", e.getMessage());
-        }
-
-        // Push to Nacos with correct namespace
-        String dataId = "config.gateway.strategy-" + strategyId;
-        if (jsonNode != null) {
-            configCenterService.publishConfig(dataId, nacosNamespace, jsonNode);
-        } else {
-            configCenterService.publishConfig(dataId, nacosNamespace, oldValue);
-        }
-        log.info("Strategy rollback: pushed config to Nacos, dataId={}, namespace={}", dataId, nacosNamespace);
-
+        // Configuration rollback must preserve bindings added after the snapshot under the same row lock.
+        strategyService.updateStrategy(strategyId, previous);
+        log.info("Strategy configuration restored: {}", strategyId);
         return true;
     }
 

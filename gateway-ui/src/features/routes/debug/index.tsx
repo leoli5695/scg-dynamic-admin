@@ -82,7 +82,7 @@ function Workbench({ route }: { route: RouteResponse }) {
   const gateway = instance.effectiveAccessUrl || instance.manualAccessUrl || instance.reportedAccessUrl || instance.discoveredAccessUrl || '';
 
   return <div className="route-debug-page">
-    <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(`/instances/${instanceId}/routes`)}>{t('routes.debug_back')}</Button>
+    <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(routeConfigurationUrl(instanceId, route.id))}>{t('routes.debug_back')}</Button>
     <div className="route-debug-heading"><BugOutlined /><div><Title level={3}>{t('routes.debug_title')}</Title><Text type="secondary">{route.routeName} · {route.id}</Text></div></div>
     {!route.enabled && <Alert type="warning" showIcon title={t('routes.debug_disabled')} />}
     <div className="route-debug-grid">
