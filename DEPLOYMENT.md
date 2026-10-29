@@ -1,5 +1,11 @@
 # Gateway Admin - 部署指南
 
+## 升级前数据库迁移
+
+生产环境使用 `ddl-auto: validate`，请在启动新版 gateway-admin 前，对其数据库执行
+`gateway-admin/src/main/resources/sql/system-settings.sql`。脚本创建功能开关表并初始化默认记录，
+可以重复执行，已有开关值和操作人不会被覆盖。首次默认值与旧版本一致（功能开启），管理员可在平台管理中调整。
+
 ## Docker 部署（推荐）
 
 ### 前置要求

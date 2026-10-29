@@ -74,7 +74,7 @@
   "settings.plugins_hint": "Hides plugin management and bindings; uploads and binding writes are rejected.",
   "settings.kubernetes": "Kubernetes",
   "settings.kubernetes_hint": "Shown only when at least one cluster-based instance is managed; switching it off hides the entry entirely.",
-  "settings.kubernetes_no_cluster": "No cluster-based instance is managed, so the Kubernetes entry is hidden.",
+  "settings.kubernetes_no_cluster": "No cluster-based instance is managed yet. Enable Kubernetes to import a cluster and create the first instance.",
   "settings.save": "Save switches",
   "settings.saved": "Feature switches saved; navigation updates on the next load",
   "settings.save_failed": "Failed to save feature switches",

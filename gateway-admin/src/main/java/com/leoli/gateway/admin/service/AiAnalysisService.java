@@ -606,8 +606,9 @@ public class AiAnalysisService {
         }
 
         // 收集时间段内的监控数据与覆盖情况（缺失指标会被明确标注，而不是当作 0）
-        String metricsData = aiMetricsCollector.collectTimeRangeMetricsData(startTime, endTime);
-        Map<String, Object> evidence = aiMetricsCollector.collectCoverage(startTime, endTime);
+        var snapshot = aiMetricsCollector.collectTimeRangeMetrics(startTime, endTime);
+        String metricsData = snapshot.metricsData();
+        Map<String, Object> evidence = snapshot.evidence();
 
         // 构建分析prompt
         String prompt = aiPromptBuilder.buildTimeRangeAnalysisPrompt(metricsData, evidence, startTime, endTime, language);

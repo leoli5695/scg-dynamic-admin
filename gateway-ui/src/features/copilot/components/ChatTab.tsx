@@ -49,8 +49,16 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   const navigate = useNavigate();
   const sessionKey = copilotSessionStorageKey(user?.username || 'anonymous', instanceId || 'all');
   const [traceLookupId, setTraceLookupId] = useState('');
-  const [targetRouteId, setTargetRouteId] = useState<string>();
-  const routesRequest = useRequest((signal) => listRoutes({ instanceId }, { signal }), { deps: [instanceId] });
+  const [routeSelection, setRouteSelection] = useState<{ sessionKey: string; routeId: string }>();
+  const routesRequest = useRequest(async (signal) => ({
+    instanceId,
+    routes: await listRoutes({ instanceId }, { signal }),
+  }), { deps: [instanceId] });
+  // useRequest retains old data during refresh; never expose it under the next instance.
+  const routes = routesRequest.data?.instanceId === instanceId ? routesRequest.data.routes : [];
+  const targetRouteId = routeSelection?.sessionKey === sessionKey
+    && !routesRequest.loading && !routesRequest.error
+    && routes.some(route => route.id === routeSelection.routeId) ? routeSelection.routeId : undefined;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -89,6 +97,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
     // no front-end tests, so that refactor should not happen blind inside a lint cleanup.
     /* eslint-disable react-hooks/set-state-in-effect */
     setMessages([]); setPendingAction(null); setFeedback({}); setInputMessage('');
+    setRouteSelection(undefined); setTraceLookupId('');
     setLoading(false); setExecuting(false); setClearing(false); setHistoryLoading(true);
     setStreamNote(''); setStreamingContent(''); setStreamDone(false);
     /* eslint-enable react-hooks/set-state-in-effect */
@@ -544,11 +553,11 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
           allowClear
           optionFilterProp="label"
           value={targetRouteId}
-          onChange={setTargetRouteId}
+          onChange={(routeId: string | undefined) => setRouteSelection(routeId ? { sessionKey, routeId } : undefined)}
           placeholder={t('copilot.route_placeholder')}
-          disabled={quickBusy}
+          disabled={quickBusy || routesRequest.loading || !!routesRequest.error}
           style={{ width: 220 }}
-          options={(routesRequest.data ?? []).map(route => ({
+          options={routes.map(route => ({
             value: route.id,
             label: `${route.routeName || route.id} (${route.id})`,
           }))}

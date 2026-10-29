@@ -74,7 +74,7 @@
   "settings.plugins_hint": "隐藏插件管理与插件绑定；关闭后上传、绑定等写操作被拒绝。",
   "settings.kubernetes": "Kubernetes",
   "settings.kubernetes_hint": "仅当控制台管理着至少一个集群部署实例时显示入口；关闭后整体隐藏。",
-  "settings.kubernetes_no_cluster": "当前没有集群部署的实例，Kubernetes 入口不会显示。",
+  "settings.kubernetes_no_cluster": "当前没有集群部署的实例。开启 Kubernetes 后可进入集群管理，导入集群并创建首个实例。",
   "settings.save": "保存开关",
   "settings.saved": "功能开关已保存，导航将在下次加载时更新",
   "settings.save_failed": "保存功能开关失败",

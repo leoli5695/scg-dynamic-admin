@@ -128,7 +128,7 @@ const AppRoutes: React.FC = () => (
           <Route path="resources" element={<ResourcesTab />} />
           <Route path="middleware" element={<FeatureGate feature="middlewareEnabled"><MiddlewareTab /></FeatureGate>} />
         </Route>
-        <Route path="/kubernetes" element={<FeatureGate feature="kubernetesEnabled" requiresCluster><KubernetesPage /></FeatureGate>} />
+        <Route path="/kubernetes" element={<FeatureGate feature="kubernetesEnabled"><KubernetesPage /></FeatureGate>} />
         <Route path="/license" element={<LicensePage />} />
         <Route path="/settings" element={<SystemSettingsPage />} />
         <Route path="/middleware-detail" element={<FeatureGate feature="middlewareEnabled"><MiddlewareDetailPage /></FeatureGate>} />

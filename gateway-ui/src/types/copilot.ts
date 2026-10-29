@@ -151,6 +151,16 @@ export interface AiAnalysisEvidence {
   step: string;
   samples: Record<string, number>;
   missing: string[];
+  queries?: Array<{
+    key: string;
+    query: string;
+    from: string;
+    to: string;
+    step: string;
+    samples: number;
+    invalidSamples: number;
+    status: 'AVAILABLE' | 'MISSING' | 'ERROR';
+  }>;
 }
 
 export interface AiTimeRangeAnalysisResult {

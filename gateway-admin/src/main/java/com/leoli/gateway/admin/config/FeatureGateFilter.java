@@ -24,7 +24,8 @@ public class FeatureGateFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
-        String feature = requiredFeature(request.getMethod(), request.getRequestURI());
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        String feature = requiredFeature(request.getMethod(), path);
         if (feature != null && !enabled(feature)) {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType("application/json;charset=UTF-8");
@@ -39,13 +40,22 @@ public class FeatureGateFilter extends OncePerRequestFilter {
         if (write && (path.equals("/api/stress-test/start") || path.equals("/api/stress-test/quick"))) {
             return "stressTest";
         }
-        if (write && (path.startsWith("/api/plugins/") || path.startsWith("/api/plugin-bindings"))) {
+        if (write && (under(path, "/api/plugins") || under(path, "/api/plugin-bindings")
+                || path.matches("/api/routes/[^/]+/plugins(?:/.*)?"))) {
             return "plugins";
         }
-        if (path.startsWith("/api/kubernetes")) {
+        if (write && (under(path, "/api/service-middleware")
+                || path.equals("/api/services/middleware-metadata"))) {
+            return "middleware";
+        }
+        if (under(path, "/api/kubernetes")) {
             return "kubernetes";
         }
         return null;
+    }
+
+    private static boolean under(String path, String root) {
+        return path.equals(root) || path.startsWith(root + "/");
     }
 
     private boolean enabled(String feature) {

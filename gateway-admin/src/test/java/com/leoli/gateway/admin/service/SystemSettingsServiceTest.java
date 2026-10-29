@@ -57,6 +57,7 @@ class SystemSettingsServiceTest {
         SystemSettingsEntity disabled = new SystemSettingsEntity();
         disabled.setStressTestEnabled(false);
         disabled.setPluginsEnabled(false);
+        disabled.setMiddlewareEnabled(false);
         disabled.setKubernetesEnabled(false);
         when(repository.findById(SystemSettingsEntity.DEFAULT_ID)).thenReturn(Optional.of(disabled));
         FeatureGateFilter filter = new FeatureGateFilter(service);
@@ -65,6 +66,12 @@ class SystemSettingsServiceTest {
                 {"POST", "/api/stress-test/start"},
                 {"POST", "/api/stress-test/quick"},
                 {"POST", "/api/plugins/upload"},
+                {"POST", "/api/routes/route-a/plugins"},
+                {"PUT", "/api/routes/route-a/plugins/binding-a"},
+                {"DELETE", "/api/routes/route-a/plugins/binding-a"},
+                {"POST", "/api/routes/route-a/plugins/binding-a/enable"},
+                {"POST", "/api/routes/route-a/plugins/binding-a/disable"},
+                {"POST", "/api/services/middleware-metadata"},
                 {"DELETE", "/api/plugin-bindings/1"},
                 {"GET", "/api/kubernetes/clusters"},
         }) {
@@ -79,5 +86,39 @@ class SystemSettingsServiceTest {
         filter.doFilter(history, response, new MockFilterChain());
         assertEquals(200, response.getStatus(), "read-only history stays available");
         verify(repository, never()).save(any());
+    }
+
+    @Test
+    void readOnlyDiagnosticsAndUnrelatedRouteWritesStayAvailable() throws Exception {
+        SystemSettingsEntity disabled = new SystemSettingsEntity();
+        disabled.setPluginsEnabled(false);
+        disabled.setMiddlewareEnabled(false);
+        when(repository.findById(SystemSettingsEntity.DEFAULT_ID)).thenReturn(Optional.of(disabled));
+        for (String[] request : new String[][]{
+                {"GET", "/api/routes/route-a/plugins"},
+                {"GET", "/api/service-middleware/services"},
+                {"POST", "/api/services/traces"},
+                {"PUT", "/api/routes/route-a"},
+        }) {
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            new FeatureGateFilter(service).doFilter(new MockHttpServletRequest(request[0], request[1]), response, new MockFilterChain());
+            assertEquals(200, response.getStatus());
+        }
+    }
+
+    @Test
+    void enabledPluginWritesPassAndDisabledWritesRespectServletContext() throws Exception {
+        SystemSettingsEntity settings = new SystemSettingsEntity();
+        when(repository.findById(SystemSettingsEntity.DEFAULT_ID)).thenReturn(Optional.of(settings));
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/admin/api/routes/route-a/plugins");
+        request.setContextPath("/admin");
+        MockHttpServletResponse allowed = new MockHttpServletResponse();
+        new FeatureGateFilter(service).doFilter(request, allowed, new MockFilterChain());
+        assertEquals(200, allowed.getStatus());
+
+        settings.setPluginsEnabled(false);
+        MockHttpServletResponse blocked = new MockHttpServletResponse();
+        new FeatureGateFilter(service).doFilter(request, blocked, new MockFilterChain());
+        assertEquals(403, blocked.getStatus());
     }
 }

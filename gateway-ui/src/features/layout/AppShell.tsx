@@ -42,10 +42,9 @@ const AppShell: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const { settings, ready, hasClusterDeployment } = useSystemSettings();
-  // Kubernetes is a deployment-shaped capability: switched on AND at least one cluster instance.
-  const kubernetesVisible = !ready || !settings
-    || (settings.kubernetesEnabled && hasClusterDeployment);
+  const { settings, ready } = useSystemSettings();
+  // Cluster management must also be reachable before the first deployment exists.
+  const kubernetesVisible = !ready || !settings || settings.kubernetesEnabled;
 
   const menuItems: MenuItem[] = useMemo(() => [
     getItem(t('menu.instances'), 'instances', <CloudServerOutlined />),
