@@ -2,6 +2,8 @@ package com.leoli.gateway.admin.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.leoli.gateway.admin.serializer.ServerLocalDateTimeSerializer;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -82,6 +84,7 @@ public class GatewayInstanceEntity {
     private Integer statusCode;  // 0-starting, 1-running, 2-error, 3-stopping, 4-stopped
     
     @Column(name = "last_heartbeat_time")
+    @JsonSerialize(using = ServerLocalDateTimeSerializer.class)
     private LocalDateTime lastHeartbeatTime;  // Last heartbeat timestamp
     
     @Column(name = "missed_heartbeats")

@@ -67,6 +67,12 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // An absent/expired/revoked login is 401; authenticated RBAC failures remain 403.
+                .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, failure) -> {
+                    response.setStatus(401);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"code\":401,\"message\":\"Login required or session expired\"}");
+                }))
                 .authorizeHttpRequests(auth -> auth
                         // FIX (SSE stream never closes): ASYNC/ERROR dispatches are continuations of an
                         // already-authorized REQUEST dispatch (SseEmitter completion, error page). Spring
