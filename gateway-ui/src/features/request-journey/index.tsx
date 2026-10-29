@@ -38,9 +38,11 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
   const [selected, setSelected] = useState<TokenUsageEvent | null>(null);
   const request = useRequest(signal => getRequestJourney(instanceId, traceId, { signal }), { deps: [instanceId, traceId] });
   const trace = request.data?.trace;
+  const accessLog = request.data?.accessLog;
+  const evidence = trace ?? accessLog;
   const usage = request.data?.usage ?? [];
   const expectedRoute = params.get('routeId');
-  const actualRoute = trace?.routeId || usage[0]?.routeId;
+  const actualRoute = trace?.routeId || accessLog?.routeId || usage[0]?.routeId;
   const routeId = actualRoute || expectedRoute || '';
   const route = useRequest(signal => getRouteById(routeId, { signal }), { deps: [routeId], immediate: !!routeId });
   const ai = route.data?.category === 'AI' || usage.length > 0;
@@ -121,11 +123,11 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
   const attempts = useRef(0);
   const refreshJourney = request.run;
   useEffect(() => {
-    if (request.loading || request.error || !request.data || attempts.current >= 8 || (trace && (!ai || usage.length))) return;
+    if (request.loading || request.error || !request.data || attempts.current >= 8 || (evidence && (!ai || usage.length))) return;
     const timer = setTimeout(() => { attempts.current += 1; refreshJourney(); }, 1200);
     return () => clearTimeout(timer);
-  }, [request.loading, request.error, request.data, refreshJourney, trace, ai, usage.length]);
-  const diagnosis = requestDiagnosis(trace?.statusCode, usage, ai);
+  }, [request.loading, request.error, request.data, refreshJourney, evidence, ai, usage.length]);
+  const diagnosis = requestDiagnosis(evidence?.statusCode, usage, ai, !!accessLog && !trace);
   const stepStatus = (done: boolean) => done ? 'finish' as const : 'wait' as const;
   const statusLabel = (value?: string) => t(`tokenUsage.status.${value ?? 'LEGACY'}`, { defaultValue: value ?? '—' });
   return <div className="console-workspace-page" style={{ display: 'grid', gap: 16 }}>
@@ -143,15 +145,15 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
         <Typography.Text copyable code>Trace ID: {traceId}</Typography.Text>
         <Steps size="small" items={[
           { title: t('journey.configuration'), status: stepStatus(!!route.data) },
-          { title: t('journey.call'), status: stepStatus(!!trace || !!usage.length) },
-          { title: t('journey.trace'), status: stepStatus(!!trace) },
+          { title: t('journey.call'), status: stepStatus(!!evidence || !!usage.length) },
+          { title: t('journey.trace'), status: stepStatus(!!trace), description: !trace && accessLog ? t('journey.traceNotCollected') : undefined },
           { title: t('journey.metering'), status: stepStatus(!ai || !!usage.length), description: !ai && route.data ? t('journey.notAi') : undefined },
           { title: t('journey.diagnosis'), status: stepStatus(diagnosis !== 'pending') },
         ]} />
         {request.error ? <Alert type="error" showIcon message={request.error.message} /> :
-          <Alert showIcon type={diagnosis === 'ok' ? 'success' : ['pending', 'traceMissing', 'usageMissing'].includes(diagnosis) ? 'info' : 'warning'}
+          <Alert showIcon type={diagnosis === 'ok' ? 'success' : ['pending', 'traceMissing', 'usageMissing', 'logOnly'].includes(diagnosis) ? 'info' : 'warning'}
             message={t(`journey.result.${diagnosis}`)} description={t(`journey.advice.${diagnosis}`)} />}
-        {trace && trace.statusCode >= 400 && <Typography.Text type="secondary">{t('journey.httpClue')}</Typography.Text>}
+        {evidence && evidence.statusCode >= 400 && <Typography.Text type="secondary">{t('journey.httpClue')}</Typography.Text>}
         {actualRoute && expectedRoute && actualRoute !== expectedRoute &&
           <Alert type="warning" showIcon message={t('journey.routeMismatch')} description={`${expectedRoute} → ${actualRoute}`} />}
         {route.error && <Alert type="warning" showIcon message={t('journey.routeUnavailable')} />}
@@ -167,13 +169,15 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
         </Space>
       </Space>
     </Card>
-    <Card title={t('journey.trace')} loading={request.loading && !request.data}>
-      {trace ? <Descriptions column={{ xs: 1, sm: 2 }} items={[
-        { key: 'route', label: t('tokenUsage.table.route'), children: trace.routeId || '—' },
-        { key: 'path', label: t('journey.call'), children: `${trace.method} ${trace.path ?? ''}` },
-        { key: 'status', label: 'HTTP', children: <Tag color={trace.statusCode >= 400 ? 'red' : 'green'}>{trace.statusCode}</Tag> },
-        { key: 'latency', label: t('tokenUsage.card.avgLatency'), children: `${trace.latencyMs} ms` },
-        { key: 'error', label: t('journey.error'), children: trace.errorType || trace.errorMessage || '—' },
+    <Card title={t(trace || !accessLog ? 'journey.trace' : 'journey.accessLog')} loading={request.loading && !request.data}>
+      {!trace && accessLog && <Alert type="info" showIcon message={t('journey.result.logOnly')}
+        description={t('journey.advice.logOnly')} style={{ marginBottom: 16 }} />}
+      {evidence ? <Descriptions column={{ xs: 1, sm: 2 }} items={[
+        { key: 'route', label: t('tokenUsage.table.route'), children: evidence.routeId || '—' },
+        { key: 'path', label: t('journey.call'), children: `${evidence.method} ${evidence.path ?? ''}` },
+        { key: 'status', label: 'HTTP', children: <Tag color={evidence.statusCode >= 400 ? 'red' : 'green'}>{evidence.statusCode}</Tag> },
+        { key: 'latency', label: t('tokenUsage.card.avgLatency'), children: `${trace ? trace.latencyMs : accessLog?.durationMs} ms` },
+        { key: 'error', label: t('journey.error'), children: trace?.errorType || evidence.errorMessage || '—' },
       ]} /> : <Typography.Text type="secondary">{t('journey.advice.traceMissing')}</Typography.Text>}
     </Card>
     <Card title={t('journey.metering')}>

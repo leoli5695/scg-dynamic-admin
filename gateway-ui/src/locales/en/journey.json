@@ -1,6 +1,10 @@
 {
+  "journey.accessLog": "Access log evidence",
+  "journey.traceNotCollected": "No trace record available",
+  "journey.result.logOnly": "Access log found; no trace record available",
+  "journey.advice.logOnly": "The captured access log is shown below. The trace may be unsampled, delayed or expired; this does not mean the request did not execute. Editing and resending requires captured trace request content.",
   "journey.title": "Request details and troubleshooting",
-  "journey.subtitle": "Correlate the matched route, trace and token records by Trace ID. Refresh and edit preparation only read records; a real request is resent only after explicit execution confirmation.",
+  "journey.subtitle": "Correlate the matched route, access logs, trace and token records by Trace ID. Refresh and edit preparation only read records; a real request is resent only after explicit execution confirmation.",
   "journey.backToRequests": "Back to request search",
   "journey.editAndResend": "Edit and resend",
   "journey.replayPrepareHint": "Load the captured request for editing without sending it.",

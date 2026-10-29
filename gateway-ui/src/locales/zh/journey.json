@@ -1,6 +1,10 @@
 {
+  "journey.accessLog": "访问日志记录",
+  "journey.traceNotCollected": "暂无追踪记录",
+  "journey.result.logOnly": "已有访问日志，暂无追踪记录",
+  "journey.advice.logOnly": "以下展示已采集的访问日志。追踪可能未被采样、尚未入库或已过保留期，这不代表请求未执行；没有追踪请求内容时无法编辑重发。",
   "journey.title": "请求详情与排障",
-  "journey.subtitle": "以同一 Trace ID 关联实际命中的路由、追踪与 Token 明细。刷新和准备编辑只读取记录；仅在执行确认后才会重新发送实际请求。",
+  "journey.subtitle": "以同一 Trace ID 关联实际命中的路由、访问日志、追踪与 Token 明细。刷新和准备编辑只读取记录；仅在执行确认后才会重新发送实际请求。",
   "journey.backToRequests": "返回请求查询中心",
   "journey.editAndResend": "编辑并重发",
   "journey.replayPrepareHint": "读取已采集的请求供编辑，此操作不会发送请求。",

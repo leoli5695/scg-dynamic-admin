@@ -2,6 +2,7 @@ package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.repository.RequestTraceRepository;
+import com.leoli.gateway.admin.repository.AccessLogEntryRepository;
 import com.leoli.gateway.admin.service.TokenUsageAnalyticsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,7 @@ import java.util.Map;
 public class RequestJourneyController {
     private final RequestTraceRepository traces;
     private final TokenUsageAnalyticsService usage;
+    private final AccessLogEntryRepository accessLogs;
 
     @GetMapping("/{traceId}")
     public ApiResponse<Map<String, Object>> get(@PathVariable String traceId, @RequestParam String instanceId) {
@@ -35,6 +37,17 @@ public class RequestJourneyController {
                     return view;
                 }).orElse(null));
         result.put("usage", usage.eventsByTrace(instanceId,traceId).get("content"));
+        result.put("accessLog", accessLogs.findFirstByInstanceIdAndTraceIdOrderByLogTimestampDescIdDesc(instanceId, traceId)
+                .map(entry -> {
+                    Map<String, Object> view = new LinkedHashMap<>();
+                    view.put("id", entry.getId()); view.put("traceId", entry.getTraceId());
+                    view.put("instanceId", entry.getInstanceId()); view.put("routeId", entry.getRouteId());
+                    view.put("method", entry.getMethod()); view.put("path", entry.getPath());
+                    view.put("statusCode", entry.getStatusCode()); view.put("durationMs", entry.getDurationMs());
+                    view.put("timestamp", entry.getLogTimestamp().atOffset(java.time.ZoneOffset.UTC).toString());
+                    view.put("errorMessage", entry.getErrorMessage());
+                    return view;
+                }).orElse(null));
         return ApiResponse.success(result);
     }
 }

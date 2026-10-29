@@ -74,7 +74,11 @@ class RequestCenterSearchTest {
         AccessLogEntryRepository logs = repositories.getRepository(AccessLogEntryRepository.class);
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         RequestTraceService service = new RequestTraceService(traces, null, mapper);
+        var usage = org.mockito.Mockito.mock(com.leoli.gateway.admin.service.TokenUsageAnalyticsService.class);
+        org.mockito.Mockito.when(usage.eventsByTrace(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(java.util.Map.of("content", List.of()));
         mvc = MockMvcBuilders.standaloneSetup(
+                        new RequestJourneyController(traces, usage, logs),
                         new RequestTraceController(service, null, null, null, null, null),
                         new AccessLogConfigController(null, null, logs, mapper))
                 .setControllerAdvice(new GlobalExceptionHandler())
@@ -85,6 +89,42 @@ class RequestCenterSearchTest {
     void beginTransaction() {
         em.getTransaction().begin();
         statements.clear();
+    }
+
+    @Test
+    void logOnlyJourneyIsExactInstanceScopedAndIndependentOfSearchWindow() throws Exception {
+        LocalDateTime old = START.minusDays(30);
+        log("unsampled", "gw-a", "route-a", "GET", 200, "/old", old);
+        long expected = log("unsampled", "gw-a", "route-a", "POST", 503, "/recorded", old);
+        log("unsampled", "gw-b", "foreign", "GET", 200, "/foreign", END);
+        log("other-trace", "gw-a", "other", "GET", 200, "/other", END);
+        mvc.perform(get("/api/request-journeys/unsampled").param("instanceId", "gw-a"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.trace").isEmpty())
+                .andExpect(jsonPath("$.data.usage").isEmpty())
+                .andExpect(jsonPath("$.data.accessLog.id").value((int) expected))
+                .andExpect(jsonPath("$.data.accessLog.instanceId").value("gw-a"))
+                .andExpect(jsonPath("$.data.accessLog.routeId").value("route-a"))
+                .andExpect(jsonPath("$.data.accessLog.path").value("/recorded"))
+                .andExpect(jsonPath("$.data.accessLog.statusCode").value(503))
+                .andExpect(jsonPath("$.data.accessLog.timestamp").value(old.atOffset(java.time.ZoneOffset.UTC).toString()));
+        mvc.perform(get("/api/request-journeys/unsampled").param("instanceId", "no-records"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessLog").isEmpty());
+    }
+
+    @Test
+    void historyUsesUtcRangeProducedByLocalBrowserConversion() throws Exception {
+        var timestamp = LocalDateTime.of(2026, 10, 29, 6, 30);
+        long expected = log("utc-log", "gw-a", "route-a", "GET", 200, "/utc", timestamp);
+        mvc.perform(get(HISTORY_URL).param("instanceId", "gw-a")
+                        .param("startTime", "2026-10-29T06:00:00.000Z").param("endTime", "2026-10-29T07:00:00.000Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.entries[0].id").value((int) expected));
+        mvc.perform(get(HISTORY_URL).param("instanceId", "gw-a")
+                        .param("startTime", "2026-10-29T14:00:00").param("endTime", "2026-10-29T15:00:00"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.entries").isEmpty());
     }
 
     @AfterEach

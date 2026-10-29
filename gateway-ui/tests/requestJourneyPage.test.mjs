@@ -169,6 +169,41 @@ async function confirm(h, options = { modifiedBody: 'edited' }, quick = false) {
   return modal(h);
 }
 
+test('unsampled requests display access-log evidence without enabling trace replay', () => {
+  for (const statusCode of [200, 503]) {
+    const accessLog = { id: 91, traceId: 'trace-a', routeId: 'logged-route', method: 'GET', path: '/recorded',
+      statusCode, durationMs: 37, errorMessage: statusCode === 503 ? 'connection failed' : null };
+    const h = journey({ request: { data: { trace: null, accessLog, usage: [] }, loading: false, run() {} } });
+    const tree = h.render();
+    assert.ok(byType(tree, 'Card').some(card => card.props.title === 'journey.accessLog'));
+    assert.ok(byType(tree, 'Alert').some(alert => alert.props.message === 'journey.result.logOnly'));
+    assert.ok(!byType(tree, 'Alert').some(alert => alert.props.message === 'journey.result.pending'));
+    const items = byType(tree, 'Descriptions')[0].props.items;
+    assert.equal(items.find(item => item.key === 'path').children, 'GET /recorded');
+    assert.equal(items.find(item => item.key === 'latency').children, '37 ms');
+    assert.equal(items.find(item => item.key === 'error').children, accessLog.errorMessage || '—');
+    assert.equal(byType(tree, 'Steps')[0].props.items[1].status, 'finish');
+    assert.equal(byType(tree, 'Steps')[0].props.items[2].status, 'wait');
+    assert.equal(button(tree, 'journey.editAndResend').props.disabled, true);
+    assert.equal(button(tree, 'journey.openTrace').props.disabled, true);
+    button(tree, 'journey.openConfiguration').props.onClick();
+    assert.match(h.calls.navigate[0], /logged-route/);
+    assert.deepEqual(h.calls.execute, []);
+    h.unmount();
+  }
+});
+
+test('access-log fallback does not replace trace evidence or imply AI metering exists', () => {
+  const accessLog = { routeId: 'log-route', method: 'GET', path: '/log', statusCode: 200, durationMs: 37 };
+  const h = journey({ request: { data: { trace, accessLog, usage: [] }, loading: false, run() {} } });
+  assert.equal(byType(h.render(), 'Descriptions')[0].props.items.find(item => item.key === 'path').children, 'POST /ai/chat');
+  h.unmount();
+  const ai = journey({ request: { data: { trace: null, accessLog, usage: [] }, loading: false, run() {} }, route: { data: { category: 'AI' } } });
+  assert.ok(byType(ai.render(), 'Alert').some(alert => alert.props.message === 'journey.result.usageMissing'));
+  assert.equal(button(ai.render(), 'journey.editAndResend').props.disabled, true);
+  ai.unmount();
+});
+
 test('return navigation accepts only the current instance requests path, preserving its complete query', () => {
   const h = journey();
   const center = '/instances/gw%2Fa/requests';

@@ -13,7 +13,7 @@ export const routeUsageUrl = (instanceId: string, routeId: string) =>
 export const routeChangesUrl = (instanceId: string, routeId: string) =>
   `/instances/${encodeURIComponent(instanceId)}/audit_logs?${new URLSearchParams({ targetType: 'ROUTE', targetId: routeId })}`;
 
-export function requestDiagnosis(status: number | undefined, usage: { usageStatus?: string; settlementStatus?: string }[], ai: boolean) {
+export function requestDiagnosis(status: number | undefined, usage: { usageStatus?: string; settlementStatus?: string }[], ai: boolean, logOnly = false) {
   if (status === 401 || status === 403) return 'authentication';
   if (status === 429) return 'rateLimit';
   if (status === 404) return 'routing';
@@ -23,5 +23,6 @@ export function requestDiagnosis(status: number | undefined, usage: { usageStatu
   if (usage.some(row => ['UNKNOWN', 'ESTIMATED'].includes(row.usageStatus ?? ''))) return 'usageUnknown';
   if (status === undefined) return usage.length ? 'traceMissing' : 'pending';
   if (ai && !usage.length) return 'usageMissing';
+  if (logOnly) return 'logOnly';
   return 'ok';
 }

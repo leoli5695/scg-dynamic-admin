@@ -12,9 +12,12 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface AccessLogEntryRepository extends JpaRepository<AccessLogEntryEntity, Long>, JpaSpecificationExecutor<AccessLogEntryEntity> {
+
+    Optional<AccessLogEntryEntity> findFirstByInstanceIdAndTraceIdOrderByLogTimestampDescIdDesc(String instanceId, String traceId);
 
     @Query("""
             SELECT l FROM AccessLogEntryEntity l

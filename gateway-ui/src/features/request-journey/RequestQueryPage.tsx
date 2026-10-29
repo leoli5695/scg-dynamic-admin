@@ -9,7 +9,7 @@ import { getHistoryEntries } from '../../api/accessLog';
 import { useRequest } from '../../hooks/useRequest';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
 import { requestJourneyUrl, routeConfigurationUrl } from './links';
-import { readRequestQuery } from './requestQuery';
+import { readRequestQuery, requestLogRange, requestLogLocalTime } from './requestQuery';
 
 interface RequestRow {
   key: string;
@@ -35,11 +35,11 @@ function RequestQuery({ instanceId }: { instanceId: string }) {
   };
   const request = useRequest(async signal => {
     if (query.source === 'logs') {
-      const result = await getHistoryEntries({ ...criteria, startTime: query.from, endTime: query.to }, { signal });
+      const result = await getHistoryEntries({ ...criteria, ...requestLogRange(query.from, query.to) }, { signal });
       return {
         total: result.total,
         rows: result.entries.map((row, index): RequestRow => ({
-          key: `${query.page}-${index}`, time: row['@timestamp'], traceId: row.traceId, routeId: row.routeId,
+          key: `${query.page}-${index}`, time: requestLogLocalTime(row['@timestamp']), traceId: row.traceId, routeId: row.routeId,
           method: row.method, path: row.path, statusCode: row.statusCode, durationMs: row.durationMs,
         })),
       };

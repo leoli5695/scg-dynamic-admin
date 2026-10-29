@@ -21,3 +21,15 @@ export function readRequestQuery(params: URLSearchParams, now = new Date()) {
     statusCode, page, error,
   };
 }
+
+/** The log collector stores the UTC clock without an offset. Keep UI/URL times local,
+ * but send UTC instants to the legacy log API (which parses their UTC wall clock). */
+export function requestLogRange(from: string, to: string) {
+  return { startTime: new Date(from).toISOString(), endTime: new Date(to).toISOString() };
+}
+
+export function requestLogLocalTime(timestamp: string) {
+  const instant = new Date(/(Z|[+-]\d{2}:?\d{2})$/i.test(timestamp) ? timestamp : `${timestamp}Z`);
+  return Number.isNaN(instant.getTime()) ? '—'
+    : new Date(instant.getTime() - instant.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+}
