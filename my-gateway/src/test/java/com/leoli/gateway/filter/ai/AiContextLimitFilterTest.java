@@ -174,6 +174,32 @@ class AiContextLimitFilterTest {
     }
 
     @Test
+    @DisplayName("Enabled with no limit still passes through, but says so once instead of silently")
+    void enabledWithNoLimitWarnsOnceRatherThanPerRequest() {
+        stubConfig(config(0));
+        when(chain.filter(any())).thenReturn(Mono.empty());
+
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(AiContextLimitFilter.class);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            for (int i = 0; i < 3; i++) {
+                StepVerifier.create(filter.filter(post(chatBody()), chain)).expectComplete().verify();
+            }
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        long warnings = appender.list.stream()
+                .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.WARN)
+                .filter(e -> e.getFormattedMessage().contains("maxContextTokens"))
+                .count();
+        assertEquals(1, warnings, "an enabled-but-unprotected route must be visible, not logged per request");
+        verify(chain, times(3)).filter(any());
+    }
+
+    @Test
     @DisplayName("Custom error status code is honoured")
     void customErrorStatus() {
         AiContextLimitConfig c = config(100);

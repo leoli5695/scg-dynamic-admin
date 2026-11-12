@@ -42,9 +42,6 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AiSemanticCacheFilterTest {
 
-    private static final String ROUTE_ATTR =
-            "org.springframework.cloud.gateway.support.ServerWebExchangeUtils.gatewayRouteId";
-
     @Mock
     private StrategyManager strategyManager;
     @Mock
@@ -75,7 +72,9 @@ class AiSemanticCacheFilterTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Flux.just(buffer));
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
-        exchange.getAttributes().put(ROUTE_ATTR, "ai-route");
+        exchange.getAttributes().put(org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR,
+                org.springframework.cloud.gateway.route.Route.async().id("ai-route").uri("http://localhost")
+                        .predicate(e -> true).build());
         return exchange;
     }
 
@@ -88,7 +87,9 @@ class AiSemanticCacheFilterTest {
             builder.header("X-Tenant-Id", tenantHeader);
         }
         MockServerWebExchange exchange = MockServerWebExchange.from(builder.body(Flux.just(buffer)));
-        exchange.getAttributes().put(ROUTE_ATTR, "ai-route");
+        exchange.getAttributes().put(org.springframework.cloud.gateway.support.ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR,
+                org.springframework.cloud.gateway.route.Route.async().id("ai-route").uri("http://localhost")
+                        .predicate(e -> true).build());
         return exchange;
     }
 
@@ -109,10 +110,29 @@ class AiSemanticCacheFilterTest {
     }
 
     @Test
+    @DisplayName("Another route's entry for the same model and tenant is not served")
+    void cacheIsIsolatedPerRoute() {
+        stubConfig(config());
+        // Same model, same absent tenant, different route. The two routes can inject different
+        // system prompts or point at different upstreams, and the embedded prompt text never sees
+        // a server-side injection, so sharing a shard would serve one route the other's answer.
+        store.put("qwen-plus|*|other-route", new float[]{1f, 0f}, "{\"cached\":true}", 60);
+        when(embeddingClient.embed(anyString(), any(), any(), any(), any()))
+                .thenReturn(Mono.just(new float[]{1f, 0f}));
+        when(chain.filter(any())).thenReturn(Mono.empty());
+
+        MockServerWebExchange exchange = post("{\"model\":\"qwen-plus\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}");
+        StepVerifier.create(filter.filter(exchange, chain)).expectComplete().verify();
+
+        verify(chain).filter(any());
+        assertEquals("MISS", exchange.getResponse().getHeaders().getFirst(AiSemanticCacheFilter.CACHE_HEADER));
+    }
+
+    @Test
     @DisplayName("HIT short-circuits with the cached response, chain not called")
     void hitShortCircuits() {
         stubConfig(config());
-        store.put("qwen-plus|*", new float[]{1f, 0f}, "{\"cached\":true}", 60);
+        store.put("qwen-plus|*|ai-route", new float[]{1f, 0f}, "{\"cached\":true}", 60);
         when(embeddingClient.embed(anyString(), any(), any(), any(), any()))
                 .thenReturn(Mono.just(new float[]{1f, 0f}));
 
@@ -247,7 +267,7 @@ class AiSemanticCacheFilterTest {
     void unprovenTenantHeaderBypassesCache() {
         stubConfig(config());
         // An entry sitting in exactly the scope the forged header would select.
-        store.put("qwen-plus|victim", new float[]{1f, 0f}, "{\"cached\":true}", 60);
+        store.put("qwen-plus|victim|ai-route", new float[]{1f, 0f}, "{\"cached\":true}", 60);
         when(chain.filter(any())).thenReturn(Mono.empty());
 
         MockServerWebExchange exchange = post("{\"model\":\"qwen-plus\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}", "victim");
@@ -263,7 +283,7 @@ class AiSemanticCacheFilterTest {
     @DisplayName("Tenant from verified API key metadata scopes the cache and can HIT")
     void trustedTenantFromApiKeyMetadataHits() {
         stubConfig(config());
-        store.put("qwen-plus|acme", new float[]{1f, 0f}, "{\"cached\":true}", 60);
+        store.put("qwen-plus|acme|ai-route", new float[]{1f, 0f}, "{\"cached\":true}", 60);
         when(embeddingClient.embed(anyString(), any(), any(), any(), any()))
                 .thenReturn(Mono.just(new float[]{1f, 0f}));
 
@@ -279,7 +299,7 @@ class AiSemanticCacheFilterTest {
     @DisplayName("An authenticated tenant cannot read another tenant entry via a forged header")
     void forgedHeaderCannotCrossAuthenticatedTenant() {
         stubConfig(config());
-        store.put("qwen-plus|victim", new float[]{1f, 0f}, "{\"cached\":true}", 60);
+        store.put("qwen-plus|victim|ai-route", new float[]{1f, 0f}, "{\"cached\":true}", 60);
         when(embeddingClient.embed(anyString(), any(), any(), any(), any()))
                 .thenReturn(Mono.just(new float[]{1f, 0f}));
         when(chain.filter(any())).thenReturn(Mono.empty());

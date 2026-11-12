@@ -24,6 +24,11 @@ import java.util.Map;
  * Served by a native WebFlux controller: {@code /v1/models} is not matched by the
  * AI proxy route (which only matches {@code /v1/chat/completions}), so there is no
  * conflict with SCG routing. No credentials are exposed - only model ids.
+ * <p>
+ * Because it sits outside SCG routing, no route auth strategy applies to it: the list is
+ * <b>unauthenticated and global</b>, so in a multi-tenant deployment any caller learns every
+ * tenant's configured model aliases. Set {@code gateway.ai.models-endpoint.enabled=false} to
+ * turn it off where that disclosure is not acceptable.
  *
  * @author leoli
  */
@@ -35,6 +40,9 @@ public class AiModelsEndpoint {
     private final StrategyManager strategyManager;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Value("${gateway.ai.models-endpoint.enabled:true}")
+    private boolean enabled = true;
+
     public AiModelsEndpoint(StrategyManager strategyManager, ObjectMapper objectMapper) {
         this.strategyManager = strategyManager;
         this.objectMapper = objectMapper;
@@ -42,6 +50,10 @@ public class AiModelsEndpoint {
 
     @GetMapping("/models")
     public Map<String, Object> listModels() {
+        if (!enabled) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.NOT_FOUND, "Model discovery is disabled");
+        }
         long created = Instant.now().getEpochSecond();
         Map<String, Map<String, Object>> byId = new LinkedHashMap<>();
 

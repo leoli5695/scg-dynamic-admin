@@ -242,7 +242,7 @@ curl -X POST http://localhost:9090/api/provider-credentials \
 
 ### 3.7 北向模型发现端点
 
-`GET /v1/models`（`my-gateway/.../controller/AiModelsEndpoint.java:32,43`）是网关进程上的原生 WebFlux 控制器，返回 OpenAI 形状：
+`GET /v1/models`（`my-gateway/.../controller/AiModelsEndpoint.java:38,52`）是网关进程上的原生 WebFlux 控制器，返回 OpenAI 形状：
 
 ```json
 {"object":"list","data":[{"id":"<model>","object":"model","created":1730000000,"owned_by":"deepseek"}]}
@@ -251,6 +251,10 @@ curl -X POST http://localhost:9090/api/provider-credentials \
 模型清单来自所有**已启用**的 `AI_PROXY` 策略：`upstreams[].modelMapping` 的键、`modelRouting` 的键、`modelMapping` 的键、`defaultModel`；`owned_by` 取 provider id，解析不出则为 `"custom"`（`:48-107`）。**不暴露任何凭据**。
 
 ⚠️ 该端点**无鉴权**：`my-gateway` 只依赖 `spring-security-crypto`（`my-gateway/pom.xml:69-73`），没有 Web 安全自动配置；进程里只有两个 `WebFilter`——`ActuatorEndpointFilter` 和只守 `/internal/**` 的 `InternalApiAuthWebFilter`。`AuthenticationGlobalFilter` 是 `GlobalFilter`，只作用于**被路由的请求**，管不到原生控制器。所以暴露在公网的网关，任何人都能列出你的模型清单。
+
+而且清单是**全局的**：它遍历所有已启用的 `AI_PROXY` 策略，不按调用方所属租户过滤，所以多租户部署里任何调用方都能学到其他租户配置的模型别名。
+
+**可以关掉**：`gateway.ai.models-endpoint.enabled=false` → 该端点返回 404，且不再读取策略（`AiModelsEndpoint.java:44,52-57`）。默认 `true`，因为很多 OpenAI 兼容 SDK 会先调 `/v1/models` 做发现，默认关掉会破坏它们。**关掉只是消除披露，不是给它加了鉴权**——要真正按租户鉴权，需要把这个端点纳入路由链或为它单独实现身份解析，那是尚未做的设计改动。
 
 ---
 
@@ -379,28 +383,28 @@ curl -X POST http://localhost:9090/api/provider-credentials \
 
 ### 5.4 ★ 隔离边界：跨路由 / 跨租户共享吗
 
-scope 字符串 = `<model 或 *>|<tenant 或 *>`（`AiSemanticCacheFilter.java:204-208`）：
+scope 字符串 = `<model 或 *>|<tenant 或 *>|<routeId 或 *>`（`AiSemanticCacheFilter.java:233-241`）：
 
 ```java
 String m = config.isScopeByModel()  ? (model  != null ? model  : "*") : "*";
 String t = config.isScopeByTenant() ? (tenant != null ? tenant : "*") : "*";
-return m + "|" + t;
+return m + "|" + t + "|" + (routeId != null ? routeId : "*");
 ```
 
 据实回答：
 
 | 维度 | 是否隔离 | 依据 |
 | --- | --- | --- |
-| **跨路由** | **不隔离，会共享。** scope 里**没有 routeId**。两条不同路由只要 `model` 与租户解析结果相同，就共用同一批缓存条目 | `:204-208`（scope 组成）；`SemanticCacheStore.java:38,53`（分片与匹配都只按 scope 字符串） |
+| **跨路由** | **隔离（无条件，没有开关）。** routeId 恒在 scope 里。此前不隔离：两条路由只要 `model` 与租户解析结果相同就共用缓存，而它们可能注入不同的 system prompt 或指向不同上游，用于 embedding 的 prompt 文本又看不到服务端注入，于是一条路由会把另一条的答案发给调用方 | `:233-241`（scope 组成）；`SemanticCacheStore.java:38,53`（分片与匹配都只按 scope 字符串） |
 | **跨租户** | 默认隔离（`scopeByTenant=true`），但**仅当租户能被服务端验证** | `AiSemanticCacheConfig.java`（`scopeByTenant` 默认 true）+ 下表 |
 | **跨模型** | 默认隔离（`scopeByModel=true`） | 同上 |
 | **跨网关实例** | **不共享**（进程内内存，重启即空） | `SemanticCacheStore.java:12-21` |
 
-租户身份**只取服务端验证过的来源**，优先级与配额过滤器一致：`api_key_metadata.tenantId` → `jwt_claims.tenant_id`（`:278-293`）。**绝不读原始 `X-Tenant-Id` 头**——scope 是隔离边界，客户端自选的值会让任何调用方读到并污染别人的缓存。具体行为：
+租户身份**只取服务端验证过的来源**，优先级与配额过滤器一致：`api_key_metadata.tenantId` → `jwt_claims.tenant_id`。**绝不读原始 `X-Tenant-Id` 头**——scope 是隔离边界，客户端自选的值会让任何调用方读到并污染别人的缓存。具体行为：
 
-- 客户端发了 `X-Tenant-Id` 但没有任何已验证租户 → **整个请求绕过缓存**（既不查也不存），`:132-140`。
-- 客户端没发 `X-Tenant-Id` 且没有已验证租户 → 租户位取 `*`，**所有匿名请求共用 `model|*` 这一个 scope**。若路由不要求认证，这等于把匿名流量池化在一个共享缓存里。要在公网匿名场景使用，必须关掉 `scopeByTenant` 的错觉、改为在路由上强制认证，或接受匿名共享。
-- `scopeByTenant=false` → 租户位恒为 `*`，跨租户共享。
+- 客户端发了 `X-Tenant-Id` 但没有任何已验证租户 → **整个请求绕过缓存**（既不查也不存），`:149-156`。
+- 客户端没发 `X-Tenant-Id` 且没有已验证租户 → 租户位取 `*`，**同一路由上的所有匿名请求共用 `model|*|routeId` 这一个 scope**。若路由不要求认证，这等于把该路由的匿名流量池化在一个共享缓存里（跨路由已隔离，不再波及其他路由）。要在公网匿名场景使用，必须在路由上强制认证，或接受同路由匿名共享。
+- `scopeByTenant=false` → 租户位恒为 `*`，该路由内跨租户共享。
 
 ---
 

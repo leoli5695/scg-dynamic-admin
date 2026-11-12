@@ -30,6 +30,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * AI context-window limit filter (Higress ai-context-limit counterpart).
@@ -59,6 +61,9 @@ public class AiContextLimitFilter implements GlobalFilter, Ordered {
     private final StrategyManager strategyManager;
     private final ObjectMapper objectMapper;
 
+    /** Routes already warned about being enabled with no limit, so the warning is not per-request. */
+    private final Set<String> unprotectedRoutes = ConcurrentHashMap.newKeySet();
+
     @Autowired
     public AiContextLimitFilter(StrategyManager strategyManager, ObjectMapper objectMapper) {
         this.strategyManager = strategyManager;
@@ -70,9 +75,20 @@ public class AiContextLimitFilter implements GlobalFilter, Ordered {
         String routeId = RouteUtils.getRouteId(exchange);
         AiContextLimitConfig config = resolveConfig(routeId);
 
-        if (config == null || !config.isEnabled() || config.getMaxContextTokens() <= 0) {
+        if (config == null || !config.isEnabled()) {
             return chain.filter(exchange);
         }
+        if (config.getMaxContextTokens() <= 0) {
+            // Enabled with a non-positive limit is a silent no-op: the operator asked for context
+            // protection and got none. Warn once per route instead of on every request.
+            if (unprotectedRoutes.add(routeId)) {
+                log.warn("AI context limit is enabled on route {} but maxContextTokens={} (<=0 disables the "
+                        + "check), so requests pass through unprotected. Set a positive limit or disable "
+                        + "the strategy.", routeId, config.getMaxContextTokens());
+            }
+            return chain.filter(exchange);
+        }
+        unprotectedRoutes.remove(routeId);
         if (exchange.getRequest().getMethod() != HttpMethod.POST) {
             return chain.filter(exchange);
         }

@@ -111,4 +111,19 @@ class AiModelsEndpointTest {
         assertEquals("openai", data.get(0).get("owned_by"));
         assertFalse(data.toString().contains("secret-ref"));
     }
+
+    @Test
+    void disabledEndpointReturns404WithoutReadingStrategies() {
+        org.springframework.test.util.ReflectionTestUtils.setField(endpoint, "enabled", false);
+        var ex = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> endpoint.listModels());
+        assertEquals(org.springframework.http.HttpStatus.NOT_FOUND, ex.getStatusCode());
+        org.mockito.Mockito.verifyNoInteractions(strategyManager);
+    }
+
+    @Test
+    void enabledByDefaultSoOpenAiClientsCanStillDiscoverModels() {
+        when(strategyManager.getAllStrategies()).thenReturn(List.of());
+        assertEquals("list", endpoint.listModels().get("object"));
+    }
 }

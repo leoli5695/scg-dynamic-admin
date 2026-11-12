@@ -154,7 +154,7 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
                                 routeId, TENANT_HEADER);
                         return chain.filter(rebuild(exchange, bytes));
                     }
-                    String scope = scope(config, model, tenant);
+                    String scope = scope(config, model, tenant, routeId);
 
                     LlmProvider embeddingProvider = ProviderRegistry.byId(config.getEmbeddingProvider()).orElse(null);
                     if (embeddingProvider == null || isBlank(config.getEmbeddingCredentialRef()) || isBlank(prompt)) {
@@ -230,10 +230,14 @@ public class AiSemanticCacheFilter implements GlobalFilter, Ordered {
         return sb.toString().trim();
     }
 
-    private String scope(AiSemanticCacheConfig config, String model, String tenant) {
+    private String scope(AiSemanticCacheConfig config, String model, String tenant, String routeId) {
         String m = config.isScopeByModel() ? (model != null ? model : "*") : "*";
         String t = config.isScopeByTenant() ? (tenant != null ? tenant : "*") : "*";
-        return m + "|" + t;
+        // routeId is always part of the key: two routes serving the same model to the same tenant
+        // can inject different system prompts or point at different upstreams, and the prompt text
+        // extracted for the embedding does not see server-side injections. Sharing a shard across
+        // routes would let one route serve the other's answer.
+        return m + "|" + t + "|" + (routeId != null ? routeId : "*");
     }
 
     /** Decorator that captures a successful upstream JSON body and stores it in the cache. */
