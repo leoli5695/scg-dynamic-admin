@@ -182,7 +182,7 @@ URL 拼接见 `LlmProvider.resolveChatUrl` / `resolveEmbeddingsUrl`（`:71-87`�
 
 ### 3.4 密钥从哪来
 
-**存放**：`provider_credentials` 表（`gateway-admin/src/main/resources/sql/provider-credentials.sql`）。`encrypted_key` 是 AES-GCM 密文 `base64(iv || ciphertext)`，`key_hint` 是 UI 用的掩码尾串，`credential_ref` 有唯一索引。策略与服务配置里只出现 `credentialRef`，**从不出现明文**。
+**存放**：`provider_credentials` 表（`gateway-admin/src/main/resources/sql/provider-credentials.sql`）。`encrypted_key` 是 AES-GCM 密文 `v2:base64(salt || iv || ciphertext)`（16 字节随机 salt、12 字节 IV、128 位 tag；AES 密钥由 PBKDF2WithHmacSHA256 210k 次迭代派生，见 `CredentialCryptoService.java:27-33,104`）。无前缀的旧密文仍用单次无盐 SHA-256 派生的密钥解密，下次重新加密时升级为 v2。`key_hint` 是 UI 用的掩码尾串，`credential_ref` 有唯一索引。策略与服务配置里只出现 `credentialRef`，**从不出现明文**。
 
 **管理端 CRUD**：`/api/provider-credentials`（`ProviderCredentialController.java:26`）。所有响应都套 `ApiResponse{code,message,data,traceId,timestamp}`（`gateway-admin/.../dto/ApiResponse.java:55-75`）。
 

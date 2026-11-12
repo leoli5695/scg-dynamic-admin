@@ -5,7 +5,8 @@
 > 请勿把本文数字当作当前状态。
 >
 > **最新实测入口:** CI 现状见 GitHub `leoli5695/scg-dynamic-admin` 的 workflow `CI` 最近一次 run
-> (事实基线 §5:HEAD 那次 Images build=success、Frontend=success、Backend=failure);
+> (2026-11-12 核实的 run `40879153086` @ `280acde`:Frontend=success、Backend=failure、Images build=failure;
+> 两个 failure 的根因已用 job 日志 + surefire 制品证实并修复,见第一节"实测更正");
 > 本机复测命令 `mvn -o -B -ntp -fae test`、`npm run lint` / `npm run type-check` / `npm run test:routes`。
 > **这些数字每次提交都会漂移**——本文下表测于 2026-10-29 的 `a750757`,请用上面的命令重测,不要引用本文数值。
 >
@@ -19,6 +20,23 @@
 ## 一、可验证的事实
 
 ### 测试(实测,非文档转述)
+
+**实测更正(2026-11-12,HEAD `280acde` + 本批修复的工作树,`mvn -o -B -ntp -fae test`,只跑默认模块):**
+下面那张 2026-10-29 的表已再次过期,保留它是为了留下漂移轨迹,**不要引用其数值**。本次实测:
+my-gateway **1091 / 0 失败 / 0 错误 / 2 跳过**、gateway-admin **757 / 0 失败 / 80 错误**、
+license-server **47**、gateway-trace-starter **160**、license-client **83**、moderation-spi 0;
+默认模块合计 **2138 / 0 失败 / 80 错误**。seckill 是 profile-only 模块,本次未跑。
+
+- **11 个真失败已修**:`AiUsageLifecycleTest` 的 mock 期望同步到 `reportDurably(...)`,
+  无调用者的 `report(...)` 别名删除。
+- **80 个错误全是环境性的**(无本机 MySQL:3306 / Nacos,12 个类在 context 加载期级联)。
+  上一版记的 105 个错误里有 **25 个不是环境性的**:`FeatureGateFilter`(`0d75ef5` 引入)是
+  `@Component` 的 servlet `Filter`,而 `@WebMvcTest` 会加载所有 `Filter`,于是本模块仅有的两个
+  web 切片测试都因取不到 `SystemSettingsService` 而建不起 context。已给两个切片补 `@MockBean`,
+  并新增 `FeatureGateFilterTest`(10 个测试,已做变异验证)覆盖闸门本身。
+- **前端不要引用本文数字**:测量时 `gateway-ui` 正被并行会话重构(123 个测试 / 10 个失败,
+  全部是测试 harness 解析不了新增的 `src/styles/palette.ts`,以及本机 Node 22.14 缺类型剥离),
+  不是产品缺陷,也不是稳定基线。
 
 **实测更正(2026-10-29,commit `a750757` 的工作树):** 评估时点(2e80a2e)的 1603 已过期。当前全反应堆
 `mvn -o -B -ntp -fae test` 为 **2107 个测试、11 个断言失败、84 个错误、6 个跳过**。
@@ -58,6 +76,16 @@
 - **实测更正:** "1603 没有任何独立机器复核过" 也不准确:CI 的 Backend job 确实在独立机器(GitHub runner)
   上跑过,只是结论为 failure,且 job 日志/annotations 匿名取不到(404),故 backend 具体哪个测试红了
   无法匿名定位。
+- **实测更正(2026-11-12):"无法定位"已解除。** 用仓库凭据(只读)取到了 run `40879153086` 的
+  job 日志与 `surefire-reports` 制品,两个红 job 的根因都已证实,不再是推断:
+  **Backend** = my-gateway `Tests run: 1042, Failures: 11`,制品里唯一的红类就是 `AiUsageLifecycleTest`;
+  **Images build** = `Build gateway-admin image` 步骤报
+  `Child module /app/gateway-moderation-spi of /app/pom.xml does not exist`(`61e48a1` 加了模块却没加
+  Dockerfile 的 `COPY`)。两者均已修复。
+  另需更正本文与旧 README 的一个推断:**"CI 是那些 `@SpringBootTest` 类唯一真正执行的地方" 是错的**。
+  `mvn -B -ntp verify` 没有 `-fae`,反应堆在 my-gateway 就停了,Reactor Summary 里
+  `gateway-admin ... SKIPPED`、`demo-service ... SKIPPED`,制品也只含 4 个模块。
+  即那些集成测试**在 CI 也从未跑过**;修掉 11 个失败后它们才会第一次执行。
 - 生产部署(见下)已核实包含全部安全修复,但部署流程此前**没有**"换 jar 后校验 JVM 确实重启"
   这一步;2026-10-27 起由 `scripts/deploy-gateway.sh` 补齐(强制重启 + 断言 JVM 启动时间晚于
   jar 落盘时间 + 健康检查 + 失败回滚)。
@@ -108,7 +136,7 @@
 |---|---|---|
 | 架构设计 | 4.0 | 控制面/数据面分离、模块依赖单向、父 pom 集中管版本。扣分:gateway-admin 仍有 1600 行级 service |
 | 代码质量 | 4.0 | 19 万行 0 FIXME/HACK;ToolExecutor 已从 4241 行拆至 553 行 |
-| 测试 | 3.5 | 2107 测试、**11 个真失败**(实测更正,测于 `a750757`;评估时点为 1603、当时记 0 真失败)。11 个失败全在 `AiUsageLifecycleTest`,由 `a69fd71` 改用 `reportDurably` 未同步测试造成。**按本行自己的扣分逻辑,今天的分数应低于 3.5**——但本表是 2026-10-27 的时点打分,不代为重算;扣分:前端测试覆盖仍薄(现 51 个,评估时误记 0)、trace-starter 曾用 300 次同义反复断言撑数字 |
+| 测试 | 3.5 | 2107 测试、**11 个真失败**(实测更正,测于 `a750757`;评估时点为 1603、当时记 0 真失败)。11 个失败全在 `AiUsageLifecycleTest`,由 `a69fd71` 改用 `reportDurably` 未同步测试造成(**2026-11-12 已修,见第一节;本行分数仍为时点值,不代为重算**)。**按本行自己的扣分逻辑,今天的分数应低于 3.5**——但本表是 2026-10-27 的时点打分,不代为重算;扣分:前端测试覆盖仍薄(现 51 个,评估时误记 0)、trace-starter 曾用 300 次同义反复断言撑数字 |
 | 文档准确性 | 2.5 | 体量与散文诚实度优秀;但测试表曾 6 行错 4 行、自称"没有 CI",即本文取代的旧自评 |
 | 可复现性/交付验证 | 2.0 | CI 已运行但 Backend job 当前 failure 且日志匿名不可取(实测更正,原"CI 从未执行"为错);三个外部依赖只文档化了两个;部署校验 10-27 才补上 |
 | 安全(现状) | 3.0 | 已知缺陷已修且有测试;扣分依据是历史自评与真实缺陷的偏差,而非现存证据 |
@@ -119,8 +147,10 @@
 
 ## 三、已知缺口(按性价比排序)
 
-1. **实测更正:** CI 并非"首跑从未发生";它已运行 39+ 次。当前真实缺口是 **Backend job 持续 failure**
-   (失败步骤 = `Build and test`),且 job 日志/annotations 匿名取不到,无法定位具体红测;需在有权限的环境排查。
+1. **实测更正(2026-11-12):** CI 并非"首跑从未发生";它已运行 67 次。Backend 与 Images build 两个红 job
+   的根因**已定位并修复**(见第一节),不再是"需在有权限的环境排查"。当前真实缺口转为:
+   **Backend job  fail-fast,把 gateway-admin / demo-service 整个跳过**,所以那 12 个集成测试类在 CI 也从未执行;
+   给该 job 加 `-fae` 才能一次拿到全模块结论(会改变 CI 的阻塞语义,未擅自改)。
    评估时"首跑会在 frontend lint 失败"的预测已被证伪(Frontend job 在 `cfb0050` 后转绿)。
 2. **实测更正:** 前端并非 0 测试,现 `tests/` 有 15 个 `*.test.mjs`、51 个测试全过(测于 `a750757`);缺口转为**覆盖广度**
    (相对庞大的 UI 而言 25 个仍偏少),而非"完全没有"。

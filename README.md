@@ -652,52 +652,85 @@ self-service registration - so if they are missing the console has no user at al
 
 ## Testing
 
-Counts below were measured with `mvn -o -B -ntp -fae test` on 2026-10-29 on the working tree at
-commit `a750757` (JDK 21, offline); the `gateway-ui` row comes from `npm run test:routes`.
-"Errors" are tests that could not run at all because an external dependency is absent. These counts
-drift with every commit - re-measure rather than trusting the table, and read the per-module
-aggregate line rather than summing surefire reports (`@Nested` classes make the sum come out low).
+Counts below were measured with `mvn -o -B -ntp -fae test` on 2026-11-12 (JDK 21, offline) on the
+working tree at commit `280acde` plus the fixes described in this section. Only the aggregator's
+default modules were run; `seckill-core-engine` is profile-only, so its row is still the measurement
+from 2026-10-29. "Errors" are tests that could not run at all because an external dependency is
+absent. These counts drift with every commit - re-measure rather than trusting the table, and read
+the per-module aggregate line rather than summing surefire reports (`@Nested` classes make the sum
+come out low: CI's own my-gateway reports sum to 641 against an aggregate of 1042).
 
-> **⚠ The suite is not green.** `my-gateway` has **11 real assertion failures**, all in
-> `AiUsageLifecycleTest`. Commit `a69fd71` switched `TokenUsageCollectorFilter` from
-> `TokenUsageReporter.report(...)` to `reportDurably(...)` without updating the test, which still
-> does `verify(reporter).report(...)`. Usage *is* collected correctly - the failure is a stale mock
-> expectation, not a behavioural regression - but it is 11 red tests and it hides anything else that
-> might break in that class. Verified by running the same class in a clean worktree at the parent
-> commit: identical failures, so it is not caused by anything after it.
+> **The 11 `AiUsageLifecycleTest` failures are fixed.** Commit `a69fd71` switched
+> `TokenUsageCollectorFilter` from `TokenUsageReporter.report(...)` to `reportDurably(...)` without
+> updating the test, which still did `verify(reporter).report(...)`. Usage was always collected
+> correctly - the expectation was stale, not a behavioural regression. The test now verifies
+> `reportDurably(...)`, and the `report(...)` alias, which had no remaining caller, is gone.
 
 | Module | Tests | Failures | Errors | Status |
 |--------|-------|----------|--------|--------|
-| **my-gateway** | 1035 | **11** | 0 | ❌ 11 failures in `AiUsageLifecycleTest` (stale `report` vs `reportDurably` expectation, see above); everything else passes (2 skipped) |
-| **gateway-admin** | 572 | 0 | 80 | ⚠️ 63 of 75 classes green locally; the other 12 are `@SpringBootTest` integration tests that need a reachable MySQL - without one they all fail at context load with `Communications link failure` |
+| **my-gateway** | 1091 | 0 | 0 | ✅ All passing (2 skipped) |
+| **gateway-admin** | 757 | 0 | **80** | ⚠️ 12 integration classes need a reachable MySQL/Nacos - without one they fail at context load with `Communications link failure`. The other 25 errors this run started with were a real defect, now fixed (see below) |
 | **gateway-trace-starter** | 160 | 0 | 0 | ✅ All passing |
 | **license-client** | 83 | 0 | 0 | ✅ All passing |
-| **license-server** | 40 | 0 | 0 | ✅ All passing |
+| **license-server** | 47 | 0 | 0 | ✅ All passing |
 | **gateway-moderation-spi** | 0 | 0 | 0 | ➖ Contract-only module (a single SPI interface), no tests yet |
-| **seckill-core-engine** | 217 | 0 | 4 | ⚠️ 3 need a bare Redis on `localhost:30379`; 1 (`LuaSlidingWindowRateLimitTest`) needs Docker via Testcontainers (4 skipped) |
-| **gateway-ui** | 51 | 0 | 0 | ✅ Node `--test` over the `tests/*.test.mjs` files run by `npm run test:routes`; no component coverage |
-| **Total (JVM)** | **2107** | **11** | **84** | ⚠️ The 84 errors are environmental; the 11 failures are real. Not reproducible on a clean machine without MySQL:3306, Redis:30379 and Docker |
+| **seckill-core-engine** † | 217 | 0 | 4 | ⚠️ 3 need a bare Redis on `localhost:30379`; 1 (`LuaSlidingWindowRateLimitTest`) needs Docker via Testcontainers (4 skipped) |
+| **gateway-ui** ‡ | 123 | 10 | 0 | ⚠️ Not a settled measurement - see below |
+| **Total (JVM, default modules)** | **2138** | **0** | **80** | ⚠️ All 80 errors are environmental; not reproducible on a clean machine without MySQL:3306 and Nacos |
+
+† Profile-only, not part of the 2026-11-12 run; last measured 2026-10-29. Including it, the
+all-module JVM total is 2355 tests / 0 failures / 84 errors.
+
+‡ The `gateway-ui` tree was mid-refactor in a concurrent session when this was measured, so the row is
+a moving snapshot rather than a baseline. All 10 failures are harness/resolve problems, not product
+defects: 7 come from the new untracked `src/styles/palette.ts` that the test harness cannot resolve
+(`MODULE_NOT_FOUND` / `Unexpected dependency`), 1 is the same import inside a child process
+(`tests/topologyLayout.test.mjs`), and 2 are `ERR_UNKNOWN_FILE_EXTENSION` on `.ts` sources because the
+local Node is 22.14 while type stripping needs 22.18+. CI's `Frontend` job was `success` at `280acde`,
+before that refactor landed.
+
+> **25 of the errors were not environmental.** `FeatureGateFilter` (added in `0d75ef5`) is a
+> `@Component` servlet `Filter`, and `@WebMvcTest` includes every `Filter` - so both web-slice tests in
+> gateway-admin loaded it and then could not build its `SystemSettingsService` collaborator, which is
+> a `@Service` and therefore outside the slice. `FilterChainControllerTest` (11) and
+> `StressTestControllerTest` (14) errored on every method regardless of infrastructure. Both slices now
+> mock that service, and `FeatureGateFilterTest` covers the gate itself (10 tests, mutation-checked).
+> Any future `@WebMvcTest` in this module needs the same mock.
 
 CI (`.github/workflows/ci.yml`) runs on every push to `main` and starts real MySQL 8, Redis 7 and
-Nacos v2.3.0 service containers, so the 84 errors above do not occur there - the Actions tab is the
-authoritative verdict, and it is also the only place those 12 `@SpringBootTest` classes and the 3
-Redis-backed seckill tests actually execute.
+Nacos v2.3.0 service containers. It is the authoritative verdict, but it is not yet a complete one -
+see the fail-fast note below.
 
-That verdict is currently **red**, and has been on every non-cancelled run since `2209032`. The
-`Frontend (gateway-ui)` and `Images build` jobs are `success`; `Backend (Java 21, Maven)` is `failure`
-at its `Build and test` step, so the overall run conclusion is `failure`. Check the Actions tab rather
-than trusting any commit pinned here - this repository moves several commits a day.
+At `280acde` (run `40879153086`) the conclusions were `Frontend` **success**, `Backend` **failure**,
+`Images build` **failure**. Both failures are root-caused from CI's own job logs and its uploaded
+`surefire-reports` artifact, not inferred:
 
-The backend job's logs and annotations are not retrievable without authentication
-(`/actions/jobs/<id>/logs` and `/check-runs/<id>/annotations` both return 404 anonymously), so the
-CI-side cause cannot be identified from a clone. What *can* be said: the 11 local
-`AiUsageLifecycleTest` failures described above were introduced by `a69fd71`, which is **later** than
-the commit where CI first went red - so CI has at least one additional failure that is not visible
-locally (it needs the real MySQL/Redis/Nacos service containers). Fixing those 11 should not be
-expected to turn the backend job green on its own.
+- **Images build** died at `Build gateway-admin image` with
+  `Child module /app/gateway-moderation-spi of /app/pom.xml does not exist`. `61e48a1` added that
+  module to the aggregator without adding the matching `COPY` to `gateway-admin/Dockerfile`, and
+  Maven validates the whole default `<modules>` list up front - so the image could not build at all.
+  Fixed by copying every child POM; `DockerfileModuleCoverageTest` now fails the build when a module
+  is added without a matching `COPY`.
+- **Backend** died at `Build and test` (`mvn -B -ntp verify`) with
+  `Tests run: 1042, Failures: 11, Errors: 0, Skipped: 2` in My Gateway - the same 11
+  `AiUsageLifecycleTest` failures described above, and the only red class in the entire artifact.
+  An earlier revision of this document argued CI must have an *additional* failure invisible
+  locally, reasoning from `a69fd71` being later than `2209032` where CI first went red. The artifact
+  disproves that at `280acde`: there is no other failure. Whatever was red at `2209032` has since
+  been fixed.
 
-Counts are the surefire aggregate lines, not a sum of the per-class reports: `@Nested` classes
-(133 in my-gateway, 27 in gateway-admin) make a per-class sum undercount.
+> **The Backend job fails fast, so `gateway-admin` has never run in CI.** `mvn -B -ntp verify` has no
+> `-fae`, and the reactor summary reads `gateway-admin ... SKIPPED`, `demo-service ... SKIPPED`; the
+> uploaded artifact holds only license-client, gateway-trace-starter, license-server and my-gateway.
+> So the claim that CI is "the only place those `@SpringBootTest` classes actually execute" was
+> wrong - they executed nowhere: not locally (no MySQL) and not in CI (skipped behind the my-gateway
+> failure). Clearing the 11 lets them run for the first time, which is a separate verdict.
+>
+> Running them locally surfaced a second, non-environmental defect that CI would have hit next - the
+> `FeatureGateFilter` / `@WebMvcTest` one described under the table above.
+>
+> Adding `-fae` to the Backend job would report every module's result in one run instead of hiding
+> the rest behind the first failure. Deliberately not changed here: it alters what CI blocks on.
 
 `npm run test:routes` imports `.ts` sources directly (for example `src/features/routes/utils.ts`),
 which needs Node's type

@@ -6,17 +6,24 @@
 # was not valid YAML. All four are caught by nothing more exotic than
 # `mvn verify` plus a YAML parse.
 #
-# STATUS (verified 2026-10-28, after 39 runs): the service containers do come up -
-# "Initialize containers" and the Nacos writability probe below both pass - so this
-# workflow is the only place where the 12 gateway-admin @SpringBootTest classes and
-# the 3 Redis-backed seckill tests actually execute. On the maintainer's machine they
-# can only ever error out with "Communications link failure", so a green local
-# `mvn test` says nothing about them. Treat the Actions tab as the authoritative
-# verdict; it is not reproducible locally.
+# STATUS (verified 2026-11-12 against run 40879153086 at 280acde, using the job logs
+# and the uploaded surefire-reports artifact): the service containers do come up -
+# "Initialize containers" and the Nacos writability probe below both pass. Frontend
+# was success; Backend and Images build were both failure.
 #
-# As of that date the Backend job's `mvn verify` step has been red on every
-# non-cancelled run since 2209032, which is not visible locally for exactly the
-# reason above.
+# Backend failed with 11 AiUsageLifecycleTest failures in my-gateway (a stale
+# `report` vs `reportDurably` mock expectation, since fixed). Because `mvn verify`
+# here has no -fae, the reactor stopped there: gateway-admin and demo-service were
+# SKIPPED, so the gateway-admin integration classes below have never actually
+# executed in CI. Locally they cannot run either without MySQL on localhost:3306.
+# Treat the Actions tab as the authoritative verdict, and note that it is currently
+# a partial one - adding -fae would make the job report every module instead of
+# hiding the rest behind the first failure.
+#
+# Images build failed at "Build gateway-admin image" with "Child module
+# /app/gateway-moderation-spi of /app/pom.xml does not exist": a module was added to
+# the aggregator without a matching COPY in gateway-admin/Dockerfile. Fixed, and
+# DockerfileModuleCoverageTest now guards it.
 # =============================================================================
 name: CI
 

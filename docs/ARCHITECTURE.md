@@ -2052,27 +2052,39 @@ The reconcile task ensures consistency between database and Nacos configuration.
 
 | Module | Tests | Coverage Areas |
 |--------|-------|----------------|
-| **my-gateway** | 1035 (**11 failures**, 2 skipped) | Filters, Auth, Rate Limiting, Strategies |
-| **gateway-admin** | 572 (80 errors) | API, Services, Repository, Integration |
+| **my-gateway** | 1091 (0 failures, 2 skipped) | Filters, Auth, Rate Limiting, Strategies |
+| **gateway-admin** | 757 (80 errors) | API, Services, Repository, Integration |
 | **license-client** | 83 | Offline RSA license verification |
 | **gateway-trace-starter** | 160 | Trace context propagation / async reporting |
-| **license-server** | 40 | License issuing API |
+| **license-server** | 47 | License issuing API + management-endpoint authentication |
 | **gateway-moderation-spi** | 0 | Contract-only module (one SPI interface), no tests yet |
-| **seckill-core-engine** | 217 (4 errors, 4 skipped) | Seckill flow, Redis Lua rate limiting |
-| **Total** | **2107** (**11 failures**, 84 errors, 6 skipped) | — |
+| **seckill-core-engine** † | 217 (4 errors, 4 skipped) | Seckill flow, Redis Lua rate limiting |
+| **Total (default modules)** | **2138** (0 failures, 80 errors, 2 skipped) | — |
 
-> Counts are the Surefire **aggregate** lines from `mvn -o -B -ntp -fae test` (do not sum the
-> per-class `*.txt` files — `@Nested` classes make that total come out low). The 84 errors are all
-> missing local infrastructure, not code defects: 80 in `gateway-admin` are the `entityManagerFactory`
-> cascade from having no MySQL on `localhost:3306`, and the 4 in `seckill-core-engine` need Redis
-> (`:30379`) and Docker. Earlier revisions of this table said 332 / 229 (561 total); that is several
-> generations out of date.
+> Counts are the Surefire **aggregate** lines from `mvn -o -B -ntp -fae test`, measured 2026-11-12 on
+> the working tree at `280acde` plus that batch of fixes (do not sum the per-class `*.txt` files —
+> `@Nested` classes make that total come out low; CI's my-gateway reports sum to 641 against an
+> aggregate of 1042). The 80 errors are all missing local infrastructure, not code defects: 12
+> gateway-admin integration classes cascade from having no MySQL on `localhost:3306` and no reachable
+> Nacos. Earlier revisions of this table said 332 / 229 (561 total), then 1035 / 572 (2107 total);
+> both are generations out of date.
 >
-> **The 11 failures are real, not environmental.** All 11 are in `AiUsageLifecycleTest`: commit
-> `a69fd71` switched `TokenUsageCollectorFilter` from `TokenUsageReporter.report(...)` to
-> `reportDurably(...)` and the test still verifies `report(...)`. Usage is collected correctly - the
-> mock expectation is stale - but the class is red and would mask a genuine regression. Confirmed
-> against a clean worktree at the parent commit, where the same 11 fail identically.
+> † Profile-only module, not part of that run; its row is the 2026-10-29 measurement (3 need Redis on
+> `:30379`, 1 needs Docker). Including it, the all-module total is 2355 tests / 0 failures / 84 errors.
+>
+> **The 11 `AiUsageLifecycleTest` failures are fixed.** Commit `a69fd71` switched
+> `TokenUsageCollectorFilter` from `TokenUsageReporter.report(...)` to `reportDurably(...)` and the
+> test still verified `report(...)`. Usage was collected correctly — the mock expectation was stale.
+> The test now verifies `reportDurably(...)` and the unused `report(...)` alias is removed. This was
+> also the sole cause of the red CI Backend job at `280acde` (run `40879153086`:
+> `Tests run: 1042, Failures: 11`), confirmed from CI's uploaded surefire artifact.
+>
+> **25 further errors were a real defect, not infrastructure.** `FeatureGateFilter` (`0d75ef5`) is a
+> `@Component` servlet `Filter` and `@WebMvcTest` includes every `Filter`, so both web-slice tests in
+> gateway-admin loaded it and could not build its `SystemSettingsService` collaborator. Both now mock
+> that service; `FeatureGateFilterTest` covers the gate directly. See README → Testing for the CI
+> fail-fast consequence: `gateway-admin` is SKIPPED behind the first module failure, so its
+> integration classes have never executed in CI either.
 
 ### 19.2 Test Structure
 
@@ -2225,7 +2237,7 @@ This API Gateway architecture demonstrates:
 - **Namespace isolation** for multi-tenancy support
 - **Heartbeat monitoring** for real-time instance health tracking
 - **Performance optimizations** including JWT cache, shadow quota, non-blocking locks
-- **Comprehensive testing** with 2107 tests across the six test-bearing Maven modules (see section 19.1 - 11 of them are currently failing)
+- **Comprehensive testing** with 2138 tests across the five test-bearing default Maven modules, all passing (2355 including the profile-only seckill module; see section 19.1 - the 80 remaining errors are missing local infrastructure, not failures)
 - **37 feature documents** under `docs/features/`, indexed in section 21; unimplemented designs live in `docs/design/`
 
 ---
