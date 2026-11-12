@@ -4,6 +4,7 @@ import { CheckCircleOutlined, WarningOutlined, FilterOutlined } from '@ant-desig
 
 const { Text } = Typography;
 import { useTranslation } from 'react-i18next';
+import { palette } from '../../../styles/palette';
 
 interface FilterExecutionBar {
   filterName: string;
@@ -52,9 +53,9 @@ const FilterWaterfallChart: React.FC<FilterWaterfallChartProps> = ({
       return {
         ...exec,
         healthStatus,
-        barColor: healthStatus === 'error' ? '#ff4d4f' :
-                  healthStatus === 'warning' ? '#faad14' : '#52c41a',
-        downstreamColor: '#1890ff'  // 下游时间用蓝色区分
+        barColor: healthStatus === 'error' ? palette.error :
+                  healthStatus === 'warning' ? palette.warning : palette.success,
+        downstreamColor: palette.primary  // 下游时间用蓝色区分
       };
     });
   }, [executions, slowThreshold]);
@@ -62,7 +63,7 @@ const FilterWaterfallChart: React.FC<FilterWaterfallChartProps> = ({
   // 如果没有数据，显示空状态
   if (!executions || executions.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: 24, color: '#999' }}>
+      <div style={{ textAlign: 'center', padding: 24, color: palette.textMuted }}>
         <FilterOutlined style={{ fontSize: 24, marginBottom: 8 }} />
         <Text type="secondary">{t('filter_waterfall.no_data')}</Text>
       </div>
@@ -74,19 +75,19 @@ const FilterWaterfallChart: React.FC<FilterWaterfallChartProps> = ({
       {/* 图例 */}
       <div style={{ marginBottom: 12, display: 'flex', gap: 16, fontSize: 12, alignItems: 'center' }}>
         <span>
-          <span style={{ display: 'inline-block', width: 12, height: 12, background: '#52c41a', marginRight: 4, borderRadius: 2 }}></span>
+          <span style={{ display: 'inline-block', width: 12, height: 12, background: palette.successSolid, marginRight: 4, borderRadius: 2 }}></span>
           {t('filter_waterfall.legend_normal')}
         </span>
         <span>
-          <span style={{ display: 'inline-block', width: 12, height: 12, background: '#faad14', marginRight: 4, borderRadius: 2 }}></span>
+          <span style={{ display: 'inline-block', width: 12, height: 12, background: palette.warningSolid, marginRight: 4, borderRadius: 2 }}></span>
           {t('filter_waterfall.legend_slow')} ({`>${slowThreshold}ms`})
         </span>
         <span>
-          <span style={{ display: 'inline-block', width: 12, height: 12, background: '#ff4d4f', marginRight: 4, borderRadius: 2 }}></span>
+          <span style={{ display: 'inline-block', width: 12, height: 12, background: palette.errorSolid, marginRight: 4, borderRadius: 2 }}></span>
           {t('filter_waterfall.legend_error')}
         </span>
         <span>
-          <span style={{ display: 'inline-block', width: 12, height: 12, background: '#1890ff', marginRight: 4, borderRadius: 2, opacity: 0.5 }}></span>
+          <span style={{ display: 'inline-block', width: 12, height: 12, background: palette.primary, marginRight: 4, borderRadius: 2, opacity: 0.5 }}></span>
           {t('filter_waterfall.legend_downstream')}
         </span>
       </div>
@@ -97,7 +98,7 @@ const FilterWaterfallChart: React.FC<FilterWaterfallChartProps> = ({
         justifyContent: 'space-between', 
         marginBottom: 8, 
         fontSize: 11, 
-        color: '#666', 
+        color: palette.textMuted, 
         paddingLeft: 180,
         paddingRight: 80
       }}>
@@ -128,7 +129,7 @@ const FilterWaterfallChart: React.FC<FilterWaterfallChartProps> = ({
               marginBottom: 4,
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: exec.healthStatus === 'error' ? 'rgba(255, 77, 79, 0.08)' : 'transparent',
+              backgroundColor: exec.healthStatus === 'error' ? 'rgba(242, 113, 127, 0.08)' : 'transparent',
               padding: '4px 0',
               borderRadius: 4,
               cursor: onFilterClick ? 'pointer' : 'default'
@@ -137,7 +138,7 @@ const FilterWaterfallChart: React.FC<FilterWaterfallChartProps> = ({
           >
             {/* Filter 名称和顺序 */}
             <div style={{ width: 180, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Badge count={exec.order} style={{ backgroundColor: '#1890ff', fontSize: 10 }} />
+              <Badge count={exec.order} style={{ backgroundColor: palette.primary, fontSize: 10 }} />
               <Tooltip title={exec.filterName}>
                 <Tag 
                   color={exec.healthStatus === 'error' ? 'error' : 
@@ -154,9 +155,9 @@ const FilterWaterfallChart: React.FC<FilterWaterfallChartProps> = ({
               flex: 1, 
               position: 'relative', 
               height: 24, 
-              background: '#fafafa', 
+              background: palette.bgElevated, 
               borderRadius: 2, 
-              border: '1px solid #f0f0f0',
+              border: `1px solid ${palette.bgElevated}`,
               marginRight: 80
             }}>
               <Tooltip title={
@@ -222,12 +223,12 @@ const FilterWaterfallChart: React.FC<FilterWaterfallChartProps> = ({
             <div style={{ width: 80, textAlign: 'center' }}>
               {exec.success ? (
                 exec.healthStatus === 'warning' ? (
-                  <WarningOutlined style={{ color: '#faad14' }} />
+                  <WarningOutlined style={{ color: palette.warning }} />
                 ) : (
-                  <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                  <CheckCircleOutlined style={{ color: palette.success }} />
                 )
               ) : (
-                <WarningOutlined style={{ color: '#ff4d4f' }} />
+                <WarningOutlined style={{ color: palette.error }} />
               )}
             </div>
           </div>

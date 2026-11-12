@@ -20,6 +20,7 @@ import { getClusterImages, getClusters } from '../../api/kubernetes';
 import { ApiError } from '../../api/http';
 import type { InstanceCreateRequest } from '../../types/instance';
 import '../../styles/form-page.css';
+import { palette } from '../../styles/palette';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -238,7 +239,7 @@ const InstanceCreatePage: React.FC = () => {
                             .map((cluster) => (
                               <Option key={cluster.id} value={cluster.id}>
                                 <Space>
-                                  <ClusterOutlined style={{ color: '#60a5fa' }} />
+                                  <ClusterOutlined style={{ color: palette.primaryLight }} />
                                   {cluster.clusterName}
                                   <Tag color="blue" style={{ marginLeft: 8 }}>{cluster.clusterVersion}</Tag>
                                 </Space>
@@ -490,7 +491,7 @@ const InstanceCreatePage: React.FC = () => {
                                 <Option key={img.name} value={img.name} title={img.name}>
                                   <Space>
                                     <Tag color="blue">{img.namespace}</Tag>
-                                    <span style={{ color: '#fafafa' }}>{img.image}</span>
+                                    <span style={{ color: palette.bgElevated }}>{img.image}</span>
                                     <Tag color="green">{img.tag}</Tag>
                                   </Space>
                                 </Option>

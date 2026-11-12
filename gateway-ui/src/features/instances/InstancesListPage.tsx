@@ -435,7 +435,7 @@ const InstancesListPage: React.FC = () => {
                   </div>
 
                   {instance.statusMessage && (
-                    <div className="instance-status-message">
+                    <div className={`instance-status-message status-message-${instance.statusCode ?? 'unknown'}`}>
                       <Tooltip title={instance.statusMessage} placement="topLeft">
                         <Text className="instance-status-text">{instance.statusMessage}</Text>
                       </Tooltip>

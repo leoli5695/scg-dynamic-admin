@@ -15,6 +15,7 @@ import {
   getRejectStrategyDisplayName, getStrategyTypeTagClass,
 } from '../utils';
 import { getStrategyTypeIcon } from './icons';
+import { palette, statusTone, toneForLegacyColor } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -81,13 +82,13 @@ function formatConfigEntry(
 const StrategyCard = memo(({ strategy, typeInfo, typeLabel, onEdit, onToggle, onDelete }: StrategyCardProps) => {
   const { t } = useTranslation();
   const config = strategy.config || {};
-  const color = typeInfo?.color || '#3b82f6';
+  const tone = statusTone[toneForLegacyColor(typeInfo?.color)];
   const entries = Object.entries(config);
 
   return (
     <Card className={`strategy-card ${!strategy.enabled ? 'strategy-card-disabled' : ''}`} hoverable>
       <div className="strategy-card-header">
-        <div className="strategy-icon" style={{ background: `${color}20`, color }}>
+        <div className="strategy-icon" style={{ background: tone.bg, color: tone.color }}>
           {getStrategyTypeIcon(typeInfo?.icon)}
         </div>
         <div className="strategy-info">
@@ -172,7 +173,7 @@ const StrategyCard = memo(({ strategy, typeInfo, typeLabel, onEdit, onToggle, on
                   const { displayKey, displayValue } = formatConfigEntry(key, value, strategy.strategyType, config);
                   return (
                     <div key={key} style={{ marginBottom: '4px', fontSize: '12px' }}>
-                      <span style={{ color: '#999' }}>{displayKey}: </span>
+                      <span style={{ color: palette.textMuted }}>{displayKey}: </span>
                       <span>{displayValue}</span>
                     </div>
                   );

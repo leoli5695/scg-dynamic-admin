@@ -20,6 +20,7 @@ import type { TopologyGraph, TopologyNode } from '../../types/topology';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
 import { buildChartOption, filterTopology, getTopologyChartHeight } from './chartOption';
 import './topology.css';
+import { palette, withAlpha } from '../../styles/palette';
 
 const { Title, Text } = Typography;
 
@@ -275,7 +276,7 @@ const TrafficTopologyPage: React.FC = () => {
             prefix={<SearchOutlined />}
             suffix={searchKeyword ? (
               <CloseOutlined
-                style={{ cursor: 'pointer', color: '#8C8C8C' }}
+                style={{ cursor: 'pointer', color: palette.textMuted }}
                 onClick={() => setSearchKeyword('')}
               />
             ) : null}
@@ -292,9 +293,9 @@ const TrafficTopologyPage: React.FC = () => {
                 onClick={() => setSelectedNodeId(null)}
                 size="small"
                 style={{
-                  background: 'linear-gradient(135deg, #0FC6C2, #14C9C9)',
+                  background: `linear-gradient(135deg, ${palette.infoSolid}, ${palette.infoSolid})`,
                   border: 'none',
-                  boxShadow: '0 2px 8px rgba(15, 198, 194, 0.4)',
+                  boxShadow: `0 2px 10px ${withAlpha(palette.info, 0.4)}`,
                 }}
               >
                 {t('topology.exit_focus')}
@@ -315,7 +316,7 @@ const TrafficTopologyPage: React.FC = () => {
           />
           <Tooltip title={t('topology.show_disabled_routes_tooltip')}>
             <Space style={{ marginRight: 8 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>{t('topology.show_disabled_routes')}</Text>
+              <Text style={{ color: palette.textTertiary, fontSize: 12 }}>{t('topology.show_disabled_routes')}</Text>
               <Switch
                 checked={showDisabledRoutes}
                 onChange={setShowDisabledRoutes}
@@ -352,27 +353,27 @@ const TrafficTopologyPage: React.FC = () => {
       {topology?.metrics && (
         <Row gutter={12} style={{ marginBottom: 16 }}>
           <Col span={3}>
-            <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <Card size="small" style={{ background: palette.bgCard }}>
               <Statistic
-                title={<span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>{t('topology.total_requests')}</span>}
+                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.total_requests')}</span>}
                 value={topology.metrics.totalRequests}
-                valueStyle={{ color: '#165DFF', fontSize: 16 }}
+                valueStyle={{ color: palette.primary, fontSize: 16 }}
               />
             </Card>
           </Col>
           <Col span={3}>
-            <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <Card size="small" style={{ background: palette.bgCard }}>
               <Statistic
-                title={<span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>{t('topology.rps')}</span>}
+                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.rps')}</span>}
                 value={topology.metrics.requestsPerSecond.toFixed(2)}
-                valueStyle={{ color: '#00D9C6', fontSize: 16 }}
+                valueStyle={{ color: palette.info, fontSize: 16 }}
               />
             </Card>
           </Col>
           <Col span={3}>
-            <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <Card size="small" style={{ background: palette.bgCard }}>
               <Statistic
-                title={<span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>{t('topology.avg_latency')}</span>}
+                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.avg_latency')}</span>}
                 value={topology.metrics.avgLatency.toFixed(2)}
                 suffix="ms"
                 valueStyle={{ fontSize: 16 }}
@@ -380,22 +381,22 @@ const TrafficTopologyPage: React.FC = () => {
             </Card>
           </Col>
           <Col span={3}>
-            <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <Card size="small" style={{ background: palette.bgCard }}>
               <Statistic
-                title={<span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>{t('topology.error_rate')}</span>}
+                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.error_rate')}</span>}
                 value={topology.metrics.errorRate.toFixed(2)}
                 suffix="%"
                 valueStyle={{
-                  color: topology.metrics.errorRate > 5 ? '#F53F3F' : '#52C41A',
+                  color: topology.metrics.errorRate > 5 ? palette.error : palette.success,
                   fontSize: 16,
                 }}
               />
             </Card>
           </Col>
           <Col span={3}>
-            <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <Card size="small" style={{ background: palette.bgCard }}>
               <Statistic
-                title={<span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>{t('topology.clients')}</span>}
+                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.clients')}</span>}
                 value={topology.metrics.uniqueClients}
                 valueStyle={{ fontSize: 16 }}
                 prefix={<GlobalOutlined />}
@@ -403,9 +404,9 @@ const TrafficTopologyPage: React.FC = () => {
             </Card>
           </Col>
           <Col span={3}>
-            <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <Card size="small" style={{ background: palette.bgCard }}>
               <Statistic
-                title={<span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>{t('topology.routes_status')}</span>}
+                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.routes_status')}</span>}
                 value={`${topology.metrics.enabledRoutes ?? 0}${t('topology.enabled')}/${topology.metrics.configuredRoutes ?? 0}${t('topology.total')}`}
                 valueStyle={{ fontSize: 16 }}
                 prefix={<ApiOutlined />}
@@ -416,21 +417,21 @@ const TrafficTopologyPage: React.FC = () => {
             <Card
               size="small"
               style={{
-                background: showOnlyActiveRoutes ? 'rgba(0, 217, 198, 0.2)' : 'rgba(255,255,255,0.05)',
+                background: showOnlyActiveRoutes ? withAlpha(palette.info, 0.18) : palette.bgCard,
                 cursor: 'pointer',
-                border: showOnlyActiveRoutes ? '1px solid #00D9C6' : 'none',
+                border: showOnlyActiveRoutes ? `1px solid ${palette.info}` : 'none',
                 transition: 'all 0.3s',
               }}
               onClick={() => setShowOnlyActiveRoutes(!showOnlyActiveRoutes)}
             >
               <Statistic
-                title={<span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>{t('topology.routes_with_traffic')}</span>}
+                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.routes_with_traffic')}</span>}
                 value={topology.metrics.uniqueRoutes}
-                valueStyle={{ color: '#00D9C6', fontSize: 16 }}
+                valueStyle={{ color: palette.info, fontSize: 16 }}
                 prefix={<ApiOutlined />}
               />
               {showOnlyActiveRoutes && (
-                <div style={{ fontSize: 10, color: '#00D9C6', marginTop: 4 }}>{t('topology.filter_active')}</div>
+                <div style={{ fontSize: 10, color: palette.info, marginTop: 4 }}>{t('topology.filter_active')}</div>
               )}
             </Card>
           </Col>
@@ -439,7 +440,7 @@ const TrafficTopologyPage: React.FC = () => {
 
       {/* Topology Graph — the chart div always exists for ECharts to attach */}
       <Card
-        style={{ background: 'rgba(0,0,0,0.2)', minHeight: 500, position: 'relative' }}
+        style={{ background: palette.bgBase, minHeight: 500, position: 'relative' }}
         styles={{ body: { padding: 0, position: 'relative' } }}
       >
         <div className="topology-chart-hint">
@@ -456,7 +457,7 @@ const TrafficTopologyPage: React.FC = () => {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(8, 13, 25, 0.72)',
             zIndex: 10,
           }}
           >
@@ -484,9 +485,9 @@ const TrafficTopologyPage: React.FC = () => {
               left: contextMenuPos.x,
               top: contextMenuPos.y,
               zIndex: 1000,
-              background: 'rgba(30, 30, 30, 0.95)',
+              background: palette.bgElevated,
               borderRadius: 8,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+              boxShadow: '0 18px 44px rgba(4, 7, 15, 0.55)',
               padding: '4px 0',
               minWidth: 160,
             }}
@@ -498,7 +499,7 @@ const TrafficTopologyPage: React.FC = () => {
                 style={{
                   padding: '8px 16px',
                   cursor: 'pointer',
-                  color: 'rgba(255,255,255,0.85)',
+                  color: palette.textPrimary,
                   fontSize: 13,
                   display: 'flex',
                   alignItems: 'center',
@@ -506,7 +507,7 @@ const TrafficTopologyPage: React.FC = () => {
                   transition: 'background 0.2s',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                  e.currentTarget.style.background = palette.hover;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
@@ -548,31 +549,31 @@ const TrafficTopologyPage: React.FC = () => {
       </Card>
 
       {/* Legend */}
-      <Card size="small" style={{ marginTop: 16, background: 'rgba(255,255,255,0.05)' }}>
+      <Card size="small" style={{ marginTop: 16, background: palette.bgCard }}>
         <Space size="large" wrap>
           <Text type="secondary">{t('topology.legend')}:</Text>
           <Space align="center">
-            <span className="legend-circle" style={{ background: '#165DFF', width: 18, height: 18 }} />
+            <span className="legend-circle" style={{ background: palette.primary, width: 18, height: 18 }} />
             <Text>{t('topology.node_gateway')}</Text>
           </Space>
           <Space align="center">
-            <span className="legend-diamond" style={{ background: '#00D9C6', width: 14, height: 14 }} />
+            <span className="legend-diamond" style={{ background: palette.infoSolid, width: 14, height: 14 }} />
             <Text>{t('topology.node_route_enabled')}</Text>
           </Space>
           <Space align="center">
-            <span className="legend-diamond" style={{ background: '#8C8C8C', width: 14, height: 14, border: '2px dashed #fff' }} />
+            <span className="legend-diamond" style={{ background: palette.textMuted, width: 14, height: 14, border: '2px dashed #fff' }} />
             <Text>{t('topology.node_route_disabled')}</Text>
           </Space>
           <Space align="center">
-            <span className="legend-rect" style={{ background: '#722ED1', width: 16, height: 14 }} />
+            <span className="legend-rect" style={{ background: palette.accentSolid, width: 16, height: 14 }} />
             <Text>{t('topology.node_service_discovery')}</Text>
           </Space>
           <Space align="center">
-            <span className="legend-rect" style={{ background: '#52C41A', width: 16, height: 14 }} />
+            <span className="legend-rect" style={{ background: palette.successSolid, width: 16, height: 14 }} />
             <Text>{t('topology.node_service_static')}</Text>
           </Space>
           <Space align="center">
-            <span className="legend-circle" style={{ background: '#FA8C16', width: 14, height: 14 }} />
+            <span className="legend-circle" style={{ background: palette.warningSolid, width: 14, height: 14 }} />
             <Text>{t('topology.node_client')}</Text>
           </Space>
         </Space>

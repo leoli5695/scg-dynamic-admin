@@ -5,6 +5,7 @@ import ts from 'typescript';
 import { requestDiagnosis, routeConfigurationUrl } from '../src/features/request-journey/links.ts';
 import { isUsageUnresolved, usageTokenValue } from '../src/features/token-usage/usagePresentation.ts';
 import * as usageNavigation from '../src/features/request-journey/usageNavigation.ts';
+import { srcRequire } from './srcRequire.mjs';
 
 // Exercise the real TSX callbacks and lifecycle without a browser or a development server.
 // UI components are boundaries; DOM/focus behavior remains part of browser verification.
@@ -19,8 +20,11 @@ function loadTsx(file, mocks) {
   }
   const module = { exports: {} };
   new Function('require', 'module', 'exports', compiled.get(file.href))((name) => {
-    assert.ok(name in mocks, `Unexpected dependency: ${name}`);
-    return mocks[name];
+    if (name in mocks) return mocks[name];
+    // Colour constants carry no behaviour, so they load for real; everything
+    // else still has to be declared by the harness.
+    assert.ok(name.endsWith('/styles/palette'), `Unexpected dependency: ${name}`);
+    return srcRequire(file)(name);
   }, module, module.exports);
   return module.exports.default;
 }

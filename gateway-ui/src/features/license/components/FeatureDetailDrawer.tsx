@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert, Divider, Drawer, List, Space, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, RocketOutlined } from '@ant-design/icons';
 import { EDITION_CONFIG, type LicenseFeatureDef } from '../constants/featureCatalog';
+import { palette } from '../../../styles/palette';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -33,13 +34,13 @@ export const FeatureDetailDrawer: React.FC<FeatureDetailDrawerProps> = ({ featur
               {EDITION_CONFIG[feature.requiredEdition].label}
             </Tag>
             {feature.requiredEdition === 'BASIC' ? (
-              <Tag color="success" style={{ backgroundColor: '#22c55e', color: '#fff' }}>免费使用</Tag>
+              <Tag color="success" style={{ backgroundColor: palette.successSolid, color: '#fff' }}>免费使用</Tag>
             ) : feature.enabled ? (
               <Tag color="success">已授权</Tag>
             ) : feature.requiredEdition === 'ADVANCED' ? (
-              <Tag color="processing" style={{ backgroundColor: '#3b82f6', color: '#fff' }}>需要高级版</Tag>
+              <Tag color="processing" style={{ backgroundColor: palette.primary, color: '#fff' }}>需要高级版</Tag>
             ) : (
-              <Tag color="purple" style={{ backgroundColor: '#7c3aed', color: '#fff' }}>需要企业版</Tag>
+              <Tag color="purple" style={{ backgroundColor: palette.accentSolid, color: '#fff' }}>需要企业版</Tag>
             )}
           </Space>
         </div>
@@ -62,7 +63,7 @@ export const FeatureDetailDrawer: React.FC<FeatureDetailDrawerProps> = ({ featur
               renderItem={(item) => (
                 <List.Item style={{ padding: '8px 0', border: 'none' }}>
                   <Space>
-                    <CheckCircleOutlined style={{ color: '#22c55e' }} />
+                    <CheckCircleOutlined style={{ color: palette.success }} />
                     <Text>{item}</Text>
                   </Space>
                 </List.Item>
@@ -81,7 +82,7 @@ export const FeatureDetailDrawer: React.FC<FeatureDetailDrawerProps> = ({ featur
               renderItem={(item) => (
                 <List.Item style={{ padding: '8px 0', border: 'none' }}>
                   <Space>
-                    <RocketOutlined style={{ color: '#3b82f6' }} />
+                    <RocketOutlined style={{ color: palette.primary }} />
                     <Text>{item}</Text>
                   </Space>
                 </List.Item>

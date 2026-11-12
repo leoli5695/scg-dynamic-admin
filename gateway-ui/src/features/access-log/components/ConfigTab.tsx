@@ -19,6 +19,7 @@ import type {
   AccessLogConfig, DeployMode, DeployModeOption, OutputTarget,
 } from '../../../types/accessLog';
 import CollectionGuide from './CollectionGuide';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -77,7 +78,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                   <Space>
                     {t('access_log.deploy_mode')}
                     <Tooltip title={t('access_log.deploy_mode_tip')}>
-                      <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                      <InfoCircleOutlined style={{ color: palette.textMuted }} />
                     </Tooltip>
                   </Space>
                 }
@@ -100,7 +101,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                   <Space>
                     {t('access_log.output_target')}
                     <Tooltip title={t('access_log.output_target_tip')}>
-                      <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                      <InfoCircleOutlined style={{ color: palette.textMuted }} />
                     </Tooltip>
                   </Space>
                 }
@@ -118,7 +119,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                             <CodeOutlined />
                             <span>stdout</span>
                             {savedDeployMode === 'K8S' && (
-                              <Badge status="success" text={<Text style={{ fontSize: 11, color: '#52c41a' }}>{t('access_log.recommended')}</Text>} />
+                              <Badge status="success" text={<Text style={{ fontSize: 11, color: palette.success }}>{t('access_log.recommended')}</Text>} />
                             )}
                           </Space>
                         ),
@@ -130,7 +131,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                             <FileOutlined />
                             <span>file</span>
                             {savedDeployMode === 'LOCAL' && (
-                              <Badge status="success" text={<Text style={{ fontSize: 11, color: '#52c41a' }}>{t('access_log.recommended')}</Text>} />
+                              <Badge status="success" text={<Text style={{ fontSize: 11, color: palette.success }}>{t('access_log.recommended')}</Text>} />
                             )}
                           </Space>
                         ),
@@ -143,7 +144,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                             <FileTextOutlined />
                             <span>both</span>
                             {savedDeployMode === 'DOCKER' && (
-                              <Badge status="processing" text={<Text style={{ fontSize: 11, color: '#1890ff' }}>{t('access_log.recommended')}</Text>} />
+                              <Badge status="processing" text={<Text style={{ fontSize: 11, color: palette.primary }}>{t('access_log.recommended')}</Text>} />
                             )}
                           </Space>
                         ),
@@ -168,14 +169,14 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                   type="success"
                   showIcon
                   icon={<CheckCircleOutlined />}
-                  style={{ marginBottom: 16, borderLeft: '4px solid #52c41a' }}
+                  style={{ marginBottom: 16, borderLeft: `4px solid ${palette.success}` }}
                   message={<Text strong>{t('access_log.k8s_stdout_hint')}</Text>}
                   description={
                     <div>
                       <p style={{ marginBottom: 8 }}>
-                        {t('access_log.k8s_stdout_desc_line1')}<code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>/var/log/containers/*.log</code>
+                        {t('access_log.k8s_stdout_desc_line1')}<code style={{ background: palette.bgElevated, padding: '2px 6px', borderRadius: 4 }}>/var/log/containers/*.log</code>
                       </p>
-                      <p style={{ color: '#52c41a', fontWeight: 500 }}>
+                      <p style={{ color: palette.success, fontWeight: 500 }}>
                         {t('access_log.k8s_stdout_desc_line2')}
                       </p>
                     </div>
@@ -187,12 +188,12 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                 <Alert
                   type="info"
                   showIcon
-                  style={{ marginBottom: 16, borderLeft: '4px solid #1890ff' }}
+                  style={{ marginBottom: 16, borderLeft: `4px solid ${palette.primary}` }}
                   message={<Text strong>{t('access_log.docker_hint')}</Text>}
                   description={
                     <div>
-                      <p>{t('access_log.docker_desc_line1')}<code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>both</code>{t('access_log.docker_desc_line2')}</p>
-                      <p style={{ color: '#1890ff', fontWeight: 500 }}>
+                      <p>{t('access_log.docker_desc_line1')}<code style={{ background: palette.bgElevated, padding: '2px 6px', borderRadius: 4 }}>both</code>{t('access_log.docker_desc_line2')}</p>
+                      <p style={{ color: palette.primary, fontWeight: 500 }}>
                         {t('access_log.docker_desc_line3')}
                       </p>
                     </div>

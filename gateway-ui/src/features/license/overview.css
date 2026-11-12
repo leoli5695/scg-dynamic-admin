@@ -15,7 +15,7 @@
 }
 .license-page.management-page .license-status-card {
   text-align: left;
-  background: linear-gradient(120deg, #1a2c49, #142039) !important;
+  background: linear-gradient(120deg, var(--bg-elevated), var(--bg-card-hover)) !important;
   border-color: #769fe14d !important;
 }
 .license-page.management-page .license-edition-header {
@@ -33,7 +33,7 @@
   background: #6b85d31a;
   border: 1px solid #8da9ec40;
   box-shadow: none;
-  color: #a9c3f5;
+  color: var(--primary-light);
   font-size: 24px;
 }
 .license-page.management-page .license-edition-header .ant-typography {
@@ -57,13 +57,13 @@
   padding-top: 16px;
   margin-top: 20px;
   font-size: 11px;
-  color: #9fb3d3;
+  color: var(--text-tertiary);
 }
 .license-page.management-page .quota-card .ant-card-body {
   padding: 16px 20px;
 }
 .license-quota-caption {
-  color: #899fbe;
+  color: var(--text-muted);
   font-size: 10px;
   line-height: 1.7;
   margin: 0 0 14px;
@@ -90,30 +90,30 @@
   margin: 8px 0 0;
 }
 .license-page.management-page .quota-descriptions .ant-descriptions-item-label {
-  color: #8498b8;
+  color: var(--text-muted);
   font-size: 10px;
 }
 .license-page.management-page .quota-descriptions .ant-descriptions-item-content {
-  color: #bbcbe3;
+  color: var(--text-secondary);
   font-size: 11px;
   overflow-wrap: anywhere;
 }
 .license-page.management-page .quota-descriptions .ant-descriptions-item-content .ant-typography {
-  color: #bbcbe3;
+  color: var(--text-secondary);
   font-size: 11px !important;
 }
 .license-page.management-page .quota-divider {
   margin: 18px 0 14px;
 }
 .license-feature-count {
-  color: #8da4c6;
+  color: var(--text-tertiary);
   font-size: 10px;
 }
 .license-page.management-page .feature-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  background: #101b2d !important;
+  background: var(--bg-card) !important;
   border: 1px solid #829ec32b !important;
   border-radius: 10px;
   padding: 14px;
@@ -127,7 +127,7 @@
   border-color: #8aaef777 !important;
 }
 .license-page.management-page .feature-item:focus-visible {
-  outline: 2px solid #a4c3ff;
+  outline: 2px solid var(--primary-light);
   outline-offset: 2px;
 }
 .license-page.management-page .feature-item .feature-icon {
@@ -138,11 +138,11 @@
   flex-shrink: 0;
   border-radius: 9px;
   font-size: 16px;
-  color: #9ebbf1;
+  color: var(--primary-light);
   background: #7da3eb12;
 }
 .license-page.management-page .feature-item.disabled .feature-icon {
-  color: #8b9bb5;
+  color: var(--text-muted);
   background: #8296b50a;
 }
 .license-page.management-page .feature-content {
@@ -157,17 +157,17 @@
   margin-bottom: 6px;
 }
 .license-page.management-page .feature-header .ant-typography {
-  color: #cfdbef;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 .license-page.management-page .feature-desc {
-  color: #899fbe;
+  color: var(--text-muted);
   font-size: 10px;
   line-height: 1.8;
 }
 .license-page.management-page .feature-item .ant-tag {
   background: #6aa98b0d !important;
-  color: #92c9b0 !important;
+  color: var(--success-color) !important;
   border: 1px solid #82aa931f !important;
   border-radius: 4px;
   padding: 0 5px;
@@ -176,7 +176,7 @@
   margin: 0;
 }
 .license-page.management-page .feature-item.disabled .ant-tag {
-  color: #a3b2cd !important;
+  color: var(--text-secondary) !important;
   background: #829ed409 !important;
   border-color: #829ed41e !important;
 }

@@ -30,6 +30,7 @@ import type {
 import { HISTORY_RANGE_OPTIONS, rangeToSeconds, type HistoryRange } from '../constants';
 import { getDurationColor, getMethodColor, getStatusBadge } from '../utils';
 import LogEntryExpanded from './LogEntryExpanded';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -300,7 +301,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
         <Alert
           type="info"
           showIcon
-          style={{ marginBottom: 16, borderLeft: '4px solid #1890ff' }}
+          style={{ marginBottom: 16, borderLeft: `4px solid ${palette.primary}` }}
           message={<Space><CloudServerOutlined />{t('access_log.k8s_viewer_title')}</Space>}
           description={
             <div>

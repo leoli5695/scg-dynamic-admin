@@ -20,16 +20,17 @@ import {
 } from '../../../utils/instance';
 import { useInstanceDetail } from '../InstanceDetailContext';
 import { parseServerTime } from '../../../utils/serverTime';
+import { palette, withAlpha } from '../../../styles/palette';
 
 const { Text } = Typography;
 
 /** Health score → progress color. */
 const getHealthColor = (score: number): string => {
-  if (score >= 90) return '#52c41a';
-  if (score >= 80) return '#73d13d';
-  if (score >= 60) return '#faad14';
-  if (score >= 40) return '#fa8c16';
-  return '#f5222d';
+  if (score >= 90) return palette.success;
+  if (score >= 80) return palette.success;
+  if (score >= 60) return palette.warning;
+  if (score >= 40) return palette.warning;
+  return palette.error;
 };
 
 /** Health score → tag color. */
@@ -71,15 +72,15 @@ const HealthScorePopover: React.FC = () => {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '12px 0',
-            borderBottom: '1px solid #f0f0f0',
+            borderBottom: `1px solid ${palette.bgElevated}`,
             marginBottom: 12,
           }}
           >
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#262626' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: palette.textPrimary }}>
                 {t('instance.health_score')}
               </div>
-              <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: palette.textMuted, marginTop: 4 }}>
                 {health?.clusterName}
                 {' / '}
                 {health?.namespace}
@@ -99,10 +100,10 @@ const HealthScorePopover: React.FC = () => {
           <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
             <Col span={12}>
               <div style={{
-                background: '#f6ffed',
+                background: palette.successSoft,
                 borderRadius: 8,
                 padding: '10px 12px',
-                border: '1px solid #b7eb8f',
+                border: `1px solid ${palette.success}`,
               }}
               >
                 <div className="flex-items-center mb-2">
@@ -111,7 +112,7 @@ const HealthScorePopover: React.FC = () => {
                     {t('instance.node_health')}
                   </span>
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#52c41a' }}>
+                <div style={{ fontSize: 16, fontWeight: 'bold', color: palette.success }}>
                   {health?.nodeHealth?.readyNodes || 0}
                   /
                   {health?.nodeHealth?.totalNodes || 0}
@@ -120,18 +121,18 @@ const HealthScorePopover: React.FC = () => {
                   percent={health?.nodeHealth?.score || 0}
                   size="small"
                   showInfo={false}
-                  strokeColor="#52c41a"
-                  trailColor="#d9f7be"
+                  strokeColor={palette.success}
+                  trailColor={withAlpha(palette.success, 0.16)}
                 />
               </div>
             </Col>
 
             <Col span={12}>
               <div style={{
-                background: podScore >= 80 ? '#f6ffed' : '#fffbe6',
+                background: podScore >= 80 ? palette.successSoft : palette.warningSoft,
                 borderRadius: 8,
                 padding: '10px 12px',
-                border: `1px solid ${podScore >= 80 ? '#b7eb8f' : '#ffe58f'}`,
+                border: `1px solid ${podScore >= 80 ? palette.success : palette.warning}`,
               }}
               >
                 <div className="flex-items-center mb-2">
@@ -140,12 +141,12 @@ const HealthScorePopover: React.FC = () => {
                     {t('instance.pod_health')}
                   </span>
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 'bold', color: podScore >= 80 ? '#52c41a' : '#faad14' }}>
+                <div style={{ fontSize: 16, fontWeight: 'bold', color: podScore >= 80 ? palette.success : palette.warning }}>
                   {health?.podHealth?.runningPods || 0}
                   /
                   {health?.podHealth?.totalPods || 0}
                 </div>
-                <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: palette.textMuted, marginTop: 4 }}>
                   {t('instance.restarts')}
                   :
                   {' '}
@@ -155,8 +156,8 @@ const HealthScorePopover: React.FC = () => {
                   percent={health?.podHealth?.score || 0}
                   size="small"
                   showInfo={false}
-                  strokeColor={podScore >= 80 ? '#52c41a' : '#faad14'}
-                  trailColor={podScore >= 80 ? '#d9f7be' : '#fff1b8'}
+                  strokeColor={podScore >= 80 ? palette.success : palette.warning}
+                  trailColor={withAlpha(podScore >= 80 ? palette.success : palette.warning, 0.16)}
                 />
               </div>
             </Col>
@@ -166,15 +167,15 @@ const HealthScorePopover: React.FC = () => {
           {(health?.issues?.length ?? 0) > 0 && (
             <div style={{
               marginBottom: 12,
-              background: '#fff2f0',
+              background: palette.errorSoft,
               borderRadius: 8,
               padding: '10px 12px',
-              border: '1px solid #ffccc7',
+              border: `1px solid ${palette.error}`,
             }}
             >
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                <AlertOutlined style={{ color: '#ff4d4f', fontSize: 14 }} />
-                <span style={{ fontWeight: 500, marginLeft: 8, color: '#ff4d4f' }}>
+                <AlertOutlined style={{ color: palette.error, fontSize: 14 }} />
+                <span style={{ fontWeight: 500, marginLeft: 8, color: palette.error }}>
                   {t('instance.issues')}
                   {' ('}
                   {health!.issues!.length}
@@ -201,7 +202,7 @@ const HealthScorePopover: React.FC = () => {
                     >
                       {issue.severity}
                     </Tag>
-                    <span style={{ color: '#595959', flex: 1 }}>{issue.message}</span>
+                    <span style={{ color: palette.textDisabled, flex: 1 }}>{issue.message}</span>
                   </div>
                 ))}
               </div>
@@ -209,7 +210,7 @@ const HealthScorePopover: React.FC = () => {
                 <div
                   style={{
                     textAlign: 'center',
-                    color: '#1890ff',
+                    color: palette.primary,
                     fontSize: 11,
                     padding: 4,
                     cursor: 'pointer',
@@ -242,14 +243,14 @@ const HealthScorePopover: React.FC = () => {
           {(health?.podHealth?.problematicPods?.length ?? 0) > 0 && (
             <div style={{
               marginBottom: 12,
-              background: '#fafafa',
+              background: palette.bgElevated,
               borderRadius: 8,
               padding: '10px 12px',
             }}
             >
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                <BugOutlined style={{ color: '#fa8c16', fontSize: 14 }} />
-                <span style={{ fontWeight: 500, marginLeft: 8, color: '#595959' }}>
+                <BugOutlined style={{ color: palette.warning, fontSize: 14 }} />
+                <span style={{ fontWeight: 500, marginLeft: 8, color: palette.textDisabled }}>
                   {t('instance.problematic_pods')}
                   {' ('}
                   {health!.podHealth!.problematicPods!.length}
@@ -271,7 +272,7 @@ const HealthScorePopover: React.FC = () => {
                 <div
                   style={{
                     textAlign: 'center',
-                    color: '#1890ff',
+                    color: palette.primary,
                     fontSize: 11,
                     padding: 4,
                     cursor: 'pointer',
@@ -303,19 +304,19 @@ const HealthScorePopover: React.FC = () => {
           {/* Recommendations */}
           {(health?.recommendations?.length ?? 0) > 0 && (
             <div style={{
-              background: '#e6f7ff',
+              background: palette.primarySoft,
               borderRadius: 8,
               padding: '10px 12px',
-              border: '1px solid #91d5ff',
+              border: `1px solid ${palette.primaryLight}`,
             }}
             >
               <div className="flex-items-center mb-2">
-                <SafetyOutlined style={{ color: '#1890ff', fontSize: 14 }} />
-                <span style={{ fontWeight: 500, marginLeft: 8, color: '#1890ff' }}>
+                <SafetyOutlined style={{ color: palette.primary, fontSize: 14 }} />
+                <span style={{ fontWeight: 500, marginLeft: 8, color: palette.primary }}>
                   {t('instance.recommendations')}
                 </span>
               </div>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: '#595959' }}>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: palette.textDisabled }}>
                 {health!.recommendations!.slice(0, 2).map((rec, idx) => (
                   <li key={idx} style={{ marginBottom: 2 }}>{rec}</li>
                 ))}

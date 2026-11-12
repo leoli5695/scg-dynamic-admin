@@ -1,17 +1,17 @@
 .route-debug-page { display: grid; gap: 20px; max-width: 1600px; margin: 0 auto; }
 .route-debug-page > .ant-btn { justify-self: start; }
 .route-debug-heading { display: flex; align-items: center; gap: 16px; }
-.route-debug-heading > .anticon { font-size: 28px; color: #60a5fa; }
+.route-debug-heading > .anticon { font-size: 28px; color: var(--primary-light); }
 .route-debug-heading h3 { margin: 0 0 4px !important; }
 .route-debug-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }
 .route-debug-label { display: block; margin: 16px 0 8px; font-weight: 500; }
 .route-debug-label:first-child { margin-top: 0; }
 .route-debug-hint { display: block; margin-top: 8px; font-size: 12px; }
 .route-debug-code, .route-debug-output { font-family: "JetBrains Mono", Consolas, monospace !important; font-size: 13px; }
-.route-debug-output { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; min-height: 280px; max-height: 65vh; overflow: auto; padding: 16px; border-radius: 8px; background: rgba(127,127,127,.08); }
+.route-debug-output { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; min-height: 280px; max-height: 65vh; overflow: auto; padding: 16px; border-radius: 8px; background: var(--bg-input); }
 .route-debug-send { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 .route-debug-trace { margin: 12px 0; overflow-wrap: anywhere; }
-.route-debug-empty { min-height: 330px; display: grid; place-content: center; color: var(--ant-color-text-secondary, #94a3b8); }
+.route-debug-empty { min-height: 330px; display: grid; place-content: center; color: var(--text-tertiary); }
 .route-debug-grid .ant-alert { margin-top: 12px; }
 .route-debug-usage { display: flex; margin-top: 16px; }
 .route-debug-readable { margin-top: 12px; min-height: 180px; font-family: inherit !important; font-size: 15px; line-height: 1.8; }
@@ -20,17 +20,17 @@
 .route-debug-secondary pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; padding: 12px; font-size: 12px; }
 .route-debug-raw-view { margin-top: 12px; }
 .route-debug-raw-toolbar { display: flex; justify-content: space-between; margin-bottom: 8px; }
-.route-debug-frames { max-height: 65vh; overflow: auto; border: 1px solid var(--border-default, #29364d); border-radius: 8px; padding: 12px; background: #0b1527; }
-.route-debug-frame { border: 1px solid #263750; border-radius: 7px; margin-bottom: 8px; }
-.route-debug-frame.has-usage { border-color: #365f98; }
-.route-debug-frame > summary { cursor: pointer; padding: 10px; color: #a5b4cb; overflow-wrap: anywhere; }
+.route-debug-frames { max-height: 65vh; overflow: auto; border: 1px solid var(--border-default, #29364d); border-radius: 8px; padding: 12px; background: var(--bg-secondary); }
+.route-debug-frame { border: 1px solid var(--border-solid); border-radius: 7px; margin-bottom: 8px; }
+.route-debug-frame.has-usage { border-color: var(--border-solid-strong); }
+.route-debug-frame > summary { cursor: pointer; padding: 10px; color: var(--text-secondary); overflow-wrap: anywhere; }
 .route-debug-frame > summary .ant-tag { margin-left: 4px; }
-.route-debug-frame-preview { display: block; margin-top: 6px; color: #c8d4e8; white-space: pre-wrap; }
-.route-debug-frame-done { padding: 8px 0; color: #79d3a6; }
-.route-debug-json { margin: 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 Consolas, monospace; color: #c8d4e8; }
-.route-debug-json .json-key { color: #8bb8ff; }
-.route-debug-json .json-string { color: #91d5a6; }
-.route-debug-json .json-number { color: #f1c17d; }
-.route-debug-json .json-boolean { color: #c6a3f4; }
-.route-debug-json .json-null { color: #8696af; }
+.route-debug-frame-preview { display: block; margin-top: 6px; color: var(--text-secondary); white-space: pre-wrap; }
+.route-debug-frame-done { padding: 8px 0; color: var(--success-color); }
+.route-debug-json { margin: 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 Consolas, monospace; color: var(--text-secondary); }
+.route-debug-json .json-key { color: var(--primary-light); }
+.route-debug-json .json-string { color: var(--success-color); }
+.route-debug-json .json-number { color: var(--warning-color); }
+.route-debug-json .json-boolean { color: var(--accent-light); }
+.route-debug-json .json-null { color: var(--text-muted); }
 @media (max-width: 1100px) { .route-debug-grid { grid-template-columns: minmax(0, 1fr); } }

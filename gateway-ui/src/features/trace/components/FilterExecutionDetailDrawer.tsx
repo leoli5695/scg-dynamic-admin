@@ -4,6 +4,7 @@ import { CheckCircleOutlined, ClockCircleOutlined, FilterOutlined, WarningOutlin
 import { useTranslation } from 'react-i18next';
 import { getFilterChainStats } from '../../../api/filterChain';
 import logger from '../../../utils/logger';
+import { palette } from '../../../styles/palette';
 
 interface FilterExecutionDetail {
   filterName: string;
@@ -103,7 +104,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
 
   // 获取健康状态颜色
   const getHealthColor = (status: 'normal' | 'warning' | 'error'): string => (
-    status === 'error' ? '#ff4d4f' : status === 'warning' ? '#faad14' : '#52c41a'
+    status === 'error' ? palette.error : status === 'warning' ? palette.warning : palette.success
   );
 
   if (!execution) return null;
@@ -179,7 +180,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
               <span style={{ fontSize: 12 }}>{t('filter_detail.downstream_time')} (下游链耗时)</span>
               <Progress
                 percent={Math.min(100, (execution.downstreamMs / execution.totalTimeMs) * 100)}
-                strokeColor="#1890ff"
+                strokeColor={palette.primary}
                 format={(p) => `${execution.downstreamMs.toFixed(2)}ms (${p?.toFixed(1)}%)`}
               />
             </div>
@@ -191,7 +192,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
           <span style={{ fontSize: 12 }}>{t('filter_detail.request_percentage')}</span>
           <Progress
             percent={execution.timePercentage || 0}
-            strokeColor={execution.timePercentage > 30 ? '#cf1322' : '#52c41a'}
+            strokeColor={execution.timePercentage > 30 ? palette.error : palette.success}
             format={(p) => `${p?.toFixed(1)}%`}
           />
         </div>
@@ -223,7 +224,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
                   title={t('filter_detail.success_rate')}
                   value={filterStats.successRate}
                   suffix="%"
-                  valueStyle={{ color: filterStats.successRate >= 95 ? '#52c41a' : '#faad14' }}
+                  valueStyle={{ color: filterStats.successRate >= 95 ? palette.success : palette.warning }}
                 />
               </Col>
               <Col span={8}>

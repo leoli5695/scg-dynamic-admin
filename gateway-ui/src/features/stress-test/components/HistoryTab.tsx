@@ -33,6 +33,7 @@ import { useTranslation } from 'react-i18next';
 import type { StressTest, StressTestLiveStatus, StressTestMetrics } from '../../../types/stressTest';
 import { parseServerTime } from '../../../utils/serverTime';
 import StressTestCharts from './Charts';
+import { palette } from '../../../styles/palette';
 
 const { Title, Text } = Typography;
 
@@ -93,7 +94,7 @@ const HistoryTab: React.FC<Props> = ({
         <Card
           title={
             <Space>
-              <ThunderboltOutlined style={{ color: '#165DFF' }} />
+              <ThunderboltOutlined style={{ color: palette.primary }} />
               <Title level={5} style={{ margin: 0, color: '#fff' }}>
                 Test #{runningTestId} {t('stress_test.running')}
               </Title>
@@ -113,7 +114,7 @@ const HistoryTab: React.FC<Props> = ({
                 <Progress
                   percent={Math.round(runningStatus.progress * 100)}
                   status="active"
-                  strokeColor={{ from: '#165DFF', to: '#52c41a' }}
+                  strokeColor={{ from: palette.primary, to: palette.success }}
                 />
               </Col>
 
@@ -122,7 +123,7 @@ const HistoryTab: React.FC<Props> = ({
                   title={t('stress_test.requests_sent')}
                   value={runningStatus.actualRequests || 0}
                   prefix={<ThunderboltOutlined />}
-                  valueStyle={{ color: '#165DFF' }}
+                  valueStyle={{ color: palette.primary }}
                 />
               </Col>
 
@@ -132,7 +133,7 @@ const HistoryTab: React.FC<Props> = ({
                   value={runningStatus.liveRps?.toFixed(2) || '0'}
                   suffix="req/s"
                   prefix={<DashboardOutlined />}
-                  valueStyle={{ color: '#52c41a' }}
+                  valueStyle={{ color: palette.success }}
                 />
               </Col>
 
@@ -152,7 +153,7 @@ const HistoryTab: React.FC<Props> = ({
                   value={runningStatus.errorRate?.toFixed(2) || '0'}
                   suffix="%"
                   prefix={<CloseCircleOutlined />}
-                  valueStyle={{ color: runningStatus.errorRate > 5 ? '#f5222d' : '#52c41a' }}
+                  valueStyle={{ color: runningStatus.errorRate > 5 ? palette.error : palette.success }}
                 />
               </Col>
             </Row>
@@ -221,7 +222,7 @@ const HistoryTab: React.FC<Props> = ({
             title={t('stress_test.req_per_sec')}
             value={test.requestsPerSecond?.toFixed(2) || '0'}
             suffix="req/s"
-            valueStyle={{ color: '#52c41a' }}
+            valueStyle={{ color: palette.success }}
           />
         </Col>
 
@@ -230,7 +231,7 @@ const HistoryTab: React.FC<Props> = ({
             title={t('stress_test.error_rate')}
             value={test.errorRate?.toFixed(2) || '0'}
             suffix="%"
-            valueStyle={{ color: test.errorRate > 5 ? '#f5222d' : '#52c41a' }}
+            valueStyle={{ color: test.errorRate > 5 ? palette.error : palette.success }}
           />
         </Col>
 

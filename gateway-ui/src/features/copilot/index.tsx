@@ -24,6 +24,7 @@ import ToolsTab from './components/ToolsTab';
 import LearnTab from './components/LearnTab';
 import KnowledgeTab from './components/KnowledgeTab';
 import ConfigModal from './components/ConfigModal';
+import { palette } from '../../styles/palette';
 
 const { Text } = Typography;
 
@@ -196,7 +197,7 @@ const AiCopilotPage: React.FC = () => {
       <Card
         title={
           <span>
-            <RobotOutlined style={{ marginRight: '8px', color: '#52c41a' }} />
+            <RobotOutlined style={{ marginRight: '8px', color: palette.success }} />
             {t('copilot.title')}
           </span>
         }

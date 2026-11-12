@@ -21,6 +21,7 @@ import type { AiAnalysisEvidence, AiProvider } from '../../types/copilot';
 import AiReportRenderer from './AiReportRenderer';
 import '../../styles/ai-report.css';
 import './ai-analysis.css';
+import { palette } from '../../styles/palette';
 
 interface AiAnalysisModalProps {
   visible: boolean;
@@ -163,8 +164,8 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
       size="small"
       style={{
         marginBottom: 8,
-        borderColor: selectedProvider === p.provider ? '#1890ff' : undefined,
-        backgroundColor: selectedProvider === p.provider ? '#e6f7ff' : undefined,
+        borderColor: selectedProvider === p.provider ? palette.primary : undefined,
+        backgroundColor: selectedProvider === p.provider ? palette.primarySoft : undefined,
       }}
       onClick={() => {
         setSelectedProvider(p.provider);
@@ -175,7 +176,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
         <Tag color={p.isValid ? 'success' : 'default'}>
           {p.providerName}
         </Tag>
-        {p.isValid && <CheckCircleOutlined style={{ color: '#52c41a' }} />}
+        {p.isValid && <CheckCircleOutlined style={{ color: palette.success }} />}
       </Space>
     </Card>
   );
@@ -234,7 +235,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
                 >
                   <Space direction="vertical" style={{ width: '100%' }}>
                     {models.map(m => (
-                      <Radio key={m} value={m} style={{ color: '#e2e8f0' }}>
+                      <Radio key={m} value={m} style={{ color: palette.textPrimary }}>
                         {m}
                       </Radio>
                     ))}
@@ -254,7 +255,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
                   data-lpignore="true"
                   suffix={
                     validated ? (
-                      <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                      <CheckCircleOutlined style={{ color: palette.success }} />
                     ) : (
                       <Button
                         type="link"
@@ -331,7 +332,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
       ) : analyzing ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
           <Spin size="large" />
-          <div style={{ marginTop: 16, color: '#666' }}>
+          <div style={{ marginTop: 16, color: palette.textMuted }}>
             {t('ai.analyzing')}
           </div>
         </div>

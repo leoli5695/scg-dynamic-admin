@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
+import { srcRequire } from './srcRequire.mjs';
 import * as React from 'react';
 
 const require = createRequire(import.meta.url);
@@ -73,10 +74,12 @@ function harness(feature) {
     './components/FullChainTab': { __esModule: true, default: 'FullChainTab' },
     './trace.css': {}, './replay.css': {},
   };
-  const source = readFileSync(new URL(`../src/features/${feature}/index.tsx`, import.meta.url), 'utf8');
+  const entryUrl = new URL(`../src/features/${feature}/index.tsx`, import.meta.url);
+  const source = readFileSync(entryUrl, 'utf8');
+  const fromSrc = srcRequire(entryUrl);
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const exports = {};
-  new Function('require', 'exports', compiled)(id => mocks[id] ?? (id.startsWith('../../utils/') || id.startsWith('../request-journey/') ? {} : require(id)), exports);
+  new Function('require', 'exports', compiled)(id => mocks[id] ?? (id.startsWith('../../utils/') || id.startsWith('../request-journey/') ? {} : fromSrc(id)), exports);
   return {
     calls, api,
     navigate(instance, trace) { instanceId = instance; traceId = trace; },

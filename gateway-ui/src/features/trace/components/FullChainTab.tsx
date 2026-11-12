@@ -17,6 +17,7 @@ import { getFullChain, getRecentFullChains } from '../../../api/traces';
 import type { FullChainListItem, TraceConfig } from '../../../types/trace';
 import { getMethodColor } from '../utils';
 import FullChainDetailDrawer from './FullChainDetailDrawer';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -96,7 +97,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
       width: 90,
       sorter: (a, b) => (a.latencyMs || 0) - (b.latencyMs || 0),
       render: (ms: number) => {
-        const color = ms > 1000 ? '#cf1322' : ms > 500 ? '#faad14' : undefined;
+        const color = ms > 1000 ? palette.error : ms > 500 ? palette.warning : undefined;
         return <Text style={{ color }}>{ms}ms</Text>;
       },
     },
@@ -109,7 +110,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
         if (status === 'COMPLETE' || status === 'COMPLETE_WITH_ERRORS' || status === 'OBSERVED' || status === 'OBSERVED_WITH_ERRORS' || status === 'PARTIAL') {
           return (
             <Space size={4}>
-              <CheckCircleOutlined style={{ color: status === 'COMPLETE' ? '#52c41a' : '#faad14' }} />
+              <CheckCircleOutlined style={{ color: status === 'COMPLETE' ? palette.success : palette.warning }} />
               <Text className="text-xs-sm">
                 {t(status === 'PARTIAL' ? 'trace.chain_partial' : 'trace.chain_observed')} · {record.serviceCount || 0} {t('trace.service_count_label')}
               </Text>
@@ -118,7 +119,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
         }
         return (
           <Space size={4}>
-            <ExclamationCircleOutlined style={{ color: '#d9d9d9' }} />
+            <ExclamationCircleOutlined style={{ color: palette.borderSolid }} />
             <Text type="secondary" className="text-xs-sm">
               {t('trace.gateway_only')}
             </Text>

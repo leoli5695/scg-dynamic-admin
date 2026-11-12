@@ -162,7 +162,7 @@ const GatewayFlowBackground: React.FC<GatewayFlowBackgroundProps> = ({
       const R = Math.min(w, h) * (0.34 + pulse * 0.03);
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
       g.addColorStop(0, `rgba(99, 102, 241, ${0.20 + pulse * 0.06})`);
-      g.addColorStop(0.45, 'rgba(59, 130, 246, 0.09)');
+      g.addColorStop(0.45, 'rgba(76, 128, 236, 0.09)');
       g.addColorStop(1, 'rgba(45, 212, 191, 0)');
       ctx.fillStyle = g;
       ctx.beginPath();

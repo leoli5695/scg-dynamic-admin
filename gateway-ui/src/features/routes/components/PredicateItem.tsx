@@ -6,6 +6,7 @@ import { Button, Form, Input, Select } from 'antd';
 import type { FormInstance } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { palette } from '../../../styles/palette';
 
 interface PredicateItemProps {
   form: FormInstance;
@@ -44,12 +45,12 @@ const PredicateItem: React.FC<PredicateItemProps> = ({
           style={{
             width: 150,
             backgroundColor: 'rgba(0, 0, 0, 0.3)',
-            border: '1px solid rgba(148, 163, 184, 0.15)',
+            border: `1px solid rgba(145, 169, 222, 0.15)`,
           }}
           onChange={(value) => {
             form.setFieldValue(['predicates', name, 'args'], value === 'Method' ? [] : '');
           }}
-          suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+          suffixIcon={<span style={{ color: palette.textTertiary, fontSize: '12px' }}>▼</span>}
         >
           <Select.Option value="Path">Path</Select.Option>
           <Select.Option value="Host">Host</Select.Option>

@@ -14,6 +14,7 @@ import {
 import type {
   TimeSeriesPoint, TimeSeriesSummary,
 } from '../../types/middleware';
+import { palette } from '../../styles/palette';
 
 export interface MiddlewareTypeConfig {
   color: string;
@@ -35,22 +36,22 @@ export const MIDDLEWARE_TYPE_CONFIG: Record<string, MiddlewareTypeConfig> = {
 
 export const getMiddlewareTypeConfig = (middlewareType: string): MiddlewareTypeConfig =>
   MIDDLEWARE_TYPE_CONFIG[middlewareType.toLowerCase()] ?? {
-    color: '#8c8c8c',
+    color: palette.textMuted,
     icon: <DatabaseOutlined />,
     label: middlewareType,
   };
 
 // 指标分类图标配置
 export const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-  memory: { icon: <FundOutlined />, label: '内存', color: '#1890ff' },
-  connections: { icon: <ApiOutlined />, label: '连接', color: '#52c41a' },
-  throughput: { icon: <DashboardOutlined />, label: '吞吐量', color: '#faad14' },
-  latency: { icon: <ClockCircleOutlined />, label: '延迟', color: '#722ed1' },
-  cache: { icon: <DatabaseOutlined />, label: '缓存', color: '#13c2c2' },
-  errors: { icon: <AlertOutlined />, label: '异常', color: '#ff4d4f' },
+  memory: { icon: <FundOutlined />, label: '内存', color: palette.primary },
+  connections: { icon: <ApiOutlined />, label: '连接', color: palette.success },
+  throughput: { icon: <DashboardOutlined />, label: '吞吐量', color: palette.warning },
+  latency: { icon: <ClockCircleOutlined />, label: '延迟', color: palette.accent },
+  cache: { icon: <DatabaseOutlined />, label: '缓存', color: palette.info },
+  errors: { icon: <AlertOutlined />, label: '异常', color: palette.error },
   cluster: { icon: <ClusterOutlined />, label: '集群', color: '#2f54eb' },
   messages: { icon: <ThunderboltOutlined />, label: '消息', color: '#fd7e14' },
-  other: { icon: <InfoCircleOutlined />, label: '其他', color: '#8c8c8c' },
+  other: { icon: <InfoCircleOutlined />, label: '其他', color: palette.textMuted },
 };
 
 // 格式化数值显示
@@ -145,15 +146,15 @@ export const getStatusIcon = (status: string): React.ReactNode => {
   switch (status?.toLowerCase()) {
     case 'healthy':
     case 'up':
-      return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+      return <CheckCircleOutlined style={{ color: palette.success }} />;
     case 'warning':
     case 'stale':
-      return <ExclamationCircleOutlined style={{ color: '#faad14' }} />;
+      return <ExclamationCircleOutlined style={{ color: palette.warning }} />;
     case 'critical':
     case 'down':
-      return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+      return <CloseCircleOutlined style={{ color: palette.error }} />;
     default:
-      return <InfoCircleOutlined style={{ color: '#8c8c8c' }} />;
+      return <InfoCircleOutlined style={{ color: palette.textMuted }} />;
   }
 };
 
@@ -248,7 +249,7 @@ export const buildTrendChartOption = (
 ) => {
   if (!data || data.length === 0) {
     return {
-      title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: '#999' } },
+      title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: palette.textMuted } },
       xAxis: { show: false },
       yAxis: { show: false },
     };

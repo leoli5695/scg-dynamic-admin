@@ -30,6 +30,7 @@ import logger from '../../utils/logger';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
 import WaterfallChart from './components/WaterfallChart';
 import './filter-chain.css';
+import { palette } from '../../styles/palette';
 
 const { Title, Text } = Typography;
 
@@ -270,7 +271,7 @@ const FilterChainPage: React.FC = () => {
       message.loading({ content: '正在生成图片...', key: 'exportImage' });
 
       const canvas = await html2canvas(waterfallChartRef.current, {
-        backgroundColor: '#141414',
+        backgroundColor: palette.bgBase,
         scale: 2,
         logging: false,
         useCORS: true,
@@ -544,8 +545,8 @@ const FilterChainPage: React.FC = () => {
       key: 'success',
       width: 80,
       render: (success: boolean) => (success
-        ? <CheckCircleOutlined style={{ color: '#52c41a' }} />
-        : <CloseCircleOutlined style={{ color: '#ff4d4f' }} />),
+        ? <CheckCircleOutlined style={{ color: palette.success }} />
+        : <CloseCircleOutlined style={{ color: palette.error }} />),
     },
     {
       title: t('filterChain.error'),
@@ -661,43 +662,43 @@ const FilterChainPage: React.FC = () => {
         )}
         type="info"
         showIcon
-        style={{ marginBottom: 16, background: 'rgba(24,144,255,0.1)' }}
+        style={{ marginBottom: 16, background: 'rgba(76, 128, 236, 0.1)' }}
       />
 
       {/* Summary stats */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={12} sm={6}>
-          <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <Card size="small" style={{ background: palette.bgCard }}>
             <Statistic
-              title={<span style={{ color: 'rgba(255,255,255,0.65)' }}>{t('filterChain.total_executions')}</span>}
+              title={<span style={{ color: palette.textTertiary }}>{t('filterChain.total_executions')}</span>}
               value={totalExecutions}
               valueStyle={{ fontSize: 20 }}
             />
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <Card size="small" style={{ background: palette.bgCard }}>
             <Statistic
-              title={<span style={{ color: 'rgba(255,255,255,0.65)' }}>{t('filterChain.success_rate')}</span>}
+              title={<span style={{ color: palette.textTertiary }}>{t('filterChain.success_rate')}</span>}
               value={overallSuccessRate}
               suffix="%"
-              valueStyle={{ fontSize: 20, color: parseFloat(overallSuccessRate) >= 99 ? '#52c41a' : '#faad14' }}
+              valueStyle={{ fontSize: 20, color: parseFloat(overallSuccessRate) >= 99 ? palette.success : palette.warning }}
             />
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <Card size="small" style={{ background: palette.bgCard }}>
             <Statistic
-              title={<span style={{ color: 'rgba(255,255,255,0.65)' }}>{t('filterChain.failures')}</span>}
+              title={<span style={{ color: palette.textTertiary }}>{t('filterChain.failures')}</span>}
               value={totalFailures}
-              valueStyle={{ fontSize: 20, color: totalFailures > 0 ? '#ff4d4f' : '#52c41a' }}
+              valueStyle={{ fontSize: 20, color: totalFailures > 0 ? palette.error : palette.success }}
             />
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card size="small" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <Card size="small" style={{ background: palette.bgCard }}>
             <Statistic
-              title={<span style={{ color: 'rgba(255,255,255,0.65)' }}>{t('filterChain.filter_count')}</span>}
+              title={<span style={{ color: palette.textTertiary }}>{t('filterChain.filter_count')}</span>}
               value={filterStats.length}
               valueStyle={{ fontSize: 20 }}
             />
@@ -711,7 +712,7 @@ const FilterChainPage: React.FC = () => {
           <Card
             title="性能分布分析"
             size="small"
-            style={{ background: 'rgba(255,255,255,0.05)' }}
+            style={{ background: palette.bgCard }}
             extra={(
               <Space>
                 <Tooltip title="历史趋势图">
@@ -733,7 +734,7 @@ const FilterChainPage: React.FC = () => {
                   title="平均自身耗时"
                   value={avgSelfTime}
                   suffix="ms"
-                  valueStyle={{ fontSize: 16, color: parseFloat(avgSelfTime) < 1 ? '#52c41a' : '#faad14' }}
+                  valueStyle={{ fontSize: 16, color: parseFloat(avgSelfTime) < 1 ? palette.success : palette.warning }}
                 />
               </Col>
               <Col span={8}>
@@ -741,7 +742,7 @@ const FilterChainPage: React.FC = () => {
                   title="P95耗时"
                   value={avgP95}
                   suffix="ms"
-                  valueStyle={{ fontSize: 16, color: parseFloat(avgP95) < 5 ? '#52c41a' : '#faad14' }}
+                  valueStyle={{ fontSize: 16, color: parseFloat(avgP95) < 5 ? palette.success : palette.warning }}
                 />
               </Col>
               <Col span={8}>
@@ -749,11 +750,11 @@ const FilterChainPage: React.FC = () => {
                   title="P99耗时"
                   value={avgP99}
                   suffix="ms"
-                  valueStyle={{ fontSize: 16, color: parseFloat(avgP99) < 10 ? '#52c41a' : '#faad14' }}
+                  valueStyle={{ fontSize: 16, color: parseFloat(avgP99) < 10 ? palette.success : palette.warning }}
                 />
               </Col>
             </Row>
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${palette.borderSubtle}` }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 自身耗时 = Filter自身逻辑执行时间（不含下游服务）
               </Text>
@@ -765,17 +766,17 @@ const FilterChainPage: React.FC = () => {
           <Card
             title="最慢Filter排名"
             size="small"
-            style={{ background: 'rgba(255,255,255,0.05)' }}
+            style={{ background: palette.bgCard }}
           >
             {slowestFilters.length > 0 ? (
               <div style={{ maxHeight: 150, overflow: 'auto' }}>
                 {slowestFilters.map((filter, index) => (
-                  <div key={filter.filterName} style={{
+                  <div key={`${filter.filterName}-${index}`} style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     padding: '8px 0',
-                    borderBottom: index < slowestFilters.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                    borderBottom: index < slowestFilters.length - 1 ? `1px solid ${palette.borderSubtle}` : 'none',
                   }}
                   >
                     <Space>
@@ -789,7 +790,7 @@ const FilterChainPage: React.FC = () => {
                         {filter.avgSelfTimeMsRaw.toFixed(3)}ms
                       </Text>
                       <Tooltip title={`P95: ${filter.selfP95Ms}ms | P99: ${filter.selfP99Ms}ms`}>
-                        <ClockCircleOutlined style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }} />
+                        <ClockCircleOutlined style={{ color: palette.textCaption, fontSize: 12 }} />
                       </Tooltip>
                     </Space>
                   </div>
@@ -856,14 +857,14 @@ const FilterChainPage: React.FC = () => {
               <Statistic
                 title={t('filterChain.success')}
                 value={selectedRecord.successCount}
-                valueStyle={{ color: '#52c41a' }}
+                valueStyle={{ color: palette.success }}
               />
             </Col>
             <Col span={6}>
               <Statistic
                 title={t('filterChain.failures')}
                 value={selectedRecord.failureCount}
-                valueStyle={{ color: selectedRecord.failureCount > 0 ? '#ff4d4f' : '#52c41a' }}
+                valueStyle={{ color: selectedRecord.failureCount > 0 ? palette.error : palette.success }}
               />
             </Col>
           </Row>
@@ -871,7 +872,7 @@ const FilterChainPage: React.FC = () => {
           <Card
             title="Filter执行瀑布图"
             size="small"
-            style={{ marginBottom: 16, background: 'rgba(255,255,255,0.05)' }}
+            style={{ marginBottom: 16, background: palette.bgCard }}
             extra={(
               <Button
                 size="small"
@@ -967,7 +968,7 @@ const FilterChainPage: React.FC = () => {
           <Button block icon={<DownloadOutlined />} onClick={() => exportData('csv')}>
             导出CSV文件 (表格数据)
           </Button>
-          <Button block icon={<PictureOutlined />} onClick={exportChartAsImage} style={{ borderColor: '#1890ff' }}>
+          <Button block icon={<PictureOutlined />} onClick={exportChartAsImage} style={{ borderColor: palette.primary }}>
             导出瀑布图 (PNG图片)
           </Button>
           <Divider />
@@ -982,7 +983,7 @@ const FilterChainPage: React.FC = () => {
       <div style={{
         marginTop: 16,
         padding: 12,
-        background: 'rgba(255,255,255,0.05)',
+        background: palette.bgCard,
         borderRadius: 6,
       }}
       >

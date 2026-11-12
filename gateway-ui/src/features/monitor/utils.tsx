@@ -4,6 +4,7 @@ import {
   CloseCircleOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
+import { palette } from '../../styles/palette';
 
 /** Human-readable byte size. */
 export const formatBytes = (bytes: number): { value: number; unit: string; display: string } => {
@@ -22,9 +23,9 @@ export const getInstanceStatusColor = (status: string) =>
 
 /** Prometheus instance status → inline icon. */
 export const getInstanceStatusIcon = (status: string): React.ReactNode => {
-  if (status === 'UP') return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
-  if (status === 'DOWN') return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
-  return <WarningOutlined style={{ color: '#faad14' }} />;
+  if (status === 'UP') return <CheckCircleOutlined style={{ color: palette.success }} />;
+  if (status === 'DOWN') return <CloseCircleOutlined style={{ color: palette.error }} />;
+  return <WarningOutlined style={{ color: palette.warning }} />;
 };
 
 /** K8s pod phase → antd Badge preset status / Tag color. */

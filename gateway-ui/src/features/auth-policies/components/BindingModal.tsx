@@ -10,6 +10,7 @@ import { LinkOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { AuthPolicyDefinition, RouteAuthBinding } from '../../../types/authPolicy';
 import type { RouteResponse } from '../../../types/route';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -59,7 +60,7 @@ const BindingModal: React.FC<BindingModalProps> = ({
     <Modal
       title={
         <div className="modal-header-modern">
-          <div className="modal-icon-wrapper" style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' }}>
+          <div className="modal-icon-wrapper" style={{ background: `linear-gradient(135deg, ${palette.primary}, ${palette.primaryActive})` }}>
             <LinkOutlined />
           </div>
           <div className="modal-title-text">
@@ -87,7 +88,7 @@ const BindingModal: React.FC<BindingModalProps> = ({
                 key={binding.bindingId}
                 style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 0', borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
+                  padding: '8px 0', borderBottom: `1px solid rgba(145, 169, 222, 0.2)`,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -127,7 +128,7 @@ const BindingModal: React.FC<BindingModalProps> = ({
               placeholder={t('auth_policy.select_routes_placeholder')}
               style={{ width: '100%' }}
               notFoundContent={
-                <span style={{ color: '#999' }}>
+                <span style={{ color: palette.textMuted }}>
                   {routes.length > 0 && availableRoutes.length === 0
                     ? t('auth_policy.all_routes_bound')
                     : t('auth_policy.no_routes_available')}

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import type { AlertHistoryItem } from '../../../types/alert';
 import { parseServerTime } from '../../../utils/serverTime';
 import { getLevelTagClass } from '../utils';
+import { palette } from '../../../styles/palette';
 
 interface HistoryTableProps {
   history: AlertHistoryItem[];
@@ -35,7 +36,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
       dataIndex: 'createdAt',
       key: 'createdAt',
       render: (text: string) => (
-        <span style={{ color: '#cbd5e1', fontFamily: 'JetBrains Mono, monospace', fontSize: 13.5 }}>
+        <span style={{ color: palette.textSecondary, fontFamily: 'JetBrains Mono, monospace', fontSize: 13.5 }}>
           {parseServerTime(text).toLocaleString()}
         </span>
       ),
@@ -58,7 +59,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
       key: 'title',
       ellipsis: true,
       render: (text: string) => (
-        <span style={{ color: '#e2e8f0', fontSize: 14, fontWeight: 500 }}>{text}</span>
+        <span style={{ color: palette.textPrimary, fontSize: 14, fontWeight: 500 }}>{text}</span>
       ),
     },
     {
@@ -111,7 +112,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({
         expandable={{
           expandedRowRender: (record) => (
             <div className="alert-detail-content">
-              <p style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.75', color: '#e2e8f0', margin: 0 }}>
+              <p style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.75', color: palette.textPrimary, margin: 0 }}>
                 {record.content}
               </p>
             </div>

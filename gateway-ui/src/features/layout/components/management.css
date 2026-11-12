@@ -1,5 +1,5 @@
 .main-content.management-content {
-  background: #0b1220 !important;
+  background: var(--bg-input) !important;
   background-attachment: scroll !important;
 }
 .management-page {
@@ -7,7 +7,7 @@
   margin: 0 auto;
   padding: 14px 8px 40px;
   min-width: 0;
-  color: #e7eefb;
+  color: var(--text-primary);
 }
 .management-page-header {
   display: flex;
@@ -18,13 +18,13 @@
 }
 .management-eyebrow {
   display: block;
-  color: #8398b9;
+  color: var(--text-muted);
   font-size: 10px;
   letter-spacing: 1.5px;
   margin-bottom: 9px;
 }
 .management-page-header h2 {
-  color: #eff4ff;
+  color: var(--text-primary);
   font-size: 26px;
   font-weight: 600;
   letter-spacing: -0.5px;
@@ -32,7 +32,7 @@
   margin: 0;
 }
 .management-page-header p {
-  color: #91a2bd;
+  color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.8;
   margin: 8px 0 0;
@@ -50,12 +50,12 @@
 }
 .management-page .management-page-actions .ant-btn-primary,
 .management-page .management-primary.ant-btn {
-  background: linear-gradient(105deg, #477fec, #6866dc) !important;
+  background: linear-gradient(105deg, var(--brand-from), var(--brand-to)) !important;
   border: 1px solid #88a8fc55 !important;
   box-shadow: 0 4px 14px #416ee622 !important;
 }
 .management-page .ant-card {
-  background: #111d30 !important;
+  background: var(--bg-card) !important;
   border: 1px solid #829ec331 !important;
   border-radius: 13px !important;
   box-shadow: none !important;
@@ -70,7 +70,7 @@
   min-height: 50px;
 }
 .management-page .ant-card-head-title {
-  color: #dce7f8;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
 }
@@ -84,28 +84,28 @@
   margin-bottom: 24px;
 }
 .management-metric {
-  --metric-color: #8ab6ff;
+  --metric-color: var(--primary-light);
   min-width: 0;
   padding: 18px 20px;
-  background: #121d30;
+  background: var(--bg-card);
   border: 1px solid #809ac329;
   border-radius: 13px;
 }
 .metric-green {
-  --metric-color: #66d6ac;
+  --metric-color: var(--success-color);
 }
 .metric-purple {
-  --metric-color: #b4a4f6;
+  --metric-color: var(--accent-light);
 }
 .metric-amber {
-  --metric-color: #dfbf7b;
+  --metric-color: var(--warning-color);
 }
 .management-metric-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  color: #b6c5dd;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 .management-metric-icon {
@@ -120,7 +120,7 @@
   font-size: 16px;
 }
 .management-metric-value {
-  color: #eff4ff;
+  color: var(--text-primary);
   font-size: 29px;
   font-weight: 600;
   line-height: 1.3;
@@ -129,7 +129,7 @@
   overflow-wrap: anywhere;
 }
 .management-metric-caption {
-  color: #8296b5;
+  color: var(--text-muted);
   font-size: 10px;
   line-height: 1.7;
 }
@@ -145,7 +145,7 @@
   gap: 10px;
   align-items: center;
   margin: 0;
-  color: #e5edfa;
+  color: var(--text-primary);
   font-size: 16px;
   font-weight: 600;
 }
@@ -156,7 +156,7 @@
   padding: 1px 6px;
   border-radius: 5px;
   font-size: 11px;
-  color: #aac3e8;
+  color: var(--text-secondary);
   background: #7d9fdd15;
   border: 1px solid #7d9fdd20;
 }
@@ -168,7 +168,7 @@
 .management-page .management-search.ant-input-affix-wrapper {
   width: 260px;
   height: 38px;
-  background: #101b2c !important;
+  background: var(--bg-card) !important;
   border: 1px solid #819ac238;
   border-radius: 9px;
   box-shadow: none;
@@ -177,15 +177,15 @@
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
-  color: #dbe6f8;
+  color: var(--text-primary);
   font-size: 12px;
 }
 .management-page .management-search .ant-input-prefix {
-  color: #8ba1c4;
+  color: var(--text-muted);
   margin-right: 8px;
 }
 .management-page .management-search input::placeholder {
-  color: #8192ad;
+  color: var(--text-muted);
 }
 .management-page .ant-alert {
   margin-bottom: 20px;
@@ -202,7 +202,7 @@
   text-align: center;
   border: 1px dashed #829ac333;
   border-radius: 14px;
-  background: #101b2c;
+  background: var(--bg-card);
 }
 .management-empty-icon {
   display: grid;
@@ -212,18 +212,18 @@
   border-radius: 15px;
   border: 1px solid #7993de2b;
   background: linear-gradient(135deg, #4778e924, #8b65f018);
-  color: #91b8ff;
+  color: var(--primary-light);
   font-size: 26px;
 }
 .management-empty h3 {
-  color: #dce7f8;
+  color: var(--text-primary);
   font-size: 15px;
   font-weight: 500;
   margin: 3px 0 0;
 }
 .management-empty p {
   max-width: 460px;
-  color: #8da1bf;
+  color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.9;
   margin: 0;

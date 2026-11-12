@@ -11,7 +11,7 @@
 }
 .kubernetes-page.management-page .cluster-card-premium {
   border: 1px solid #829ec331;
-  background: #111d30;
+  background: var(--bg-card);
   border-radius: 13px;
   backdrop-filter: none;
   box-shadow: none;
@@ -34,7 +34,7 @@
   border-radius: 11px;
   border: 1px solid #7993de2b;
   background: linear-gradient(135deg, #4778e924, #8b65f018);
-  color: #91b8ff;
+  color: var(--primary-light);
 }
 .kubernetes-page.management-page .cluster-card-info {
   min-width: 0;
@@ -45,7 +45,7 @@
   align-items: center;
   gap: 6px;
   font-size: 14px;
-  color: #e5edfa;
+  color: var(--text-primary);
   overflow-wrap: anywhere;
 }
 .kubernetes-page.management-page .cluster-card-status-text {
@@ -58,7 +58,7 @@
   gap: 6px;
   margin-top: 8px;
   font-size: 11px;
-  color: #8da1bf;
+  color: var(--text-tertiary);
 }
 .kubernetes-page.management-page .cluster-card-status-dot-inline {
   animation: none;
@@ -81,7 +81,7 @@
   height: 30px;
   border: 1px solid #869ec51e;
   border-radius: 7px;
-  color: #93a8c7;
+  color: var(--text-tertiary);
   background: #829ed409;
   box-shadow: none;
   transition: background-color 0.15s;
@@ -97,11 +97,11 @@
   align-items: center;
   width: auto;
   padding-inline: 9px;
-  color: #9bbcf5;
+  color: var(--primary-light);
   font-size: 11px;
 }
 .kubernetes-page.management-page .cluster-card-action-btn.danger {
-  color: #df8d9b;
+  color: var(--error-color);
 }
 @media (max-width: 1000px) {
   .kubernetes-page.management-page {

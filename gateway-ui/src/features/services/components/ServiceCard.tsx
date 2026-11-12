@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import type { ServiceDefinition } from '../../../types/service';
 import { getLoadBalancerLabelKey, getServiceStatus } from '../utils';
 import AiServiceConnection from './AiServiceConnection';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -67,7 +68,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
           icon={<ExclamationCircleOutlined />}
           message={warningMessage}
           className="service-warning-alert"
-          style={{ marginBottom: 16, background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)' }}
+          style={{ marginBottom: 16, background: 'rgba(232, 180, 100, 0.08)', border: `1px solid rgba(232, 180, 100, 0.2)` }}
         />
       )}
       <div className="service-card-header">
@@ -151,7 +152,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
               >
                 <span
                   className="instance-dot"
-                  style={{ background: inst.healthy !== false && inst.enabled !== false ? '#10b981' : '#ef4444' }}
+                  style={{ background: inst.healthy !== false && inst.enabled !== false ? palette.success : palette.error }}
                 />
                 <span className="instance-addr">
                   {inst.ip}

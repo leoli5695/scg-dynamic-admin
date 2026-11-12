@@ -27,6 +27,7 @@ import { getSharedStressTestReport } from '../../api/stressTest';
 import type { StressTest } from '../../types/stressTest';
 import AiReportRenderer from '../../components/ai/AiReportRenderer';
 import '../../styles/ai-report.css';
+import { palette } from '../../styles/palette';
 
 const { Title, Text } = Typography;
 
@@ -95,7 +96,7 @@ const StressTestSharePage: React.FC = () => {
         justifyContent: 'center',
         alignItems: 'center',
         minHeight: '100vh',
-        background: '#0f172a',
+        background: palette.bgSecondary,
       }}
       >
         <Spin size="large" />
@@ -109,7 +110,7 @@ const StressTestSharePage: React.FC = () => {
         padding: '48px',
         maxWidth: '600px',
         margin: '0 auto',
-        background: '#0f172a',
+        background: palette.bgSecondary,
         minHeight: '100vh',
       }}
       >
@@ -128,20 +129,20 @@ const StressTestSharePage: React.FC = () => {
       padding: '24px',
       maxWidth: '1200px',
       margin: '0 auto',
-      background: '#0f172a',
+      background: palette.bgSecondary,
       minHeight: '100vh',
     }}
     >
       <Card
         style={{
-          background: 'rgba(30, 41, 59, 0.8)',
-          border: '1px solid rgba(148, 163, 184, 0.2)',
+          background: 'rgba(16, 24, 40, 0.8)',
+          border: `1px solid rgba(145, 169, 222, 0.2)`,
           marginBottom: '24px',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <Title level={3} style={{ margin: 0, color: '#f1f5f9' }}>
-            <ThunderboltOutlined style={{ marginRight: '8px', color: '#3b82f6' }} />
+          <Title level={3} style={{ margin: 0, color: palette.textPrimary }}>
+            <ThunderboltOutlined style={{ marginRight: '8px', color: palette.primary }} />
             {test?.testName || 'Stress Test Report'}
           </Title>
           <Space>
@@ -157,8 +158,8 @@ const StressTestSharePage: React.FC = () => {
           bordered
           size="small"
           styles={{
-            label: { background: 'rgba(15, 23, 42, 0.6)', color: '#94a3b8' },
-            content: { background: 'transparent', color: '#f1f5f9' },
+            label: { background: 'rgba(10, 16, 32, 0.6)', color: palette.textTertiary },
+            content: { background: 'transparent', color: palette.textPrimary },
           }}
         >
           <Descriptions.Item label="Target URL">{test?.targetUrl}</Descriptions.Item>
@@ -169,15 +170,15 @@ const StressTestSharePage: React.FC = () => {
           <Descriptions.Item label="Duration">{test?.durationSeconds ? `${test.durationSeconds}s` : test?.totalRequests ? `${test.totalRequests} requests` : 'N/A'}</Descriptions.Item>
         </Descriptions>
 
-        <Divider style={{ borderColor: 'rgba(148, 163, 184, 0.2)' }} />
+        <Divider style={{ borderColor: 'rgba(145, 169, 222, 0.2)' }} />
 
-        <Title level={5} style={{ color: '#f1f5f9', marginBottom: '16px' }}>Test Results</Title>
+        <Title level={5} style={{ color: palette.textPrimary, marginBottom: '16px' }}>Test Results</Title>
 
         <div className="console-report-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-          <Card size="small" style={{ background: 'rgba(15, 23, 42, 0.6)', border: 'none' }}>
+          <Card size="small" style={{ background: 'rgba(10, 16, 32, 0.6)', border: 'none' }}>
             <div style={{ textAlign: 'center' }}>
               <Text type="secondary">Total Requests</Text>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f1f5f9' }}>{test?.actualRequests}</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: palette.textPrimary }}>{test?.actualRequests}</div>
               <Space style={{ marginTop: '8px' }}>
                 <Tag color="success" icon={<CheckCircleOutlined />}>{test?.successfulRequests} success</Tag>
                 <Tag color="error" icon={<CloseCircleOutlined />}>{test?.failedRequests} failed</Tag>
@@ -185,35 +186,35 @@ const StressTestSharePage: React.FC = () => {
             </div>
           </Card>
 
-          <Card size="small" style={{ background: 'rgba(15, 23, 42, 0.6)', border: 'none' }}>
+          <Card size="small" style={{ background: 'rgba(10, 16, 32, 0.6)', border: 'none' }}>
             <div style={{ textAlign: 'center' }}>
               <Text type="secondary">Requests/Second</Text>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#22c55e' }}>{test?.requestsPerSecond?.toFixed(2)}</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: palette.success }}>{test?.requestsPerSecond?.toFixed(2)}</div>
               <Text type="secondary" style={{ fontSize: '12px' }}>req/s</Text>
             </div>
           </Card>
 
-          <Card size="small" style={{ background: 'rgba(15, 23, 42, 0.6)', border: 'none' }}>
+          <Card size="small" style={{ background: 'rgba(10, 16, 32, 0.6)', border: 'none' }}>
             <div style={{ textAlign: 'center' }}>
               <Text type="secondary">Error Rate</Text>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: (test?.errorRate ?? 0) > 5 ? '#ef4444' : '#22c55e' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: (test?.errorRate ?? 0) > 5 ? palette.error : palette.success }}>
                 {test?.errorRate?.toFixed(2)}%
               </div>
             </div>
           </Card>
 
-          <Card size="small" style={{ background: 'rgba(15, 23, 42, 0.6)', border: 'none' }}>
+          <Card size="small" style={{ background: 'rgba(10, 16, 32, 0.6)', border: 'none' }}>
             <div style={{ textAlign: 'center' }}>
               <Text type="secondary">Avg Response Time</Text>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f1f5f9' }}>{test?.avgResponseTimeMs?.toFixed(2)}</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: palette.textPrimary }}>{test?.avgResponseTimeMs?.toFixed(2)}</div>
               <Text type="secondary" style={{ fontSize: '12px' }}>ms</Text>
             </div>
           </Card>
         </div>
 
-        <Divider style={{ borderColor: 'rgba(148, 163, 184, 0.2)', margin: '24px 0' }} />
+        <Divider style={{ borderColor: 'rgba(145, 169, 222, 0.2)', margin: '24px 0' }} />
 
-        <Title level={5} style={{ color: '#f1f5f9', marginBottom: '16px' }}>Response Time Distribution</Title>
+        <Title level={5} style={{ color: palette.textPrimary, marginBottom: '16px' }}>Response Time Distribution</Title>
 
         <div className="console-report-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
           {[
@@ -224,9 +225,9 @@ const StressTestSharePage: React.FC = () => {
             { label: 'P99', value: test?.p99ResponseTimeMs },
             { label: 'Max', value: test?.maxResponseTimeMs },
           ].map((item) => (
-            <div key={item.label} style={{ textAlign: 'center', padding: '12px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '8px' }}>
+            <div key={item.label} style={{ textAlign: 'center', padding: '12px', background: 'rgba(10, 16, 32, 0.6)', borderRadius: '8px' }}>
               <Text type="secondary">{item.label}</Text>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f1f5f9' }}>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: palette.textPrimary }}>
                 {item.value?.toFixed(2) || '0'}
               </div>
               <Text type="secondary" style={{ fontSize: '12px' }}>ms</Text>
@@ -239,20 +240,20 @@ const StressTestSharePage: React.FC = () => {
         <Card
           title={
             <Space>
-              <ClockCircleOutlined style={{ color: '#3b82f6' }} />
-              <Title level={4} style={{ margin: 0, color: '#f1f5f9' }}>AI Analysis</Title>
+              <ClockCircleOutlined style={{ color: palette.primary }} />
+              <Title level={4} style={{ margin: 0, color: palette.textPrimary }}>AI Analysis</Title>
             </Space>
           }
           style={{
-            background: 'rgba(30, 41, 59, 0.8)',
-            border: '1px solid rgba(148, 163, 184, 0.2)',
+            background: 'rgba(16, 24, 40, 0.8)',
+            border: `1px solid rgba(145, 169, 222, 0.2)`,
           }}
         >
           <AiReportRenderer content={test.aiAnalysisResult} />
         </Card>
       )}
 
-      <div style={{ textAlign: 'center', marginTop: '24px', color: '#64748b' }}>
+      <div style={{ textAlign: 'center', marginTop: '24px', color: palette.textMuted }}>
         <Text type="secondary">
           Generated by Gateway Admin • {new Date().toLocaleString()}
         </Text>

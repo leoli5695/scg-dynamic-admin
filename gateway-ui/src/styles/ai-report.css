@@ -64,7 +64,7 @@
 }
 
 .ai-report-smart-table td[data-type="name"]:hover {
-  color: #40a9ff;
+  color: var(--primary-hover);
 }
 
 /* Markdown原生表格样式（备用） */
@@ -109,17 +109,17 @@
 
 /* 表格内数字高亮 */
 .ai-report-markdown-table td[data-status="good"] {
-  color: #52c41a;
+  color: var(--success-color);
   font-weight: 500;
 }
 
 .ai-report-markdown-table td[data-status="warning"] {
-  color: #faad14;
+  color: var(--warning-color);
   font-weight: 500;
 }
 
 .ai-report-markdown-table td[data-status="error"] {
-  color: #ff4d4f;
+  color: var(--error-color);
   font-weight: 500;
 }
 
@@ -187,7 +187,7 @@
 }
 
 .ai-report-container pre code {
-  color: #52c41a;
+  color: var(--success-color);
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 13px;
 }
@@ -197,19 +197,19 @@
   background: rgba(255, 255, 255, 0.1);
   padding: 2px 6px;
   border-radius: 4px;
-  color: #1890ff;
+  color: var(--primary-color);
   font-size: 13px;
 }
 
 /* 链接样式 */
 .ai-report-container a {
-  color: #1890ff;
+  color: var(--primary-color);
   text-decoration: underline;
   transition: color 0.2s;
 }
 
 .ai-report-container a:hover {
-  color: #40a9ff;
+  color: var(--primary-hover);
 }
 
 /* 分隔线样式 */
@@ -235,8 +235,8 @@
 .ai-report-container blockquote {
   margin: 0 0 12px 0;
   padding: 12px 16px;
-  background: rgba(24, 144, 255, 0.1);
-  border-left: 4px solid #1890ff;
+  background: rgba(76, 128, 236, 0.1);
+  border-left: 4px solid var(--primary-color);
   border-radius: 4px;
   color: rgba(255, 255, 255, 0.85);
 }
@@ -269,22 +269,21 @@
 
 /* 滚动条样式 */
 .ai-report-container ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
 }
 
 .ai-report-container ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 3px;
+  background: transparent;
 }
 
 .ai-report-container ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
 }
 
 .ai-report-container ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* 动画效果 */

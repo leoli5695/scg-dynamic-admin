@@ -17,6 +17,7 @@ import {
   FireOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
+import { palette } from '../../styles/palette';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -32,24 +33,24 @@ interface AiReportRendererProps {
 
 // 状态图标映射
 const statusIconMap: Record<string, ReactNode> = {
-  '✅': <CheckCircleOutlined style={{ color: '#52c41a' }} />,
-  '⚠️': <WarningOutlined style={{ color: '#faad14' }} />,
-  '❌': <CloseCircleOutlined style={{ color: '#ff4d4f' }} />,
-  '🔴': <CloseCircleOutlined style={{ color: '#ff4d4f' }} />,
-  '🟡': <WarningOutlined style={{ color: '#faad14' }} />,
-  '🟢': <CheckCircleOutlined style={{ color: '#52c41a' }} />,
-  '🟠': <WarningOutlined style={{ color: '#faad14' }} />,
+  '✅': <CheckCircleOutlined style={{ color: palette.success }} />,
+  '⚠️': <WarningOutlined style={{ color: palette.warning }} />,
+  '❌': <CloseCircleOutlined style={{ color: palette.error }} />,
+  '🔴': <CloseCircleOutlined style={{ color: palette.error }} />,
+  '🟡': <WarningOutlined style={{ color: palette.warning }} />,
+  '🟢': <CheckCircleOutlined style={{ color: palette.success }} />,
+  '🟠': <WarningOutlined style={{ color: palette.warning }} />,
   '📊': <DashboardOutlined />,
   '🔍': <InfoCircleOutlined />,
-  '📈': <ArrowUpOutlined style={{ color: '#52c41a' }} />,
-  '📉': <ArrowDownOutlined style={{ color: '#ff4d4f' }} />,
-  '🎯': <BulbOutlined style={{ color: '#1890ff' }} />,
-  '⚡': <ThunderboltOutlined style={{ color: '#1890ff' }} />,
-  '🐛': <BugOutlined style={{ color: '#ff4d4f' }} />,
+  '📈': <ArrowUpOutlined style={{ color: palette.success }} />,
+  '📉': <ArrowDownOutlined style={{ color: palette.error }} />,
+  '🎯': <BulbOutlined style={{ color: palette.primary }} />,
+  '⚡': <ThunderboltOutlined style={{ color: palette.primary }} />,
+  '🐛': <BugOutlined style={{ color: palette.error }} />,
   '📝': <InfoCircleOutlined />,
   '⏱️': <ClockCircleOutlined />,
-  '💡': <BulbOutlined style={{ color: '#1890ff' }} />,
-  '🔥': <FireOutlined style={{ color: '#ff4d4f' }} />,
+  '💡': <BulbOutlined style={{ color: palette.primary }} />,
+  '🔥': <FireOutlined style={{ color: palette.error }} />,
 };
 
 // 状态颜色映射
@@ -74,9 +75,9 @@ const statusColorMap: Record<string, string> = {
 
 // 影响等级映射
 const impactLevelMap: Record<string, { color: string; icon: ReactNode }> = {
-  '🔴 高影响': { color: '#ff4d4f', icon: <CloseCircleOutlined style={{ color: '#ff4d4f' }} /> },
-  '🟠 中影响': { color: '#faad14', icon: <WarningOutlined style={{ color: '#faad14' }} /> },
-  '🟢 低影响': { color: '#52c41a', icon: <CheckCircleOutlined style={{ color: '#52c41a' }} /> },
+  '🔴 高影响': { color: palette.error, icon: <CloseCircleOutlined style={{ color: palette.error }} /> },
+  '🟠 中影响': { color: palette.warning, icon: <WarningOutlined style={{ color: palette.warning }} /> },
+  '🟢 低影响': { color: palette.success, icon: <CheckCircleOutlined style={{ color: palette.success }} /> },
 };
 
 // 解析状态文本中的图标
@@ -108,14 +109,14 @@ const parseNumericValue = (text: string): { value: number; unit: string; isNumer
 // 获取耗时对应的颜色
 const getLatencyColor = (value: number, unit: string): string => {
   if (unit === 'ms') {
-    if (value < 10) return '#52c41a';  // 绿色 - 快
-    if (value < 50) return '#faad14';  // 黄色 - 中等
-    return '#ff4d4f';                   // 红色 - 慢
+    if (value < 10) return palette.success;  // 绿色 - 快
+    if (value < 50) return palette.warning;  // 黄色 - 中等
+    return palette.error;                   // 红色 - 慢
   }
   if (unit === '%') {
-    if (value >= 95) return '#52c41a';  // 绿色 - 高成功率
-    if (value >= 80) return '#faad14';  // 黄色 - 中等
-    return '#ff4d4f';                   // 红色 - 低
+    if (value >= 95) return palette.success;  // 绿色 - 高成功率
+    if (value >= 80) return palette.warning;  // 黄色 - 中等
+    return palette.error;                   // 红色 - 低
   }
   return 'rgba(255,255,255,0.85)';
 };
@@ -235,7 +236,7 @@ const SmartTable: React.FC<{ headers: string[]; rows: string[][] }> = ({ headers
             return (
               <Text
                 style={{
-                  color: '#1890ff',
+                  color: palette.primary,
                   fontWeight: 500,
                   cursor: 'pointer',
                 }}
@@ -531,8 +532,8 @@ const createComponents = (): Components => ({
           showIcon
           style={{
             marginBottom: 12,
-            background: 'rgba(24, 144, 255, 0.1)',
-            border: '1px solid rgba(24, 144, 255, 0.3)',
+            background: 'rgba(76, 128, 236, 0.1)',
+            border: `1px solid rgba(76, 128, 236, 0.3)`,
           }}
           message={<Text style={{ color: 'rgba(255,255,255,0.85)' }}>{content}</Text>}
         />
@@ -590,7 +591,7 @@ const createComponents = (): Components => ({
           background: 'rgba(255,255,255,0.1)',
           padding: '2px 6px',
           borderRadius: 4,
-          color: '#1890ff',
+          color: palette.primary,
           fontSize: '13px',
         }}>
           {children}
@@ -607,7 +608,7 @@ const createComponents = (): Components => ({
         border: '1px solid rgba(255,255,255,0.1)',
       }}>
         <code style={{
-          color: '#52c41a',
+          color: palette.success,
           fontFamily: 'monospace',
           fontSize: '13px',
         }}>
@@ -624,7 +625,7 @@ const createComponents = (): Components => ({
       target="_blank"
       rel="noopener noreferrer"
       style={{
-        color: '#1890ff',
+        color: palette.primary,
         textDecoration: 'underline',
       }}
     >
@@ -642,8 +643,8 @@ const createComponents = (): Components => ({
       showIcon
       style={{
         marginBottom: 12,
-        background: 'rgba(24, 144, 255, 0.1)',
-        border: '1px solid rgba(24, 144, 255, 0.3)',
+        background: 'rgba(76, 128, 236, 0.1)',
+        border: `1px solid rgba(76, 128, 236, 0.3)`,
       }}
       message={<div style={{ color: 'rgba(255,255,255,0.85)' }}>{children}</div>}
     />

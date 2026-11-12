@@ -15,6 +15,8 @@ import { parseServerTime } from '../../../utils/serverTime';
 import { compareWithPrevious, getDiagnosticHistory } from '../../../api/diagnostic';
 import type { DiagnosticReport } from '../../../types/diagnostic';
 import { getScoreColor } from '../utils';
+import { chartColors, palette, withAlpha } from '../../../styles/palette';
+import { chartCategoryAxis, chartLegend, chartTitle, chartTooltip, chartValueAxis } from '../../../styles/chartTheme';
 
 const { Text } = Typography;
 
@@ -50,10 +52,11 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
     title: {
       text: t('diagnostic.score_trend'),
       left: 'center',
-      textStyle: { fontSize: 14 },
+      textStyle: chartTitle,
     },
     tooltip: {
       trigger: 'axis',
+      ...chartTooltip,
       formatter: (params: Array<{ value: [string, number] }>) => {
         const date = parseServerTime(params[0].value[0] as string | number).toLocaleString();
         const score = params[0].value[1];
@@ -61,37 +64,40 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
       },
     },
     xAxis: {
+      ...chartCategoryAxis,
       type: 'time',
       axisLabel: {
+        ...chartCategoryAxis.axisLabel,
         formatter: (value: number) => new Date(value).toLocaleTimeString(),
       },
     },
     yAxis: {
+      ...chartValueAxis,
       type: 'value',
       min: 0,
       max: 100,
-      axisLabel: { formatter: '{value}' },
     },
     series: [{
       type: 'line',
       data: trend.timestamps.map((ts, i) => [ts, trend.scores[i]]),
       smooth: true,
-      lineStyle: { width: 2 },
+      itemStyle: { color: palette.success },
+      lineStyle: { width: 2, color: palette.success },
       areaStyle: {
         color: {
           type: 'linear',
           x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: 'rgba(82, 196, 26, 0.3)' },
-            { offset: 1, color: 'rgba(82, 196, 26, 0.05)' },
+            { offset: 0, color: withAlpha(palette.success, 0.3) },
+            { offset: 1, color: withAlpha(palette.success, 0.05) },
           ],
         },
       },
       markLine: {
         silent: true,
         data: [
-          { yAxis: 80, lineStyle: { color: '#52c41a' }, label: { formatter: '健康线' } },
-          { yAxis: 50, lineStyle: { color: '#faad14' }, label: { formatter: '警告线' } },
+          { yAxis: 80, lineStyle: { color: palette.success }, label: { formatter: '健康线' } },
+          { yAxis: 50, lineStyle: { color: palette.warning }, label: { formatter: '警告线' } },
         ],
       },
     }],
@@ -116,7 +122,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
             description={
               <div>
                 <p>{t('diagnostic.no_gateway_metrics_desc')}</p>
-                <p style={{ marginTop: 8, color: '#8c8c8c' }}>
+                <p style={{ marginTop: 8, color: palette.textMuted }}>
                   {t('diagnostic.prometheus_hint')}
                 </p>
               </div>
@@ -129,39 +135,47 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
     return (
       <ReactECharts
         option={{
-          tooltip: { trigger: 'axis' },
+          tooltip: { trigger: 'axis', ...chartTooltip },
+          color: chartColors,
           legend: {
+            ...chartLegend,
             data: ['QPS', '错误率(%)', '堆内存(%)'],
             bottom: 0,
           },
           xAxis: {
+            ...chartCategoryAxis,
             type: 'time',
             data: history.map((h) => parseServerTime(h.createdAt).getTime()),
             axisLabel: {
+              ...chartCategoryAxis.axisLabel,
               formatter: (value: number) => new Date(value).toLocaleTimeString(),
             },
           },
-          yAxis: { type: 'value' },
+          yAxis: { ...chartValueAxis, type: 'value' },
           series: [
             {
               name: 'QPS',
               type: 'line',
               data: history.map((h) => h.gatewayQps || 0),
               smooth: true,
+              itemStyle: { color: chartColors[0] },
+              lineStyle: { color: chartColors[0] },
             },
             {
               name: '错误率(%)',
               type: 'line',
               data: history.map((h) => h.gatewayErrorRate || 0),
               smooth: true,
-              lineStyle: { color: '#ff4d4f' },
+              itemStyle: { color: palette.error },
+              lineStyle: { color: palette.error },
             },
             {
               name: '堆内存(%)',
               type: 'line',
               data: history.map((h) => h.gatewayHeapUsagePercent || 0),
               smooth: true,
-              lineStyle: { color: '#1890ff' },
+              itemStyle: { color: palette.primary },
+              lineStyle: { color: palette.primary },
             },
           ],
           grid: { left: 60, right: 20, top: 20, bottom: 50 },
@@ -233,7 +247,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
                 title={t('diagnostic.score_change')}
                 value={comparison.scoreChange || 0}
                 prefix={(comparison.scoreChange ?? 0) > 0 ? '+' : ''}
-                valueStyle={{ color: (comparison.scoreChange ?? 0) > 0 ? '#52c41a' : (comparison.scoreChange ?? 0) < 0 ? '#ff4d4f' : '#8c8c8c' }}
+                valueStyle={{ color: (comparison.scoreChange ?? 0) > 0 ? palette.success : (comparison.scoreChange ?? 0) < 0 ? palette.error : palette.textMuted }}
               />
             </Col>
             <Col span={12}>

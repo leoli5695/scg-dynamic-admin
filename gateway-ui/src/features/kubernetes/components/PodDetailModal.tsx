@@ -5,6 +5,7 @@ import { CloudServerOutlined, CopyOutlined, PlayCircleOutlined, ReloadOutlined }
 import { useTranslation } from 'react-i18next';
 import { getPodDetail, getPodLogs, getPodYaml } from '../../../api/kubernetes';
 import type { KubernetesPodDetail, KubernetesPodInfo } from '../../../types/kubernetes';
+import { palette } from '../../../styles/palette';
 
 const INITIAL_TAIL_LINES = 200;
 
@@ -222,7 +223,7 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
                               <div style={{ marginTop: 8, maxHeight: 100, overflow: 'auto' }}>
                                 {container.env.map((e, i) => (
                                   <div key={i} style={{ fontSize: 12, marginBottom: 4 }}>
-                                    <code style={{ color: '#60a5fa' }}>{e.name}</code>: <span style={{ color: '#a1a1aa' }}>{e.value || `(${t('k8s.from_secret')})`}</span>
+                                    <code style={{ color: palette.primaryLight }}>{e.name}</code>: <span style={{ color: '#a1a1aa' }}>{e.value || `(${t('k8s.from_secret')})`}</span>
                                   </div>
                                 ))}
                               </div>

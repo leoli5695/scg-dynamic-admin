@@ -5,7 +5,7 @@ body {
 
 /* Sidebar Styles */
 .sidebar {
-  background-color: #0f172a !important; /* Dark charcoal gray */
+  background-color: var(--bg-secondary) !important; /* Dark charcoal gray */
   
   .logo {
     height: 64px;
@@ -35,10 +35,10 @@ body {
       }
       
       &.ant-menu-item-selected {
-        background-color: #165DFF !important; /* Modern cobalt blue */
-        border-left: 4px solid #165DFF;
+        background-color: var(--primary-color) !important; /* Modern cobalt blue */
+        border-left: 4px solid var(--primary-color);
         padding-left: 12px !important;
-        box-shadow: 0 2px 8px rgba(22, 93, 255, 0.2);
+        box-shadow: 0 2px 8px rgba(76, 128, 236, 0.2);
         
         span {
           color: white !important;

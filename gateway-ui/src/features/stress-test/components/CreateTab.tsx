@@ -34,6 +34,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { StressTestConfig } from '../../../types/stressTest';
 import { TEST_TEMPLATES } from '../constants/templates';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -344,7 +345,7 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
                             `${t('stress_test.template_applied')}: ${t(template.nameKey)}`,
                           );
                         }}
-                        style={{ background: 'rgba(255,255,255,0.08)', borderColor: '#165DFF' }}
+                        style={{ background: 'rgba(255,255,255,0.08)', borderColor: palette.primary }}
                       >
                         <Space direction="vertical" style={{ width: '100%' }} size="small">
                           <Space>

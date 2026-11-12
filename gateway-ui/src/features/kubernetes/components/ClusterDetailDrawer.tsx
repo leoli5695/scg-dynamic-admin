@@ -17,6 +17,7 @@ import type {
 } from '../../../types/kubernetes';
 import { DeployGatewayModal } from './DeployGatewayModal';
 import { PodDetailModal } from './PodDetailModal';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -42,7 +43,7 @@ const ClusterInfo: React.FC<{ cluster: KubernetesCluster }> = ({ cluster }) => {
         <span className="k8s-description-label">{t('k8s.server_url')}</span>
         <span className="k8s-description-value">
           {cluster.serverUrl
-            ? <Text copyable style={{ color: '#f1f5f9' }}>{cluster.serverUrl}</Text>
+            ? <Text copyable style={{ color: palette.textPrimary }}>{cluster.serverUrl}</Text>
             : fallback}
         </span>
       </div>
@@ -161,7 +162,7 @@ export const ClusterDetailDrawer: React.FC<ClusterDetailDrawerProps> = ({ cluste
       title: t('k8s.deployment_name'),
       dataIndex: 'name',
       key: 'name',
-      render: (name: string) => <Text strong style={{ color: '#fafafa' }}>{name}</Text>,
+      render: (name: string) => <Text strong style={{ color: palette.bgElevated }}>{name}</Text>,
     },
     {
       title: t('k8s.namespace'),
@@ -203,7 +204,7 @@ export const ClusterDetailDrawer: React.FC<ClusterDetailDrawerProps> = ({ cluste
                 e.stopPropagation();
                 let newValue: number | null = null;
                 modal.confirm({
-                  title: <span style={{ color: '#fafafa', fontWeight: 600 }}>{t('k8s.scale_title')}</span>,
+                  title: <span style={{ color: palette.bgElevated, fontWeight: 600 }}>{t('k8s.scale_title')}</span>,
                   content: (
                     <div style={{ padding: '20px 0' }}>
                       <InputNumber
@@ -371,7 +372,7 @@ export const ClusterDetailDrawer: React.FC<ClusterDetailDrawerProps> = ({ cluste
                         {
                           title: t('k8s.node_name'),
                           dataIndex: 'name',
-                          render: (name: string) => <Text strong style={{ color: '#f1f5f9' }}>{name}</Text>,
+                          render: (name: string) => <Text strong style={{ color: palette.textPrimary }}>{name}</Text>,
                         },
                         {
                           title: t('k8s.node_status'),

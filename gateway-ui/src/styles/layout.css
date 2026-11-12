@@ -81,7 +81,7 @@
 }
 
 .sidebar-premium .ant-menu-item-selected {
-  background: rgba(59, 130, 246, 0.08);
+  background: rgba(76, 128, 236, 0.08);
 }
 
 .sidebar-premium .ant-menu-item-selected span {
@@ -534,7 +534,7 @@
 }
 
 .tab-nav-premium .ant-tabs-tab-active {
-  background: rgba(59, 130, 246, 0.06);
+  background: rgba(76, 128, 236, 0.06);
 }
 
 .tab-nav-premium .ant-tabs-tab-active .ant-tabs-tab-btn {

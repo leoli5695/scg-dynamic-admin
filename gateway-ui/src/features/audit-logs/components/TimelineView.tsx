@@ -15,6 +15,7 @@ import { useRequest } from '../../../hooks/useRequest';
 import { getAuditTimeline } from '../../../api/auditLogs';
 import type { TimelineDiffEntry, TimelineEvent } from '../../../types/auditLog';
 import { getOperationColor, getOperationIcon } from '../utils';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -205,7 +206,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
                   borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 8,
                 }}>
                   <Text strong style={{ fontSize: 16 }}>{day.label}</Text>
-                  <Badge count={day.changeCount} style={{ marginLeft: 12, backgroundColor: '#165DFF' }} />
+                  <Badge count={day.changeCount} style={{ marginLeft: 12, backgroundColor: palette.primary }} />
                 </div>
                 <Timeline items={day.events.map(renderEvent)} />
               </div>

@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { ReplayBodyDiff, ReplayResult } from '../../../types/replay';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -87,7 +88,7 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
                 title={t('replay.status_code')}
                 value={result.statusCode}
                 valueStyle={{
-                  color: result.statusCode >= 400 ? '#ff4d4f' : '#52c41a',
+                  color: result.statusCode >= 400 ? palette.error : palette.success,
                 }}
                 prefix={result.success ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
               />
@@ -106,7 +107,7 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
                   value={result.comparison.latencyDiffMs || 0}
                   suffix="ms"
                   valueStyle={{
-                    color: (result.comparison.latencyDiffMs || 0) > 100 ? '#ff4d4f' : '#52c41a',
+                    color: (result.comparison.latencyDiffMs || 0) > 100 ? palette.error : palette.success,
                   }}
                 />
               )}
@@ -117,7 +118,7 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
                   title={t('replay.status_match')}
                   value={result.comparison.statusMatch ? 'Yes' : 'No'}
                   valueStyle={{
-                    color: result.comparison.statusMatch ? '#52c41a' : '#ff4d4f',
+                    color: result.comparison.statusMatch ? palette.success : palette.error,
                   }}
                 />
               )}
@@ -205,7 +206,7 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
           )}
 
           <div style={{
-            background: result.statusCode >= 400 ? 'rgba(255,77,79,0.1)' : 'rgba(0,0,0,0.3)',
+            background: result.statusCode >= 400 ? 'rgba(242, 113, 127, 0.1)' : 'rgba(0,0,0,0.3)',
             padding: 12,
             borderRadius: 4,
             maxHeight: 400,

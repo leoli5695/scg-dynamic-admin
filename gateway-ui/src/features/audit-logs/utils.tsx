@@ -52,12 +52,12 @@ export const getTargetTypeTag = (t: TFunction, type: string) => {
 /** Subtle row background by operation type (table view). */
 export const getRowStyle = (operationType: string): CSSProperties => {
   switch (operationType) {
-    case 'DELETE': return { backgroundColor: 'rgba(255, 77, 79, 0.08)' };
-    case 'CREATE': return { backgroundColor: 'rgba(82, 196, 26, 0.08)' };
-    case 'ROLLBACK': return { backgroundColor: 'rgba(250, 173, 20, 0.08)' };
-    case 'UPDATE': return { backgroundColor: 'rgba(24, 144, 255, 0.08)' };
-    case 'ENABLE': return { backgroundColor: 'rgba(82, 196, 26, 0.08)' };
-    case 'DISABLE': return { backgroundColor: 'rgba(255, 77, 79, 0.08)' };
+    case 'DELETE': return { backgroundColor: 'rgba(242, 113, 127, 0.08)' };
+    case 'CREATE': return { backgroundColor: 'rgba(61, 220, 151, 0.08)' };
+    case 'ROLLBACK': return { backgroundColor: 'rgba(232, 180, 100, 0.08)' };
+    case 'UPDATE': return { backgroundColor: 'rgba(76, 128, 236, 0.08)' };
+    case 'ENABLE': return { backgroundColor: 'rgba(61, 220, 151, 0.08)' };
+    case 'DISABLE': return { backgroundColor: 'rgba(242, 113, 127, 0.08)' };
     default: return {};
   }
 };

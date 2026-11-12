@@ -18,6 +18,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { LicenseEdition } from '../../../types/license';
+import { palette } from '../../../styles/palette';
 
 /** Feature catalog entry shown in the authorization matrix. */
 export interface LicenseFeatureDef {
@@ -546,9 +547,9 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
 
 // Edition display config - BASIC is free (green), ADVANCED (blue), ENTERPRISE (purple/gold)
 export const EDITION_CONFIG: Record<LicenseEdition, { color: string; bgColor: string; icon: React.ReactNode; label: string }> = {
-  BASIC: { color: 'success', bgColor: '#22c55e', icon: <CheckCircleOutlined />, label: '基础版' },
-  ADVANCED: { color: 'processing', bgColor: '#3b82f6', icon: <CrownOutlined />, label: '高级版' },
-  ENTERPRISE: { color: 'purple', bgColor: '#7c3aed', icon: <CrownOutlined style={{ color: '#7c3aed' }} />, label: '企业版' },
+  BASIC: { color: 'success', bgColor: palette.success, icon: <CheckCircleOutlined />, label: '基础版' },
+  ADVANCED: { color: 'processing', bgColor: palette.primary, icon: <CrownOutlined />, label: '高级版' },
+  ENTERPRISE: { color: 'purple', bgColor: palette.accent, icon: <CrownOutlined style={{ color: palette.accent }} />, label: '企业版' },
 };
 
 // Status display config (backend list endpoint only returns ACTIVE/EXPIRED)

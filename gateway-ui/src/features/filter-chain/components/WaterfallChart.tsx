@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { Space, Tag, Tooltip, Typography } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import type { FilterExecution } from '../../../types/filterChain';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -47,26 +48,26 @@ const getFilterColor = (filterName: string, selfTime: number): string => {
   const name = filterName.toLowerCase();
   // Critical filters (auth, security) — red shades
   if (name.includes('auth') || name.includes('security')) {
-    return selfTime > 5 ? '#ff7875' : '#ffa39e';
+    return selfTime > 5 ? palette.error : palette.warning;
   }
   // Rate limiter — orange
   if (name.includes('rate') || name.includes('limit')) {
-    return selfTime > 3 ? '#fa8c16' : '#ffc53d';
+    return selfTime > 3 ? palette.warning : palette.warning;
   }
   // Routing filters — blue
   if (name.includes('route') || name.includes('load')) {
-    return '#1890ff';
+    return palette.primary;
   }
   // Transform filters — cyan
   if (name.includes('transform') || name.includes('header')) {
-    return '#13c2c2';
+    return palette.info;
   }
   // Cache — purple
   if (name.includes('cache')) {
-    return '#722ed1';
+    return palette.accent;
   }
   // Default — green (fast) to yellow (medium)
-  return selfTime > 10 ? '#faad14' : selfTime > 5 ? '#52c41a' : '#73d13d';
+  return selfTime > 10 ? palette.warning : selfTime > 5 ? palette.success : palette.success;
 };
 
 const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
@@ -92,19 +93,19 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
     const timeMarkers = [0, 25, 50, 75, 100];
 
     return (
-      <div ref={ref} data-waterfall-chart style={{ width: '100%', background: '#141414', padding: '8px', borderRadius: '4px' }}>
+      <div ref={ref} data-waterfall-chart style={{ width: '100%', background: palette.bgBase, padding: 8, borderRadius: 10 }}>
         {/* Time axis header */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           padding: '4px 120px 8px 120px',
           fontSize: 10,
-          color: 'rgba(255,255,255,0.45)',
-          borderBottom: '1px solid rgba(255,255,255,0.1)',
+          color: palette.textCaption,
+          borderBottom: `1px solid ${palette.borderSubtle}`,
         }}
         >
           {timeMarkers.map((percent) => (
-            <Text key={percent} style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)' }}>
+            <Text key={percent} style={{ fontSize: 10, color: palette.textCaption }}>
               {((totalDuration * percent) / 100).toFixed(1)}ms
             </Text>
           ))}
@@ -132,11 +133,11 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
                   display: 'flex',
                   alignItems: 'center',
                   padding: '6px 0',
-                  borderBottom: '1px solid rgba(255,255,255,0.05)',
+                  borderBottom: `1px solid ${palette.borderSubtle}`,
                   transition: 'background 0.2s',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                  e.currentTarget.style.background = palette.hover;
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent';
@@ -175,7 +176,7 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
                   }}
                   >
                     {[25, 50, 75].map((p) => (
-                      <div key={p} style={{ width: 1, height: '100%', background: 'rgba(255,255,255,0.05)' }} />
+                      <div key={p} style={{ width: 1, height: '100%', background: palette.borderSubtle }} />
                     ))}
                   </div>
 
@@ -192,7 +193,7 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
                       borderRadius: 2,
                       overflow: 'hidden',
                       cursor: 'pointer',
-                      boxShadow: isSuccess ? 'none' : '0 0 0 1px #ff4d4f',
+                      boxShadow: isSuccess ? 'none' : `0 0 0 1px ${palette.error}`,
                     }}
                     onMouseMove={(e) => {
                       setTooltip({
@@ -239,8 +240,8 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
                       <div style={{
                         width: `${(downstreamPercent / (selfPercent + downstreamPercent)) * 100}%`,
                         height: '100%',
-                        background: 'rgba(255,255,255,0.15)',
-                        borderLeft: '1px solid rgba(255,255,255,0.3)',
+                        background: palette.bgSwitch,
+                        borderLeft: `1px solid ${palette.borderStrong}`,
                       }}
                       />
                     )}
@@ -257,9 +258,9 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
                       {timeDisplay}
                     </Tag>
                     {isSuccess ? (
-                      <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />
+                      <CheckCircleOutlined style={{ color: palette.success, fontSize: 12 }} />
                     ) : (
-                      <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 12 }} />
+                      <CloseCircleOutlined style={{ color: palette.error, fontSize: 12 }} />
                     )}
                   </Space>
                 </div>
@@ -272,7 +273,7 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
         <div style={{
           marginTop: 12,
           padding: '8px 12px',
-          background: 'rgba(255,255,255,0.03)',
+          background: palette.bgSecondary,
           borderRadius: 4,
           display: 'flex',
           justifyContent: 'space-between',
@@ -281,15 +282,15 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
         >
           <Space size={16}>
             <Space size={4}>
-              <div style={{ width: 14, height: 14, background: '#52c41a', borderRadius: 2 }} />
+              <div style={{ width: 14, height: 14, background: palette.successSolid, borderRadius: 2 }} />
               <Text type="secondary" style={{ fontSize: 11 }}>自身耗时 (快)</Text>
             </Space>
             <Space size={4}>
-              <div style={{ width: 14, height: 14, background: '#faad14', borderRadius: 2 }} />
+              <div style={{ width: 14, height: 14, background: palette.warningSolid, borderRadius: 2 }} />
               <Text type="secondary" style={{ fontSize: 11 }}>自身耗时 (慢)</Text>
             </Space>
             <Space size={4}>
-              <div style={{ width: 14, height: 14, background: 'rgba(255,255,255,0.15)', borderRadius: 2 }} />
+              <div style={{ width: 14, height: 14, background: palette.bgSwitch, borderRadius: 2 }} />
               <Text type="secondary" style={{ fontSize: 11 }}>下游耗时</Text>
             </Space>
           </Space>
@@ -306,11 +307,11 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
               left: tooltip.x,
               top: tooltip.y,
               zIndex: 9999,
-              background: 'rgba(0, 0, 0, 0.85)',
+              background: palette.bgElevated,
               color: 'white',
               padding: '8px 12px',
               borderRadius: 6,
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              boxShadow: '0 12px 28px rgba(4, 7, 15, 0.46)',
               maxWidth: 280,
               pointerEvents: 'none',
               transition: 'left 0.05s ease-out, top 0.05s ease-out',

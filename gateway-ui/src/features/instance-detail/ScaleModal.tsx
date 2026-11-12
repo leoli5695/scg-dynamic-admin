@@ -11,6 +11,7 @@ import { scaleInstance } from '../../api/instances';
 import { ApiError } from '../../api/http';
 import type { GatewayInstance, ScaleInstanceRequest } from '../../types/instance';
 import { getSpecText } from '../../utils/instance';
+import { palette } from '../../styles/palette';
 
 const { Text } = Typography;
 
@@ -177,8 +178,8 @@ const ScaleModal: React.FC<ScaleModalProps> = ({
         {specType !== '' && specType !== instance.specType && (
           <div style={{
             padding: '8px 12px',
-            background: '#fffbe6',
-            border: '1px solid #ffe58f',
+            background: palette.warningSoft,
+            border: `1px solid ${palette.warning}`,
             borderRadius: 4,
             marginTop: 8,
           }}

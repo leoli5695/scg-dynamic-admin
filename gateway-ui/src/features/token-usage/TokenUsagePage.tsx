@@ -46,13 +46,15 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { ManagementMetric, ManagementPageHeader } from '../layout/components/ManagementPage';
+import { chartAxis, chartColors } from '../../styles/palette';
+import { chartTooltip } from '../../styles/chartTheme';
 import './token-usage.css';
 
 const { RangePicker } = DatePicker;
 
-const PALETTE = ['#7fa8f5', '#a89beb', '#68cbb4', '#d3b67c', '#7bc3d3', '#d99bbf'];
-const AXIS_TEXT = 'rgba(255,255,255,0.65)';
-const SPLIT_LINE = 'rgba(255,255,255,0.12)';
+const PALETTE = chartColors;
+const AXIS_TEXT = chartAxis.label;
+const SPLIT_LINE = chartAxis.grid;
 
 // Stable identity for "no data yet". An inline `?? []` below produced a fresh array on every render,
 // which made the timeseries useMemo dependency change every time and defeated the memo entirely.
@@ -65,9 +67,7 @@ const baseOption = () => ({
   textStyle: { color: AXIS_TEXT },
   tooltip: {
     trigger: 'axis',
-    backgroundColor: 'rgba(20,20,20,0.9)',
-    borderColor: SPLIT_LINE,
-    textStyle: { color: '#fff' },
+    ...chartTooltip,
   },
   grid: { left: 48, right: 24, top: 32, bottom: 28 },
 });
@@ -228,9 +228,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
       ...baseOption(),
       tooltip: {
         trigger: 'item',
-        backgroundColor: 'rgba(20,20,20,0.9)',
-        borderColor: SPLIT_LINE,
-        textStyle: { color: '#fff' },
+        ...chartTooltip,
       },
       series: [
         {

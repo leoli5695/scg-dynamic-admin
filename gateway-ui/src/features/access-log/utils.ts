@@ -3,6 +3,7 @@
  * by the expanded log row (json-* classes live in antd-overrides.css).
  */
 import type { BadgeProps } from 'antd';
+import { palette } from '../../styles/palette';
 
 /** Badge status for an HTTP status code. */
 export const getStatusBadge = (code: number): NonNullable<BadgeProps['status']> => {
@@ -25,7 +26,7 @@ export const getMethodColor = (method: string): string => {
 
 /** Duration color thresholds shared by table and expanded detail. */
 export const getDurationColor = (ms: number): string => (
-  ms > 1000 ? '#ff4d4f' : ms > 500 ? '#faad14' : '#52c41a'
+  ms > 1000 ? palette.error : ms > 500 ? palette.warning : palette.success
 );
 
 /** Compact single-line JSON (falls back to the raw string). */

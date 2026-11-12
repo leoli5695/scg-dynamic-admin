@@ -8,6 +8,7 @@ import {
 import { InfoCircleOutlined } from '@ant-design/icons';
 import type { MiddlewareDetailMetric } from '../../../types/middleware';
 import { CATEGORY_CONFIG, formatMetricValue, getESHealthTagColor } from '../utils';
+import { palette } from '../../../styles/palette';
 
 interface InstantMetricsProps {
   instant: MiddlewareDetailMetric[] | undefined;
@@ -51,7 +52,7 @@ const InstantMetrics: React.FC<InstantMetricsProps> = ({ instant }) => {
                   <Tooltip title={metric.name}>
                     <span style={{ cursor: 'help' }}>
                       {metric.displayName}
-                      <InfoCircleOutlined style={{ marginLeft: 4, fontSize: 12, color: '#999' }} />
+                      <InfoCircleOutlined style={{ marginLeft: 4, fontSize: 12, color: palette.textMuted }} />
                     </span>
                   </Tooltip>
                 );
@@ -60,7 +61,7 @@ const InstantMetrics: React.FC<InstantMetricsProps> = ({ instant }) => {
                 if (metric.name === 'elasticsearch_cluster_health_status') {
                   return (
                     <Col key={idx} span={8}>
-                      <Card size="small" styles={{ body: { background: '#fafafa' } }}>
+                      <Card size="small" styles={{ body: { background: palette.bgElevated } }}>
                         <Statistic
                           title={title}
                           valueRender={() => (
@@ -79,13 +80,13 @@ const InstantMetrics: React.FC<InstantMetricsProps> = ({ instant }) => {
 
                 return (
                   <Col key={idx} span={8}>
-                    <Card size="small" styles={{ body: { background: '#fafafa' } }}>
+                    <Card size="small" styles={{ body: { background: palette.bgElevated } }}>
                       <Statistic
                         title={title}
                         value={formatMetricValue(metric.value, metric.unit, metric.name)}
                         valueStyle={{
-                          color: metric.status === 'healthy' ? '#52c41a'
-                            : metric.status === 'warning' ? '#faad14' : '#ff4d4f',
+                          color: metric.status === 'healthy' ? palette.success
+                            : metric.status === 'warning' ? palette.warning : palette.error,
                           fontSize: 18,
                         }}
                       />

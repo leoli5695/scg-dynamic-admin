@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { AuthPolicyDefinition, RouteAuthBinding } from '../../../types/authPolicy';
 import { getAuthTypeColor, getAuthTypeDescKey, getAuthTypeLabel } from '../utils';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -91,7 +92,7 @@ const AuthPolicyCard: React.FC<AuthPolicyCardProps> = ({
             overlayStyle={{ maxWidth: '350px' }}
             align={{ offset: [8, 0] }}
           >
-            <QuestionCircleOutlined style={{ marginLeft: 4, color: '#6b7280', cursor: 'pointer' }} />
+            <QuestionCircleOutlined style={{ marginLeft: 4, color: palette.textMuted, cursor: 'pointer' }} />
           </Tooltip>
         )}
       </div>

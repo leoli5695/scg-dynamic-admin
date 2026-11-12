@@ -13,6 +13,7 @@ import type { RouteResponse } from '../../../types/route';
 import { GLOBAL_BINDING_ROUTE_ID } from '../../../types/plugin';
 import ConfigFieldInput from './ConfigFieldInput';
 import { getPluginIcon } from '../utils';
+import { palette, statusTone, toneForLegacyColor } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -109,7 +110,7 @@ const BindingFormModal: React.FC<BindingFormModalProps> = ({
 
   const title = isEdit ? (
     <div style={{ display: 'flex', alignItems: 'center' }}>
-      <EditOutlined style={{ marginRight: 12, color: '#8b5cf6' }} />
+      <EditOutlined style={{ marginRight: 12, color: palette.accent }} />
       <div>
         <div style={{ fontSize: 16, fontWeight: 600 }}>{t('plugin_bindings.edit_title')}</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -127,12 +128,12 @@ const BindingFormModal: React.FC<BindingFormModalProps> = ({
           width: 40,
           height: 40,
           borderRadius: '50%',
-          background: `${plugin?.color || '#8b5cf6'}20`,
+          background: statusTone[toneForLegacyColor(plugin?.color)].bg,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           marginRight: 12,
-          color: plugin?.color || '#8b5cf6',
+          color: statusTone[toneForLegacyColor(plugin?.color)].color,
         }}
       >
         {plugin && getPluginIcon(plugin)}

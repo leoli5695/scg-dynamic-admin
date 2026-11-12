@@ -27,6 +27,7 @@ import {
   createProviderCredential,
   type ProviderCredential,
 } from '../../../api/providerCredentials';
+import { palette } from '../../../styles/palette';
 
 /** Built-in provider catalogue — mirrors my-gateway ai/LlmProvider.java. */
 const PROVIDERS = [
@@ -184,7 +185,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
             <KeyOutlined />
             <span>{t('strategy.ai.credentials', { defaultValue: 'Provider 凭据（API Key）' })}</span>
             <Tooltip title={t('strategy.ai.credentials_help', { defaultValue: '为每个 Provider 绑定一个凭据；密钥加密存储、只写不回显。' })}>
-              <InfoCircleOutlined style={{ color: '#999' }} />
+              <InfoCircleOutlined style={{ color: palette.textMuted }} />
             </Tooltip>
           </Space>
         }
@@ -241,7 +242,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
             <ApiOutlined />
             <span>{t('strategy.ai.key_pools', { defaultValue: '多密钥池与负载均衡' })}</span>
             <Tooltip title={t('strategy.ai.key_pools_help', { defaultValue: '为同一 Provider 配置多个凭据并按策略选择(轮询/最少在途)，规避单钥限流；配置后优先于上方单凭据绑定(对标 Higress ai-load-balancer)。' })}>
-              <InfoCircleOutlined style={{ color: '#999' }} />
+              <InfoCircleOutlined style={{ color: palette.textMuted }} />
             </Tooltip>
           </Space>
         }
@@ -304,7 +305,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
             <BranchesOutlined />
             <span>{t('strategy.ai.model_routing', { defaultValue: 'Model 路由别名（可选）' })}</span>
             <Tooltip title={t('strategy.ai.model_routing_help', { defaultValue: '把自定义 model 名显式指向某 Provider；不配则按内置前缀自动识别（gpt-→openai、qwen→qwen、deepseek-→deepseek、glm-→zhipu、kimi-→moonshot、claude-→anthropic）。' })}>
-              <InfoCircleOutlined style={{ color: '#999' }} />
+              <InfoCircleOutlined style={{ color: palette.textMuted }} />
             </Tooltip>
           </Space>
         }

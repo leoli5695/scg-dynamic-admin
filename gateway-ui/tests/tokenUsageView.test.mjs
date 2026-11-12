@@ -7,6 +7,7 @@ import * as React from 'react';
 import * as presentation from '../src/features/token-usage/usagePresentation.ts';
 import * as query from '../src/features/token-usage/usageQuery.ts';
 import * as usageNavigation from '../src/features/request-journey/usageNavigation.ts';
+import { srcRequire } from './srcRequire.mjs';
 
 const require = createRequire(import.meta.url);
 const normalEvent = {
@@ -95,10 +96,12 @@ function harness(file, { search = '', command = null, role = 'ADMIN', overview =
     '@ant-design/icons': new Proxy({}, { get: (_, name) => String(name) }),
     'echarts-for-react': { default: 'Chart', __esModule: true }, './token-usage.css': {},
   };
-  const source = readFileSync(new URL(`../src/features/token-usage/${file}`, import.meta.url), 'utf8');
+  const entryUrl = new URL(`../src/features/token-usage/${file}`, import.meta.url);
+  const source = readFileSync(entryUrl, 'utf8');
+  const fromSrc = srcRequire(entryUrl);
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const exports = {};
-  new Function('require', 'exports', compiled)((id) => mocks[id] ?? require(id), exports);
+  new Function('require', 'exports', compiled)((id) => mocks[id] ?? fromSrc(id), exports);
   return {
     calls, components, api,
     params: () => params,

@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import ts from 'typescript';
 import * as React from 'react';
 import * as sessions from '../src/features/copilot/utils/session.ts';
+import { srcRequire } from './srcRequire.mjs';
 
 const require = createRequire(import.meta.url);
 const flush = () => new Promise(resolve => setImmediate(resolve));
@@ -40,11 +41,13 @@ function hooks() {
   };
 }
 function load(file, mocks) {
-  const compiled = ts.transpileModule(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8'), {
+  const entryUrl = new URL(`../src/${file}`, import.meta.url);
+  const fromSrc = srcRequire(entryUrl);
+  const compiled = ts.transpileModule(readFileSync(entryUrl, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', compiled)(id => mocks[id] ?? require(id), exports);
+  new Function('require', 'exports', compiled)(id => mocks[id] ?? fromSrc(id), exports);
   return exports.default;
 }
 const defaultComponent = name => ({ __esModule: true, default: name });

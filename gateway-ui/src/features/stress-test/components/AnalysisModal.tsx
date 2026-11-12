@@ -7,6 +7,7 @@ import { RobotOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import AiReportRenderer from '../../../components/ai/AiReportRenderer';
 import '../../../styles/ai-report.css';
+import { palette } from '../../../styles/palette';
 
 interface Props {
   open: boolean;
@@ -23,7 +24,7 @@ const AnalysisModal: React.FC<Props> = ({ open, testId, loading, content, onClos
     <Modal className="console-dialog"
       title={
         <Space>
-          <RobotOutlined style={{ color: '#52c41a' }} />
+          <RobotOutlined style={{ color: palette.success }} />
           {t('stress_test.ai_analysis_title')} - Test #{testId}
         </Space>
       }

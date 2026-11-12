@@ -66,8 +66,8 @@
   align-items: center;
   justify-content: center;
   font-size: 16px;
-  background: rgba(16, 185, 129, 0.12);
-  color: #34d399;
+  background: rgba(61, 220, 151, 0.12);
+  color: var(--success-color);
   flex-shrink: 0;
 }
 
@@ -204,18 +204,18 @@
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  background: linear-gradient(135deg, var(--success-solid) 0%, var(--success-solid) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   font-size: 18px;
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 4px 12px rgba(61, 220, 151, 0.3);
 }
 
 .route-modal .modal-icon-wrapper.edit {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-solid) 100%);
+  box-shadow: 0 4px 12px rgba(76, 128, 236, 0.3);
 }
 
 /* ==================== Form Sections - Enhanced ==================== */
@@ -243,8 +243,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
+  background: rgba(61, 220, 151, 0.15);
+  color: var(--success-color);
   font-size: 12px;
 }
 
@@ -281,8 +281,8 @@
 .route-modal .ant-input:focus,
 .route-modal .ant-input-focused,
 .route-modal .ant-select-focused .ant-select-selector {
-  border-color: #22c55e !important;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15) !important;
+  border-color: var(--success-color) !important;
+  box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.15) !important;
 }
 
 .route-modal .ant-input::placeholder {
@@ -331,9 +331,9 @@
 }
 
 .route-modal .ant-radio-button-wrapper-checked {
-  background: rgba(34, 197, 94, 0.15) !important;
-  border-color: #22c55e !important;
-  color: #34d399 !important;
+  background: rgba(61, 220, 151, 0.15) !important;
+  border-color: var(--success-color) !important;
+  color: var(--success-color) !important;
 }
 
 /* ==================== Switch ==================== */
@@ -342,7 +342,7 @@
 }
 
 .route-modal .ant-switch-checked {
-  background: #22c55e !important;
+  background: var(--success-solid) !important;
 }
 
 /* ==================== Form Row Layout ==================== */
@@ -394,7 +394,7 @@
 }
 
 .key-value-inputs .kv-separator {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 /* Header Input Container */
@@ -424,7 +424,7 @@
 }
 
 .rewrite-inputs .rewrite-separator {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 /* RedirectTo Input Container */
@@ -444,7 +444,7 @@
 
 /* Delete Button in Form Row */
 .form-item-row .delete-btn {
-  color: #ef4444;
+  color: var(--error-color);
   opacity: 0.8;
   padding: 4px 8px;
   display: flex;
@@ -456,7 +456,7 @@
 
 .form-item-row .delete-btn:hover {
   opacity: 1;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(242, 113, 127, 0.1);
 }
 
 /* No Params Input */
@@ -477,7 +477,7 @@
 }
 
 .plugin-help-icon:hover {
-  color: #60a5fa;
+  color: var(--primary-light);
 }
 
 /* ==================== Service Option Tags ==================== */
@@ -491,13 +491,13 @@
 }
 
 .service-option-tag.static {
-  background: rgba(139, 92, 246, 0.15);
-  color: #a78bfa;
+  background: rgba(155, 140, 245, 0.15);
+  color: var(--accent-light);
 }
 
 .service-option-tag.nacos {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  background: rgba(61, 220, 151, 0.15);
+  color: var(--success-color);
 }
 
 /* ==================== Add Buttons ==================== */
@@ -513,9 +513,9 @@
 
 .add-predicate-btn-modern:hover,
 .add-filter-btn-modern:hover {
-  border-color: #22c55e !important;
-  background: rgba(34, 197, 94, 0.08) !important;
-  color: #34d399 !important;
+  border-color: var(--success-color) !important;
+  background: rgba(61, 220, 151, 0.08) !important;
+  color: var(--success-color) !important;
 }
 
 /* ==================== Multi-Service Row ==================== */
@@ -530,14 +530,14 @@
 
 /* ==================== Weight Indicator ==================== */
 .route-modal .ant-tag.ant-tag-success {
-  background: rgba(34, 197, 94, 0.15) !important;
-  border-color: rgba(34, 197, 94, 0.3) !important;
-  color: #34d399 !important;
+  background: rgba(61, 220, 151, 0.15) !important;
+  border-color: rgba(61, 220, 151, 0.3) !important;
+  color: var(--success-color) !important;
 }
 
 .route-modal .ant-tag.ant-tag-warning {
-  background: rgba(245, 158, 11, 0.15) !important;
-  border-color: rgba(245, 158, 11, 0.3) !important;
+  background: rgba(232, 180, 100, 0.15) !important;
+  border-color: rgba(232, 180, 100, 0.3) !important;
   color: var(--accent-color) !important;
 }
 
@@ -578,13 +578,13 @@
 }
 
 .route-modal .modal-footer-modern .ant-btn-primary {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  background: linear-gradient(135deg, var(--success-solid) 0%, var(--success-solid) 100%);
   border: none;
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 4px 12px rgba(61, 220, 151, 0.3);
 }
 
 .route-modal .modal-footer-modern .ant-btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
+  box-shadow: 0 6px 20px rgba(61, 220, 151, 0.4);
   transform: translateY(-1px);
 }
 
@@ -602,12 +602,12 @@
 }
 
 .pagination-container .ant-pagination-item-active {
-  background: rgba(34, 197, 94, 0.15);
-  border-color: #22c55e;
+  background: rgba(61, 220, 151, 0.15);
+  border-color: var(--success-color);
 }
 
 .pagination-container .ant-pagination-item-active a {
-  color: #34d399;
+  color: var(--success-color);
 }
 
 /* ==================== Stats Bar ==================== */
@@ -651,19 +651,19 @@
   height: 32px;
 }
 
-.text-green-600 { color: #22c55e; }
-.text-red-600 { color: #ef4444; }
+.text-green-600 { color: var(--success-color); }
+.text-red-600 { color: var(--error-color); }
 
 /* ==================== Create Button ==================== */
 .create-btn {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+  background: linear-gradient(135deg, var(--success-solid) 0%, var(--success-solid) 100%) !important;
   border: none !important;
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3) !important;
+  box-shadow: 0 4px 12px rgba(61, 220, 151, 0.3) !important;
   transition: all 0.2s ease !important;
 }
 
 .create-btn:hover {
-  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4) !important;
+  box-shadow: 0 6px 20px rgba(61, 220, 151, 0.4) !important;
   transform: translateY(-1px);
 }
 

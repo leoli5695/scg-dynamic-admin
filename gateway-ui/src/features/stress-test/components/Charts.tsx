@@ -6,31 +6,25 @@ import React from 'react';
 import ReactECharts from 'echarts-for-react';
 import { Card, Row, Col } from 'antd';
 import type { StressTestMetrics } from '../../../types/stressTest';
+import { palette, withAlpha } from '../../../styles/palette';
+import { chartCategoryAxis, chartLegend, chartTitle, chartTooltip, chartValueAxis } from '../../../styles/chartTheme';
 
 interface Props {
   metrics: StressTestMetrics | null;
 }
 
-const chartCardStyle: React.CSSProperties = { background: 'rgba(255,255,255,0.05)' };
+const chartCardStyle: React.CSSProperties = { background: palette.bgCard };
 
 const axisCommon = {
-  tooltip: {
-    trigger: 'axis' as const,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    textStyle: { color: '#fff' },
-  },
+  tooltip: { trigger: 'axis' as const, ...chartTooltip },
   xAxis: {
-    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.3)' } },
-    axisLabel: { color: 'rgba(255,255,255,0.7)', rotate: 45 },
+    ...chartCategoryAxis,
+    axisLabel: { ...chartCategoryAxis.axisLabel, rotate: 45 },
   },
-  yAxis: {
-    axisLine: { lineStyle: { color: 'rgba(255,255,255,0.3)' } },
-    axisLabel: { color: 'rgba(255,255,255,0.7)' },
-    splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
-  },
+  yAxis: chartValueAxis,
 };
 
-const titleStyle = { color: '#fff', fontSize: 14 };
+const titleStyle = chartTitle;
 
 const StressTestCharts: React.FC<Props> = ({ metrics }) => {
   if (!metrics || !metrics.timeline || metrics.timeline.length === 0) {
@@ -47,7 +41,7 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
   // RPS Chart
   const rpsOption = {
     title: { text: 'Requests Per Second', left: 'center', textStyle: titleStyle },
-    tooltip: { ...axisCommon.tooltip, borderColor: '#165DFF' },
+    tooltip: { ...axisCommon.tooltip, borderColor: palette.primary },
     grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
     xAxis: { type: 'category' as const, data: timeLabels, ...axisCommon.xAxis },
     yAxis: { type: 'value' as const, name: 'RPS', ...axisCommon.yAxis },
@@ -56,14 +50,14 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
       type: 'line',
       smooth: true,
       data: metrics.timeline.map((p) => p.rps.toFixed(2)),
-      itemStyle: { color: '#52c41a' },
+      itemStyle: { color: palette.success },
       areaStyle: {
         color: {
           type: 'linear',
           x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: 'rgba(82, 196, 26, 0.3)' },
-            { offset: 1, color: 'rgba(82, 196, 26, 0.05)' },
+            { offset: 0, color: 'rgba(61, 220, 151, 0.3)' },
+            { offset: 1, color: 'rgba(61, 220, 151, 0.05)' },
           ],
         },
       },
@@ -73,11 +67,11 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
   // Response Time Chart
   const rtOption = {
     title: { text: 'Response Time (ms)', left: 'center', textStyle: titleStyle },
-    tooltip: { ...axisCommon.tooltip, borderColor: '#165DFF' },
+    tooltip: { ...axisCommon.tooltip, borderColor: palette.primary },
     legend: {
       data: ['Avg', 'P95', 'P99'],
       top: 25,
-      textStyle: { color: 'rgba(255,255,255,0.7)' },
+      textStyle: chartLegend.textStyle,
     },
     grid: { left: '3%', right: '4%', bottom: '3%', top: '20%', containLabel: true },
     xAxis: { type: 'category' as const, data: timeLabels, ...axisCommon.xAxis },
@@ -88,21 +82,21 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.avgResponseTime.toFixed(2)),
-        itemStyle: { color: '#165DFF' },
+        itemStyle: { color: palette.primary },
       },
       {
         name: 'P95',
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.p95ResponseTime.toFixed(2)),
-        itemStyle: { color: '#faad14' },
+        itemStyle: { color: palette.warning },
       },
       {
         name: 'P99',
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.p99ResponseTime.toFixed(2)),
-        itemStyle: { color: '#f5222d' },
+        itemStyle: { color: palette.error },
       },
     ],
   };
@@ -112,7 +106,7 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
     title: { text: 'Error Rate (%)', left: 'center', textStyle: titleStyle },
     tooltip: {
       ...axisCommon.tooltip,
-      borderColor: '#f5222d',
+      borderColor: palette.error,
       formatter: (params: unknown) => {
         const point = (params as Array<{ name: string; value: string }>)[0];
         return `${point.name}<br/>Error Rate: ${point.value}%`;
@@ -127,22 +121,22 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
       smooth: true,
       data: metrics.timeline.map((p) => p.errorRate.toFixed(2)),
       itemStyle: {
-        color: (params: { value?: string }) => Number(params.value) > 5 ? '#f5222d' : '#52c41a',
+        color: (params: { value?: string }) => Number(params.value) > 5 ? palette.error : palette.success,
       },
       areaStyle: {
         color: {
           type: 'linear',
           x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: 'rgba(245, 34, 45, 0.3)' },
-            { offset: 1, color: 'rgba(245, 34, 45, 0.05)' },
+            { offset: 0, color: withAlpha(palette.error, 0.3) },
+            { offset: 1, color: withAlpha(palette.error, 0.05) },
           ],
         },
       },
       markLine: {
         silent: true,
         data: [{ yAxis: 5, label: { formatter: 'Warning: 5%' } }],
-        lineStyle: { color: '#faad14', type: 'dashed' },
+        lineStyle: { color: palette.warning, type: 'dashed' },
       },
     }],
   };
@@ -150,11 +144,11 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
   // Cumulative Requests Chart
   const cumulativeOption = {
     title: { text: 'Cumulative Requests', left: 'center', textStyle: titleStyle },
-    tooltip: { ...axisCommon.tooltip, borderColor: '#165DFF' },
+    tooltip: { ...axisCommon.tooltip, borderColor: palette.primary },
     legend: {
       data: ['Total', 'Success', 'Failed'],
       top: 25,
-      textStyle: { color: 'rgba(255,255,255,0.7)' },
+      textStyle: chartLegend.textStyle,
     },
     grid: { left: '3%', right: '4%', bottom: '3%', top: '20%', containLabel: true },
     xAxis: { type: 'category' as const, data: timeLabels, ...axisCommon.xAxis },
@@ -165,21 +159,21 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.totalRequests),
-        itemStyle: { color: '#165DFF' },
+        itemStyle: { color: palette.primary },
       },
       {
         name: 'Success',
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.successRequests),
-        itemStyle: { color: '#52c41a' },
+        itemStyle: { color: palette.success },
       },
       {
         name: 'Failed',
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.failedRequests),
-        itemStyle: { color: '#f5222d' },
+        itemStyle: { color: palette.error },
       },
     ],
   };

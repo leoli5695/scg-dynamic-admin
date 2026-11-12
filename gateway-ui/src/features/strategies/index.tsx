@@ -28,6 +28,7 @@ import StrategyCard from './components/StrategyCard';
 import StrategyFormModal from './components/StrategyFormModal';
 import StrategyTypeSelectModal from './components/StrategyTypeSelectModal';
 import './strategies-premium.css';
+import { palette } from '../../styles/palette';
 
 const { Text, Title } = Typography;
 
@@ -40,7 +41,7 @@ const fallbackTypeInfo = (typeCode: string): StrategyTypeInfo => ({
   typeName: typeCode,
   typeNameEn: typeCode,
   icon: '',
-  color: '#3b82f6',
+  color: palette.primary,
   category: 'misc',
   enabled: true,
   sortOrder: 0,

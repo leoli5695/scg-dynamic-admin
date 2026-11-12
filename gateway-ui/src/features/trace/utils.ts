@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import type { FilterChainExecution, FilterExecutionBar, RequestTrace } from '../../types/trace';
+import { palette } from '../../styles/palette';
 
 /** Column visibility presets for the trace table. */
 export const DEFAULT_VISIBLE_COLUMNS = ['traceId', 'method', 'path', 'statusCode', 'latencyMs', 'traceTime', 'actions'];
@@ -101,9 +102,9 @@ export const toFilterExecutionBars = (executions: FilterChainExecution[]): Filte
 };
 
 export const getFilterPercentageColor = (percentage: number): string => {
-  if (percentage >= 50) return '#cf1322';
-  if (percentage >= 30) return '#faad14';
-  return '#52c41a';
+  if (percentage >= 50) return palette.error;
+  if (percentage >= 30) return palette.warning;
+  return palette.success;
 };
 
 /** Download the current (filtered) trace list as JSON or CSV. */

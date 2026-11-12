@@ -107,12 +107,12 @@
 }
 
 .stat-card-icon.success {
-  background: rgba(16, 185, 129, 0.1);
-  color: #34d399;
+  background: rgba(61, 220, 151, 0.1);
+  color: var(--success-color);
 }
 
 .stat-card-icon.warning {
-  background: rgba(245, 158, 11, 0.1);
+  background: rgba(232, 180, 100, 0.1);
   color: var(--accent-color);
 }
 
@@ -179,11 +179,11 @@
 }
 
 .cluster-card-status-text.connected {
-  color: #34d399;
+  color: var(--success-color);
 }
 
 .cluster-card-status-text.error {
-  color: #f87171;
+  color: var(--error-color);
 }
 
 /* ==================== Buttons ==================== */
@@ -245,7 +245,7 @@
 }
 
 .cluster-card-premium.connected {
-  border-color: rgba(16, 185, 129, 0.2);
+  border-color: rgba(61, 220, 151, 0.2);
 }
 
 .cluster-card-header {
@@ -268,13 +268,13 @@
 }
 
 .cluster-card-icon.connected {
-  background: rgba(16, 185, 129, 0.1);
-  color: #34d399;
+  background: rgba(61, 220, 151, 0.1);
+  color: var(--success-color);
 }
 
 .cluster-card-icon.error {
-  background: rgba(239, 68, 68, 0.1);
-  color: #f87171;
+  background: rgba(242, 113, 127, 0.1);
+  color: var(--error-color);
 }
 
 .cluster-card-info {
@@ -335,21 +335,21 @@
 }
 
 .cluster-card-action-btn.primary {
-  color: #60a5fa;
-  border-color: rgba(96, 165, 250, 0.2);
+  color: var(--primary-light);
+  border-color: rgba(138, 176, 255, 0.2);
 }
 
 .cluster-card-action-btn.primary:hover {
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(76, 128, 236, 0.1);
 }
 
 .cluster-card-action-btn.danger {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.2);
+  color: var(--error-color);
+  border-color: rgba(242, 113, 127, 0.2);
 }
 
 .cluster-card-action-btn.danger:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(242, 113, 127, 0.1);
 }
 
 .cluster-card-body {
@@ -375,11 +375,11 @@
 }
 
 .cluster-card-status-dot.connected {
-  background: #34d399;
+  background: var(--success-solid);
 }
 
 .cluster-card-status-dot.error {
-  background: #f87171;
+  background: var(--error-color);
 }
 
 .cluster-card-status-dot.warning {
@@ -534,27 +534,27 @@
 }
 
 .ant-tag-green {
-  background: rgba(16, 185, 129, 0.1) !important;
-  border-color: rgba(16, 185, 129, 0.2) !important;
-  color: #34d399 !important;
+  background: rgba(61, 220, 151, 0.1) !important;
+  border-color: rgba(61, 220, 151, 0.2) !important;
+  color: var(--success-color) !important;
 }
 
 .ant-tag-blue {
-  background: rgba(59, 130, 246, 0.1) !important;
-  border-color: rgba(59, 130, 246, 0.2) !important;
-  color: #60a5fa !important;
+  background: rgba(76, 128, 236, 0.1) !important;
+  border-color: rgba(76, 128, 236, 0.2) !important;
+  color: var(--primary-light) !important;
 }
 
 .ant-tag-purple {
-  background: rgba(139, 92, 246, 0.1) !important;
-  border-color: rgba(139, 92, 246, 0.2) !important;
-  color: #a78bfa !important;
+  background: rgba(155, 140, 245, 0.1) !important;
+  border-color: rgba(155, 140, 245, 0.2) !important;
+  color: var(--accent-light) !important;
 }
 
 .ant-tag-red {
-  background: rgba(239, 68, 68, 0.1) !important;
-  border-color: rgba(239, 68, 68, 0.2) !important;
-  color: #f87171 !important;
+  background: rgba(242, 113, 127, 0.1) !important;
+  border-color: rgba(242, 113, 127, 0.2) !important;
+  color: var(--error-color) !important;
 }
 
 .ant-tag-gray {
@@ -570,7 +570,7 @@
 }
 
 .ant-progress-bg-status-success {
-  background: #34d399 !important;
+  background: var(--success-solid) !important;
 }
 
 /* ==================== Select ==================== */
@@ -659,11 +659,11 @@
 }
 
 .cluster-card-status-dot-inline.connected {
-  background: #34d399;
+  background: var(--success-solid);
 }
 
 .cluster-card-status-dot-inline.error {
-  background: #f87171;
+  background: var(--error-color);
 }
 
 .cluster-card-status-dot-inline.warning {
@@ -850,27 +850,27 @@ body .ant-modal {
 }
 
 .ant-alert-info {
-  background: rgba(59, 130, 246, 0.05) !important;
-  border-color: rgba(59, 130, 246, 0.2) !important;
-  color: #60a5fa !important;
+  background: rgba(76, 128, 236, 0.05) !important;
+  border-color: rgba(76, 128, 236, 0.2) !important;
+  color: var(--primary-light) !important;
 }
 
 .ant-alert-success {
-  background: rgba(16, 185, 129, 0.05) !important;
-  border-color: rgba(16, 185, 129, 0.2) !important;
-  color: #34d399 !important;
+  background: rgba(61, 220, 151, 0.05) !important;
+  border-color: rgba(61, 220, 151, 0.2) !important;
+  color: var(--success-color) !important;
 }
 
 .ant-alert-warning {
-  background: rgba(245, 158, 11, 0.05) !important;
-  border-color: rgba(245, 158, 11, 0.2) !important;
+  background: rgba(232, 180, 100, 0.05) !important;
+  border-color: rgba(232, 180, 100, 0.2) !important;
   color: var(--accent-color) !important;
 }
 
 .ant-alert-error {
-  background: rgba(239, 68, 68, 0.05) !important;
-  border-color: rgba(239, 68, 68, 0.2) !important;
-  color: #f87171 !important;
+  background: rgba(242, 113, 127, 0.05) !important;
+  border-color: rgba(242, 113, 127, 0.2) !important;
+  color: var(--error-color) !important;
 }
 
 /* ==================== Tabs Enhancement ==================== */
@@ -1047,8 +1047,8 @@ body .ant-modal {
 }
 
 .kubernetes-page .ant-pagination-item-active {
-  background: #3b82f6 !important;
-  border-color: #3b82f6 !important;
+  background: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
 }
 
 .kubernetes-page .ant-pagination-item-active a {
@@ -1077,13 +1077,13 @@ body .ant-modal {
 
 /* ==================== Pod Name Link ==================== */
 .pod-name-link {
-  color: #60a5fa !important;
+  color: var(--primary-light) !important;
   cursor: pointer;
   font-weight: 500 !important;
 }
 
 .pod-name-link:hover {
-  color: #93c5fd !important;
+  color: var(--primary-light) !important;
   text-decoration: underline;
 }
 
@@ -1104,7 +1104,7 @@ body .ant-modal {
 }
 
 .ant-progress-bg-status-success {
-  background: #34d399 !important;
+  background: var(--success-solid) !important;
 }
 
 .ant-progress-text {
@@ -1283,7 +1283,7 @@ body .ant-modal {
 
 .modal-pod-title .anticon {
   font-size: 20px;
-  color: #60a5fa;
+  color: var(--primary-light);
 }
 
 .modal-pod-name {
@@ -1320,7 +1320,7 @@ body .ant-modal {
 }
 
 .pod-info-item:hover {
-  background: #2a2a2e;
+  background: var(--bg-elevated);
   border-color: var(--border-strong);
 }
 
@@ -1356,7 +1356,7 @@ body .ant-modal {
 }
 
 .pod-container-card:hover {
-  background: #121216;
+  background: var(--bg-primary);
   border-color: var(--border-strong);
 }
 
@@ -1423,7 +1423,7 @@ body .ant-modal {
 }
 
 .pod-event-card:hover {
-  background: #2a2a2e;
+  background: var(--bg-elevated);
   border-color: var(--border-strong);
 }
 
@@ -1484,26 +1484,25 @@ body .ant-modal {
   padding: 20px;
   max-height: 600px;
   overflow: auto;
-  background: #0a0a0d;
+  background: var(--bg-base);
 }
 
 .pod-code-body::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
 }
 
 .pod-code-body::-webkit-scrollbar-track {
-  background: var(--bg-card);
-  border-radius: 4px;
+  background: transparent;
 }
 
 .pod-code-body::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 4px;
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
 }
 
 .pod-code-body::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
+  background: var(--scrollbar-thumb-hover);
 }
 
 .pod-code-text {
@@ -1630,7 +1629,7 @@ body .ant-modal {
 
 .ant-drawer .ant-select {
   background: rgba(9, 15, 26, 0.55);
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  border: 1px solid rgba(145, 169, 222, 0.2);
   border-radius: 10px;
   padding: 0 12px;
 }

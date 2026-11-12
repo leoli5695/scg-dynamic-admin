@@ -23,6 +23,7 @@ import AiReportRenderer from '../../../components/ai/AiReportRenderer';
 import { useAuth } from '../../auth/AuthContext';
 import { copilotSessionStorageKey, createCopilotSessionId } from '../utils/session';
 import '../../../styles/ai-report.css';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -384,7 +385,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
                   borderRadius: '8px',
                   background:
                     msg.role === 'user'
-                      ? 'rgba(22, 93, 255, 0.2)'
+                      ? 'rgba(76, 128, 236, 0.2)'
                       : 'rgba(255,255,255,0.05)',
                 }}
               >
@@ -396,9 +397,9 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
                   }}
                 >
                   {msg.role === 'assistant' ? (
-                    <RobotOutlined style={{ color: '#52c41a', marginRight: '8px' }} />
+                    <RobotOutlined style={{ color: palette.success, marginRight: '8px' }} />
                   ) : (
-                    <UserOutlined style={{ color: '#165DFF', marginRight: '8px' }} />
+                    <UserOutlined style={{ color: palette.primary, marginRight: '8px' }} />
                   )}
                   <Text type="secondary" style={{ fontSize: '12px' }}>
                     {msg.timestamp.toLocaleTimeString()}
@@ -422,7 +423,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
                         type="text"
                         disabled={!!feedback[index]}
                         icon={feedback[index] === 'UP'
-                          ? <LikeFilled style={{ color: '#52c41a' }} />
+                          ? <LikeFilled style={{ color: palette.success }} />
                           : <LikeOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />}
                         onClick={() => handleFeedback(index, 'UP', msg.content)}
                       />
@@ -433,7 +434,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
                         type="text"
                         disabled={!!feedback[index]}
                         icon={feedback[index] === 'DOWN'
-                          ? <DislikeFilled style={{ color: '#ff4d4f' }} />
+                          ? <DislikeFilled style={{ color: palette.error }} />
                           : <DislikeOutlined style={{ color: 'rgba(255,255,255,0.45)' }} />}
                         onClick={() => handleFeedback(index, 'DOWN', msg.content)}
                       />
@@ -456,7 +457,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                <RobotOutlined style={{ color: '#52c41a', marginRight: '8px' }} />
+                <RobotOutlined style={{ color: palette.success, marginRight: '8px' }} />
               </div>
               <div style={{ color: 'rgba(255,255,255,0.85)' }}>
                 <AiReportRenderer content={streamingContent} />
@@ -483,13 +484,13 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
             marginTop: '12px',
             padding: '12px 16px',
             borderRadius: '8px',
-            border: '1px solid rgba(250, 173, 20, 0.5)',
-            background: 'rgba(250, 173, 20, 0.08)',
+            border: `1px solid rgba(232, 180, 100, 0.5)`,
+            background: 'rgba(232, 180, 100, 0.08)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-            <ExclamationCircleOutlined style={{ color: '#faad14', marginRight: '8px' }} />
-            <Text strong style={{ color: '#faad14' }}>
+            <ExclamationCircleOutlined style={{ color: palette.warning, marginRight: '8px' }} />
+            <Text strong style={{ color: palette.warning }}>
               {t('copilot.confirm_title')}: {String(pendingAction.preview?.operationType ?? pendingAction.toolName)}
             </Text>
           </div>

@@ -15,6 +15,7 @@ import copy from 'copy-to-clipboard';
 import type { RoutePredicate, RouteResponse } from '../../../types/route';
 import { extractMethods } from '../utils';
 import RouteActions from './RouteActions';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -59,9 +60,9 @@ const predicateTagStyle: React.CSSProperties = {
   padding: '4px 12px',
   fontSize: '13px',
   fontWeight: 500,
-  backgroundColor: 'rgba(59, 130, 246, 0.15)',
-  color: '#60a5fa',
-  border: '1px solid rgba(59, 130, 246, 0.3)',
+  backgroundColor: 'rgba(76, 128, 236, 0.15)',
+  color: palette.primaryLight,
+  border: `1px solid rgba(76, 128, 236, 0.3)`,
   cursor: 'help',
 };
 
@@ -70,9 +71,9 @@ const pluginTagStyle: React.CSSProperties = {
   padding: '4px 12px',
   fontSize: '13px',
   fontWeight: 500,
-  backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  color: '#34d399',
-  border: '1px solid rgba(16, 185, 129, 0.3)',
+  backgroundColor: 'rgba(61, 220, 151, 0.15)',
+  color: palette.success,
+  border: `1px solid rgba(61, 220, 151, 0.3)`,
   cursor: 'help',
 };
 

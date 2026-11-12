@@ -9,6 +9,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { MonitorMetricsData } from '../../../types/monitor';
 import { formatBytes } from '../utils';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -66,7 +67,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                       <Progress
                         percent={gc.memoryRegions.eden?.usagePercent || 0}
                         size="small"
-                        strokeColor="#1890ff"
+                        strokeColor={palette.primary}
                         format={(p) => `${p?.toFixed(1)}%`}
                       />
                     </div>
@@ -82,7 +83,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                       <Progress
                         percent={gc.memoryRegions.survivor?.usagePercent || 0}
                         size="small"
-                        strokeColor="#52c41a"
+                        strokeColor={palette.success}
                         format={(p) => `${p?.toFixed(1)}%`}
                       />
                     </div>
@@ -98,7 +99,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                       <Progress
                         percent={gc.memoryRegions.oldGen?.usagePercent || 0}
                         size="small"
-                        strokeColor={(gc.memoryRegions.oldGen?.usagePercent || 0) > 70 ? '#ff4d4f' : '#722ed1'}
+                        strokeColor={(gc.memoryRegions.oldGen?.usagePercent || 0) > 70 ? palette.error : palette.accent}
                         format={(p) => `${p?.toFixed(1)}%`}
                       />
                     </div>
@@ -145,7 +146,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
               title={t('monitor.gc_overhead')}
               value={gc?.gcOverheadPercent?.toFixed(2) || '0'}
               suffix="%"
-              valueStyle={{ fontSize: 14, color: (gc?.gcOverheadPercent || 0) > 10 ? '#ff4d4f' : '#52c41a' }}
+              valueStyle={{ fontSize: 14, color: (gc?.gcOverheadPercent || 0) > 10 ? palette.error : palette.success }}
             />
             {gc?.gcByType && (
               <>
@@ -155,23 +156,23 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                 </Text>
                 <Row gutter={[8, 8]}>
                   <Col span={24}>
-                    <div style={{ padding: '8px 12px', background: 'rgba(59, 130, 246, 0.12)', borderRadius: 4, border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                      <Text strong style={{ fontSize: 12, color: '#60a5fa' }}>Young GC</Text>
+                    <div style={{ padding: '8px 12px', background: 'rgba(76, 128, 236, 0.12)', borderRadius: 4, border: `1px solid rgba(76, 128, 236, 0.2)` }}>
+                      <Text strong style={{ fontSize: 12, color: palette.primaryLight }}>Young GC</Text>
                       <Row gutter={8} style={{ marginTop: 4 }}>
                         <Col span={8}>
                           <Text type="secondary" style={{ fontSize: 11 }}>{t('monitor.count_short')}</Text>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>{gc.gcByType.youngGC?.count || 0}</div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: palette.bgElevated }}>{gc.gcByType.youngGC?.count || 0}</div>
                         </Col>
                         <Col span={8}>
                           <Text type="secondary" style={{ fontSize: 11 }}>{t('monitor.total_time')}</Text>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: palette.bgElevated }}>
                             {gc.gcByType.youngGC?.totalTimeSeconds?.toFixed(2) || '0'}
                             s
                           </div>
                         </Col>
                         <Col span={8}>
                           <Text type="secondary" style={{ fontSize: 11 }}>{t('monitor.avg_time')}</Text>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: palette.bgElevated }}>
                             {gc.gcByType.youngGC?.avgTimeMs?.toFixed(1) || '0'}
                             ms
                           </div>
@@ -182,27 +183,27 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                   <Col span={24}>
                     <div style={{
                       padding: '8px 12px',
-                      background: oldGcCount > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255, 255, 255, 0.06)',
+                      background: oldGcCount > 0 ? 'rgba(242, 113, 127, 0.12)' : 'rgba(255, 255, 255, 0.06)',
                       borderRadius: 4,
-                      border: oldGcCount > 0 ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(255, 255, 255, 0.1)',
+                      border: oldGcCount > 0 ? `1px solid rgba(242, 113, 127, 0.2)` : '1px solid rgba(255, 255, 255, 0.1)',
                     }}
                     >
-                      <Text strong style={{ fontSize: 12, color: oldGcCount > 0 ? '#f87171' : '#a1a1aa' }}>Old/Full GC</Text>
+                      <Text strong style={{ fontSize: 12, color: oldGcCount > 0 ? palette.error : '#a1a1aa' }}>Old/Full GC</Text>
                       <Row gutter={8} style={{ marginTop: 4 }}>
                         <Col span={8}>
                           <Text type="secondary" style={{ fontSize: 11 }}>{t('monitor.count_short')}</Text>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: oldGcCount > 0 ? '#f87171' : '#fafafa' }}>{oldGcCount}</div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: oldGcCount > 0 ? palette.error : palette.bgElevated }}>{oldGcCount}</div>
                         </Col>
                         <Col span={8}>
                           <Text type="secondary" style={{ fontSize: 11 }}>{t('monitor.total_time')}</Text>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: palette.bgElevated }}>
                             {oldGcCount > 0 ? (gc.gcByType.oldGC?.totalTimeSeconds?.toFixed(2) || '0') : '0'}
                             s
                           </div>
                         </Col>
                         <Col span={8}>
                           <Text type="secondary" style={{ fontSize: 11 }}>{t('monitor.avg_time')}</Text>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: '#fafafa' }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: palette.bgElevated }}>
                             {oldGcCount > 0 ? (gc.gcByType.oldGC?.avgTimeMs?.toFixed(1) || '0') : '0'}
                             ms
                           </div>
@@ -233,7 +234,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                       title={t('monitor.promotion_rate')}
                       value={gc.promotionRateMBPerSec.toFixed(2)}
                       suffix="MB/s"
-                      valueStyle={{ fontSize: 14, color: gc.promotionRateMBPerSec > 10 ? '#faad14' : '#52c41a' }}
+                      valueStyle={{ fontSize: 14, color: gc.promotionRateMBPerSec > 10 ? palette.warning : palette.success }}
                     />
                   </Col>
                   <Col span={12}>
@@ -241,7 +242,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                       title={t('monitor.promotion_ratio')}
                       value={gc.promotionRatio?.toFixed(1) || '0'}
                       suffix="%"
-                      valueStyle={{ fontSize: 14, color: (gc.promotionRatio || 0) > 30 ? '#faad14' : '#52c41a' }}
+                      valueStyle={{ fontSize: 14, color: (gc.promotionRatio || 0) > 30 ? palette.warning : palette.success }}
                     />
                   </Col>
                 </Row>
@@ -256,7 +257,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
               title={t('monitor.requests_per_second')}
               value={Number(metrics?.httpRequests?.requestsPerSecond || 0).toFixed(2)}
               suffix={t('monitor.per_second')}
-              valueStyle={{ color: '#1890ff', fontSize: 20 }}
+              valueStyle={{ color: palette.primary, fontSize: 20 }}
             />
             <Divider style={{ margin: '8px 0' }} />
             <Row gutter={8}>
@@ -268,7 +269,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                   title={t('monitor.error_rate')}
                   value={metrics?.httpRequests?.errorRate?.toFixed(2) || '0.00'}
                   suffix="%"
-                  valueStyle={{ fontSize: 14, color: (metrics?.httpRequests?.errorRate || 0) > 1 ? '#ff4d4f' : '#52c41a' }}
+                  valueStyle={{ fontSize: 14, color: (metrics?.httpRequests?.errorRate || 0) > 1 ? palette.error : palette.success }}
                 />
               </Col>
             </Row>
@@ -301,7 +302,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
             <Statistic
               title={t('monitor.live_threads')}
               value={metrics?.threads?.liveThreads || 0}
-              valueStyle={{ fontSize: 16, color: '#1890ff' }}
+              valueStyle={{ fontSize: 16, color: palette.primary }}
             />
             <Divider style={{ margin: '8px 0' }} />
             <Row gutter={8}>
@@ -361,7 +362,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
             <Statistic
               title={t('monitor.error_count')}
               value={metrics?.logEvents?.errorCount || 0}
-              valueStyle={{ fontSize: 16, color: (metrics?.logEvents?.errorCount || 0) > 100 ? '#ff4d4f' : '#52c41a' }}
+              valueStyle={{ fontSize: 16, color: (metrics?.logEvents?.errorCount || 0) > 100 ? palette.error : palette.success }}
             />
             <Divider style={{ margin: '8px 0' }} />
             <Row gutter={8}>
@@ -369,7 +370,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                 <Statistic
                   title={t('monitor.warn_count')}
                   value={metrics?.logEvents?.warnCount || 0}
-                  valueStyle={{ fontSize: 14, color: (metrics?.logEvents?.warnCount || 0) > 50 ? '#faad14' : 'inherit' }}
+                  valueStyle={{ fontSize: 14, color: (metrics?.logEvents?.warnCount || 0) > 50 ? palette.warning : 'inherit' }}
                 />
               </Col>
               <Col span={8}>

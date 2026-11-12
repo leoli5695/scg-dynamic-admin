@@ -3,6 +3,7 @@ import { Card, List, Tabs, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined, CrownOutlined } from '@ant-design/icons';
 import { EDITION_CONFIG, type LicenseFeatureDef } from '../constants/featureCatalog';
 import { useTranslation } from 'react-i18next';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -46,7 +47,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
                   <Tag
                     color="success"
                     icon={<CheckCircleOutlined />}
-                    style={{ backgroundColor: '#22c55e', color: '#fff' }}
+                    style={{ backgroundColor: palette.successSolid, color: '#fff' }}
                   >
                     免费
                   </Tag>
@@ -58,7 +59,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
                   <Tag
                     color="processing"
                     icon={<CloseCircleOutlined />}
-                    style={{ backgroundColor: '#3b82f6', color: '#fff' }}
+                    style={{ backgroundColor: palette.primary, color: '#fff' }}
                   >
                     高级版
                   </Tag>
@@ -66,7 +67,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
                   <Tag
                     color="purple"
                     icon={<CloseCircleOutlined />}
-                    style={{ backgroundColor: '#7c3aed', color: '#fff' }}
+                    style={{ backgroundColor: palette.accentSolid, color: '#fff' }}
                   >
                     企业版
                   </Tag>
@@ -124,7 +125,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
             key: 'advanced',
             label: (
               <span>
-                <CrownOutlined style={{ color: '#1890ff' }} />
+                <CrownOutlined style={{ color: palette.primary }} />
                 高级功能
               </span>
             ),
@@ -140,7 +141,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
             key: 'enterprise',
             label: (
               <span>
-                <CrownOutlined style={{ color: '#faad14' }} />
+                <CrownOutlined style={{ color: palette.warning }} />
                 企业功能
               </span>
             ),

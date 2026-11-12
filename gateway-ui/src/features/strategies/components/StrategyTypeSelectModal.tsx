@@ -7,6 +7,7 @@ import { CATEGORY_LABELS } from '../utils';
 import { filterStrategyTypes, getCreatableStrategyTypes } from '../strategyPicker';
 import type { StrategyPickerTab } from '../strategyPicker';
 import { getStrategyTypeIcon } from './icons';
+import { statusTone, toneForLegacyColor } from '../../../styles/palette';
 import './strategy-picker.css';
 
 interface StrategyTypeSelectModalProps {
@@ -155,8 +156,8 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
                     <span
                       className="strategy-picker-icon"
                       style={{
-                        color: type.color || '#9ebcff',
-                        background: `${type.color || '#819feb'}18`,
+                        color: statusTone[toneForLegacyColor(type.color)].color,
+                        background: statusTone[toneForLegacyColor(type.color)].bg,
                       }}
                     >
                       {getStrategyTypeIcon(type.icon)}

@@ -8,6 +8,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { ServiceMiddlewareView } from '../../types/middleware';
+import { palette } from '../../styles/palette';
 
 export interface MiddlewareTypeInfo {
   color: string;
@@ -53,16 +54,16 @@ export const getStatusIcon = (status?: string): React.ReactNode => {
     case 'healthy':
     case 'up':
     case 'running':
-      return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+      return <CheckCircleOutlined style={{ color: palette.success }} />;
     case 'warning':
     case 'degraded':
-      return <ExclamationCircleOutlined style={{ color: '#faad14' }} />;
+      return <ExclamationCircleOutlined style={{ color: palette.warning }} />;
     case 'critical':
     case 'down':
     case 'error':
-      return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+      return <CloseCircleOutlined style={{ color: palette.error }} />;
     default:
-      return <InfoCircleOutlined style={{ color: '#8c8c8c' }} />;
+      return <InfoCircleOutlined style={{ color: palette.textMuted }} />;
   }
 };
 

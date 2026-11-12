@@ -9,6 +9,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { Plugin } from '../../types/plugin';
+import { palette } from '../../styles/palette';
 
 /** Pick the localized description matching the current UI language. */
 export const getPluginDescription = (plugin: Plugin, language: string) => {
@@ -16,17 +17,17 @@ export const getPluginDescription = (plugin: Plugin, language: string) => {
   return isZh ? plugin.description : (plugin.descriptionEn || plugin.description);
 };
 
-/** Category → antd Tag color (falls back to purple like the legacy page). */
+/** Category → chip fill. Solid tokens so the white Tag label stays readable. */
 export const getCategoryColor = (category: string) => {
   switch (category) {
     case 'security':
-      return 'red';
+      return palette.errorSolid;
     case 'traffic':
-      return 'blue';
+      return palette.primary;
     case 'transform':
-      return 'green';
+      return palette.successSolid;
     default:
-      return 'purple';
+      return palette.accentSolid;
   }
 };
 

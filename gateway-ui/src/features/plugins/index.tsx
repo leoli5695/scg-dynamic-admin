@@ -41,6 +41,7 @@ import { getCategoryColor, getCategoryIcon, getPluginDescription, getPluginStatu
 import UploadPluginModal from './components/UploadPluginModal';
 import PluginDetailDrawer from './components/PluginDetailDrawer';
 import DevGuideCard from './components/DevGuideCard';
+import { palette, statusTone, toneForLegacyColor } from '../../styles/palette';
 
 const PluginsPage: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -112,7 +113,7 @@ const PluginsPage: React.FC = () => {
         render: (name: string, record: Plugin) => (
           <Tag
             icon={getCategoryIcon(record.category)}
-            color={record.color || getCategoryColor(record.category)}
+            color={record.color ? statusTone[toneForLegacyColor(record.color)].solid : getCategoryColor(record.category)}
           >
             {name}
           </Tag>
@@ -246,7 +247,7 @@ const PluginsPage: React.FC = () => {
                 <Statistic
                   title={t('plugins.disabled')}
                   value={stats.disabled}
-                  valueStyle={{ color: '#cf1322' }}
+                  valueStyle={{ color: palette.error }}
                   prefix={<StopOutlined />}
                 />
               </Col>
@@ -254,7 +255,7 @@ const PluginsPage: React.FC = () => {
                 <Statistic
                   title={t('plugins.loaded')}
                   value={stats.loaded}
-                  valueStyle={{ color: '#1890ff' }}
+                  valueStyle={{ color: palette.primary }}
                   prefix={<ThunderboltOutlined />}
                 />
               </Col>
@@ -262,7 +263,7 @@ const PluginsPage: React.FC = () => {
                 <Statistic
                   title={t('plugins.registered')}
                   value={stats.registered}
-                  valueStyle={{ color: '#52c41a' }}
+                  valueStyle={{ color: palette.success }}
                   prefix={<FileTextOutlined />}
                 />
               </Col>

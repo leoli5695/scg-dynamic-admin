@@ -8,6 +8,7 @@ import { ApiError } from '../../../api/http';
 import type { ConnectionTestResult } from '../../../types/kubernetes';
 import { FormModal } from '../../../components/ui/FormModal';
 import { FormSection } from '../../../components/ui/FormSection';
+import { palette } from '../../../styles/palette';
 
 const { TextArea } = Input;
 
@@ -176,7 +177,7 @@ export const ImportClusterModal: React.FC<ImportClusterModalProps> = ({
               ) : (
                 <div>
                   <p>{testResult.serverUrl && <><strong>{t('k8s.server_url')}:</strong> {testResult.serverUrl}<br /></>}</p>
-                  <p style={{ color: '#ff4d4f' }}>{testResult.error}</p>
+                  <p style={{ color: palette.error }}>{testResult.error}</p>
                 </div>
               )
             }

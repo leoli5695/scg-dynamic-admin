@@ -23,6 +23,7 @@ import { ApiError } from '../../../api/http';
 import AiReportRenderer from '../../../components/ai/AiReportRenderer';
 import '../../../styles/ai-report.css';
 import { translateValidationError } from '../utils/validationErrors';
+import { palette } from '../../../styles/palette';
 
 const { Paragraph, Text } = Typography;
 const { TextArea } = Input;
@@ -259,7 +260,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
         <Card
           title={
             <span>
-              <ThunderboltOutlined style={{ marginRight: '8px', color: '#165DFF' }} />
+              <ThunderboltOutlined style={{ marginRight: '8px', color: palette.primary }} />
               {t('copilot.route_generator')}
             </span>
           }
@@ -340,7 +341,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
                     onClick={handleValidateRoute}
                     loading={validatingRoute}
                     style={{
-                      borderColor: validationResult?.valid ? '#52c41a' : undefined,
+                      borderColor: validationResult?.valid ? palette.success : undefined,
                     }}
                   >
                     {t('copilot.validate')}
@@ -365,7 +366,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
                 rows={12}
                 style={{
                   background: 'rgba(0,0,0,0.3)',
-                  color: '#52c41a',
+                  color: palette.success,
                   fontFamily: 'monospace',
                   fontSize: '13px',
                 }}
@@ -416,7 +417,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
         <Card
           title={
             <span>
-              <BugOutlined style={{ marginRight: '8px', color: '#f5222d' }} />
+              <BugOutlined style={{ marginRight: '8px', color: palette.error }} />
               {t('copilot.error_analyzer')}
             </span>
           }
@@ -459,7 +460,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
         <Card
           title={
             <span>
-              <DashboardOutlined style={{ marginRight: '8px', color: '#52c41a' }} />
+              <DashboardOutlined style={{ marginRight: '8px', color: palette.success }} />
               {t('copilot.performance_optimizer')}
             </span>
           }

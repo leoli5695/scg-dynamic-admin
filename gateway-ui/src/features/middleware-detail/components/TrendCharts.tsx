@@ -10,6 +10,7 @@ import { LineChartOutlined } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
 import type { MiddlewareTrend } from '../../../types/middleware';
 import { buildTrendChartOption, formatMetricValue, type TrendItem } from '../utils';
+import { palette } from '../../../styles/palette';
 
 interface TrendChartsProps {
   trendItems: TrendItem[];
@@ -43,7 +44,7 @@ const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, t
                 dataIndex: 'diffTotal',
                 key: 'diffTotal',
                 render: (val: number) => (
-                  <span style={{ color: val > 100 ? '#ff4d4f' : val > 0 ? '#faad14' : '#52c41a' }}>
+                  <span style={{ color: val > 100 ? palette.error : val > 0 ? palette.warning : palette.success }}>
                     {val || 0}
                   </span>
                 ),
@@ -78,7 +79,7 @@ const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, t
                 <LineChartOutlined />
                 <span>{item.label}</span>
                 {item.summary?.avg ? (
-                  <Tag color="blue">
+                  <Tag color={palette.primary}>
                     平均: {formatMetricValue(item.summary.avg, item.unit)}
                   </Tag>
                 ) : null}

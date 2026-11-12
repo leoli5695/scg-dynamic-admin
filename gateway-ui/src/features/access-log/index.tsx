@@ -28,6 +28,7 @@ import { DEFAULT_SENSITIVE_FIELDS } from './constants';
 import ConfigTab from './components/ConfigTab';
 import LogViewerTab from './components/LogViewerTab';
 import './access-log.css';
+import { palette } from '../../styles/palette';
 
 const { Title } = Typography;
 
@@ -176,7 +177,7 @@ const AccessLogPage: React.FC = () => {
         <Space>
           <EyeOutlined />
           {t('access_log.viewer_tab')}
-          {logTotal > 0 && <Badge count={logTotal} style={{ backgroundColor: '#52c41a' }} />}
+          {logTotal > 0 && <Badge count={logTotal} style={{ backgroundColor: palette.successSolid }} />}
         </Space>
       ),
       children: (

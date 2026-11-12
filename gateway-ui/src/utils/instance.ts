@@ -2,6 +2,7 @@
  * Instance Utility Functions
  * Shared functions for instance status and configuration handling
  */
+import { palette } from '../styles/palette';
 
 /**
  * Instance status codes - matches backend enum
@@ -75,20 +76,20 @@ export const getStatusColorByName = (status: string): string => {
   switch (status) {
     case 'Running':
     case 'RUNNING':
-      return 'green';
+      return palette.successSolid;
     case 'Creating':
     case 'Starting':
-      return 'blue';
+      return palette.primary;
     case 'Stopped':
     case 'STOPPED':
-      return 'orange';
+      return palette.warningSolid;
     case 'Error':
     case 'ERROR':
-      return 'red';
+      return palette.errorSolid;
     case 'Stopping':
-      return 'purple';
+      return palette.accentSolid;
     default:
-      return 'default';
+      return palette.textDisabled;
   }
 };
 

@@ -1,89 +1,285 @@
 import type { ThemeConfig } from 'antd';
+import { palette } from './styles/palette';
 
 /**
- * Ant Design Theme Configuration
- * Colors aligned with CSS variables in variables.css for consistency
- * Note: Antd requires hex colors in theme config (CSS vars not supported)
+ * antd theme for the whole console. Every colour comes from styles/palette.ts,
+ * the JS twin of styles/variables.css, both derived from the login page.
+ *
+ * antd v6 ships its styles as runtime CSS-in-JS, so component surfaces that a
+ * plain stylesheet cannot win against (table headers, row hover, menu items)
+ * have to be themed here rather than in antd-overrides.css.
  */
 const theme: ThemeConfig = {
   token: {
-    // Background - aligned with --bg-base (#0a0f1e) and --bg-secondary
-    colorBgBase: '#0a0f1e',
-    colorBgContainer: '#101b30',      // aligned with --bg-card
-    colorBgElevated: '#1a2740',       // aligned with --bg-elevated
-    colorBorder: 'rgba(148, 163, 184, 0.18)',   // aligned with --border-default
-    // Text - aligned with CSS variables
-    colorText: '#eaf1fb',             // aligned with --text-primary
-    colorTextSecondary: '#a5b4cb',    // aligned with --text-secondary
-    colorTextTertiary: '#6b7c95',     // aligned with --text-muted
-    borderRadius: 12,
-    boxShadow: '0 10px 15px -3px rgba(3, 7, 18, 0.45)',
-    // Brand colors - aligned with CSS variables
-    colorPrimary: '#3b82f6',          // aligned with --primary-color
-    colorSuccess: '#22c55e',          // aligned with --success-color
-    colorWarning: '#eab308',          // aligned with --warning-color
-    colorError: '#ef4444',            // aligned with --error-color
-    colorBgContainerDisabled: 'rgba(148,163,184,0.08)',
+    colorBgBase: palette.bgBase,
+    colorBgContainer: palette.bgCard,
+    colorBgElevated: palette.bgElevated,
+    colorBgLayout: palette.bgPrimary,
+    colorBgSpotlight: palette.bgElevated,
+    colorBorder: palette.borderDefault,
+    colorBorderSecondary: palette.borderSubtle,
+    colorSplit: palette.borderSubtle,
+    colorText: palette.textPrimary,
+    colorTextSecondary: palette.textSecondary,
+    colorTextTertiary: palette.textTertiary,
+    colorTextQuaternary: palette.textCaption,
+    colorTextPlaceholder: palette.textCaption,
+    colorTextDisabled: palette.textDisabled,
+    colorPrimary: palette.primary,
+    colorInfo: palette.info,
+    colorSuccess: palette.success,
+    colorWarning: palette.warning,
+    colorError: palette.error,
+    colorLink: palette.primaryLight,
+    colorLinkHover: palette.accentLight,
+    colorLinkActive: palette.primary,
+    borderRadius: 10,
+    borderRadiusLG: 14,
+    borderRadiusSM: 6,
+    fontFamily:
+      "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif",
+    fontFamilyCode: "'JetBrains Mono', 'SF Mono', Monaco, Consolas, ui-monospace, monospace",
+    boxShadow: '0 12px 28px rgba(4, 7, 15, 0.46)',
+    boxShadowSecondary: '0 24px 60px rgba(4, 7, 15, 0.55)',
+    colorBgContainerDisabled: 'rgba(145, 169, 222, 0.08)',
+    colorFillTertiary: 'rgba(145, 169, 222, 0.06)',
+    colorFillQuaternary: 'rgba(145, 169, 222, 0.04)',
+    controlOutline: 'rgba(96, 149, 255, 0.20)',
+    lineWidthFocus: 0,
   },
   components: {
     Card: {
-      colorBgContainer: '#101b30',    // aligned with --bg-card
-      borderRadius: 12,
-      boxShadow: '0 1px 2px rgba(3, 7, 18, 0.30), 0 8px 24px -12px rgba(3, 7, 18, 0.60)',
+      colorBgContainer: palette.bgCard,
+      borderRadiusLG: 14,
+      headerBg: 'transparent',
+      boxShadowTertiary: '0 18px 48px rgba(3, 7, 18, 0.42), 0 2px 8px rgba(3, 7, 18, 0.28)',
     },
     Layout: {
-      colorBgHeader: '#0e1728',       // aligned with --bg-secondary
-      colorBgBody: '#0c1424',         // aligned with --bg-primary
+      headerBg: palette.bgSecondary,
+      bodyBg: palette.bgPrimary,
+      siderBg: palette.bgSecondary,
+      triggerBg: palette.bgTertiary,
     },
     Menu: {
-      colorBgContainer: '#0e1728',    // aligned with --bg-secondary
+      colorBgContainer: 'transparent',
+      itemBg: 'transparent',
+      itemColor: palette.textSecondary,
+      itemHoverColor: palette.textPrimary,
+      itemHoverBg: palette.hover,
+      itemSelectedColor: palette.primaryTint,
+      itemSelectedBg: 'rgba(76, 128, 236, 0.18)',
+      subMenuItemBg: 'transparent',
+      itemBorderRadius: 10,
+      iconSize: 16,
+      groupTitleColor: palette.textCaption,
+      activeBarWidth: 0,
     },
     Button: {
-      borderRadius: 8,
-      colorPrimary: '#3b82f6',        // aligned with --primary-color
-    },
-    Tag: {
-      colorBgContainer: 'rgba(148,163,184,0.10)',
-    },
-    Alert: {
-      colorBgContainer: 'rgba(234, 179, 8, 0.1)',  // aligned with --warning-color
-    },
-    Statistic: {
-      colorText: '#eaf1fb',           // aligned with --text-primary
-      colorTextSecondary: '#a5b4cb',  // aligned with --text-secondary
-    },
-    Descriptions: {
-      labelBg: 'transparent',         // no highlight patch behind labels on dark cards
+      borderRadius: 10,
+      colorPrimary: palette.primary,
+      colorPrimaryHover: palette.primaryHover,
+      colorPrimaryActive: palette.primaryActive,
+      primaryShadow: 'none',
+      defaultShadow: 'none',
+      dangerShadow: 'none',
+      defaultBg: 'transparent',
+      defaultBorderColor: palette.borderDefault,
+      defaultColor: palette.textPrimary,
+      defaultHoverBg: palette.hover,
+      defaultHoverBorderColor: palette.borderStrong,
+      defaultHoverColor: palette.textPrimary,
+      defaultActiveBg: 'rgba(121, 157, 249, 0.16)',
+      textHoverBg: palette.hover,
+      colorError: palette.error,
+      colorErrorHover: '#ff8b97',
+      colorErrorActive: palette.errorSolid,
     },
     Input: {
-      colorBgContainer: '#0a1120',    // aligned with --bg-input
-      colorBorder: 'rgba(148, 163, 184, 0.18)',  // aligned with --border-default
+      colorBgContainer: palette.bgInput,
+      activeBg: palette.bgInput,
+      hoverBg: palette.bgInput,
+      colorBorder: palette.borderDefault,
+      hoverBorderColor: palette.borderStrong,
+      activeBorderColor: palette.focus,
+      activeShadow: '0 0 0 3px rgba(96, 149, 255, 0.12)',
+      borderRadius: 10,
+      addonBg: palette.bgSecondary,
+    },
+    InputNumber: {
+      colorBgContainer: palette.bgInput,
+      activeBg: palette.bgInput,
+      hoverBg: palette.bgInput,
+      handleBg: palette.bgSecondary,
+      handleBorderColor: palette.borderSubtle,
+      activeBorderColor: palette.focus,
+      hoverBorderColor: palette.borderStrong,
+      activeShadow: '0 0 0 3px rgba(96, 149, 255, 0.12)',
     },
     Select: {
-      colorBgContainer: '#101b30',    // aligned with --bg-card
-      colorBorder: 'rgba(148, 163, 184, 0.25)',  // aligned with --border-strong
-      colorText: '#eaf1fb',           // aligned with --text-primary
-      optionSelectedBg: '#1a2740',    // aligned with --bg-elevated
+      colorBgContainer: palette.bgInput,
+      colorBgElevated: palette.bgElevated,
+      colorBorder: palette.borderDefault,
+      hoverBorderColor: palette.borderStrong,
+      activeBorderColor: palette.focus,
+      activeOutlineColor: 'rgba(96, 149, 255, 0.12)',
+      optionSelectedBg: 'rgba(76, 128, 236, 0.20)',
+      optionSelectedColor: palette.textPrimary,
+      optionActiveBg: palette.hover,
+      multipleItemBg: 'rgba(145, 169, 222, 0.12)',
+      multipleItemBorderColor: 'transparent',
+      selectorBg: palette.bgInput,
     },
-    Modal: {
-      colorBgContainer: '#101b30',    // aligned with --bg-card
-      colorBgElevated: '#1a2740',     // aligned with --bg-elevated
-      lineWidthFocus: 0,
-    },
-    Drawer: {
-      colorBgContainer: '#101b30',    // aligned with --bg-card
+    DatePicker: {
+      colorBgContainer: palette.bgInput,
+      colorBgElevated: palette.bgElevated,
+      activeBorderColor: palette.focus,
+      hoverBorderColor: palette.borderStrong,
+      activeShadow: '0 0 0 3px rgba(96, 149, 255, 0.12)',
+      cellActiveWithRangeBg: 'rgba(76, 128, 236, 0.16)',
+      cellHoverWithRangeBg: 'rgba(76, 128, 236, 0.24)',
     },
     Table: {
-      colorBgContainer: '#101b30',    // aligned with --bg-card
-      colorBorder: 'rgba(148, 163, 184, 0.12)',  // aligned with --border-subtle
-      // Header/hover backgrounds must be themed here: plain CSS overrides lose to antd v6 runtime CSS-in-JS
-      headerBg: '#15213a',
-      headerColor: '#a5b4cb',
+      colorBgContainer: 'transparent',
+      headerBg: palette.bgTableHead,
+      headerColor: palette.textSecondary,
       headerSplitColor: 'transparent',
-      headerSortActiveBg: '#15213a',
+      headerSortActiveBg: '#182444',
       headerSortHoverBg: '#1b2a47',
-      borderColor: 'rgba(148, 163, 184, 0.10)',
-      rowHoverBg: 'rgba(96, 165, 250, 0.08)',
+      borderColor: palette.borderSubtle,
+      rowHoverBg: 'rgba(121, 157, 249, 0.07)',
+      rowSelectedBg: 'rgba(76, 128, 236, 0.14)',
+      rowSelectedHoverBg: 'rgba(76, 128, 236, 0.20)',
+      footerBg: palette.bgSecondary,
+      headerBorderRadius: 10,
+    },
+    Modal: {
+      contentBg: palette.bgCard,
+      headerBg: palette.bgCard,
+      footerBg: 'transparent',
+      titleColor: palette.textPrimary,
+      borderRadiusLG: 16,
+    },
+    Drawer: {
+      colorBgContainer: palette.bgCard,
+      colorBgElevated: palette.bgCard,
+      footerPaddingBlock: 14,
+    },
+    Tabs: {
+      itemColor: palette.textTertiary,
+      itemHoverColor: palette.textPrimary,
+      itemSelectedColor: palette.primaryLight,
+      itemActiveColor: palette.primaryLight,
+      inkBarColor: palette.primaryLight,
+      titleFontSize: 14,
+      horizontalItemGutter: 28,
+    },
+    Tag: {
+      defaultBg: 'rgba(145, 169, 222, 0.10)',
+      defaultColor: palette.textSecondary,
+      borderRadiusSM: 6,
+    },
+    Badge: {
+      colorError: palette.error,
+      colorSuccess: palette.success,
+      colorWarning: palette.warning,
+      colorInfo: palette.info,
+    },
+    Alert: {
+      colorInfoBg: palette.infoSoft,
+      colorInfoBorder: 'rgba(95, 201, 216, 0.28)',
+      colorSuccessBg: palette.successSoft,
+      colorSuccessBorder: 'rgba(61, 220, 151, 0.28)',
+      colorWarningBg: palette.warningSoft,
+      colorWarningBorder: 'rgba(232, 180, 100, 0.28)',
+      colorErrorBg: palette.errorSoft,
+      colorErrorBorder: 'rgba(242, 113, 127, 0.30)',
+      borderRadiusLG: 12,
+    },
+    Tooltip: {
+      colorBgSpotlight: palette.bgElevated,
+      colorTextLightSolid: palette.textPrimary,
+      borderRadius: 8,
+    },
+    Popover: { colorBgElevated: palette.bgElevated, borderRadiusLG: 12 },
+    Dropdown: {
+      colorBgElevated: palette.bgElevated,
+      controlItemBgHover: palette.hover,
+      controlItemBgActive: 'rgba(76, 128, 236, 0.20)',
+      borderRadiusLG: 12,
+    },
+    Message: { contentBg: palette.bgElevated, borderRadiusLG: 12 },
+    Notification: { colorBgElevated: palette.bgElevated, borderRadiusLG: 14 },
+    Switch: {
+      colorTextQuaternary: palette.bgSwitch,
+      colorTextTertiary: '#243352',
+      handleBg: palette.textPrimary,
+    },
+    Checkbox: { colorBgContainer: palette.bgInput, borderRadiusSM: 4 },
+    Radio: {
+      colorBgContainer: palette.bgInput,
+      buttonSolidCheckedBg: palette.primary,
+      buttonBg: palette.bgSecondary,
+    },
+    Segmented: {
+      trackBg: palette.bgSecondary,
+      itemColor: palette.textTertiary,
+      itemHoverColor: palette.textPrimary,
+      itemHoverBg: palette.hover,
+      itemSelectedBg: '#253b66',
+      itemSelectedColor: palette.textPrimary,
+    },
+    Progress: {
+      defaultColor: palette.primary,
+      remainingColor: 'rgba(145, 169, 222, 0.14)',
+      circleTextColor: palette.textPrimary,
+    },
+    Statistic: {
+      colorText: palette.textPrimary,
+      colorTextDescription: palette.textTertiary,
+      titleFontSize: 13,
+    },
+    Descriptions: {
+      labelBg: 'transparent',
+      colorSplit: palette.borderSubtle,
+      labelColor: palette.textTertiary,
+      contentColor: palette.textPrimary,
+    },
+    Timeline: { tailColor: palette.borderSubtle, dotBg: 'transparent' },
+    Steps: {
+      colorTextDescription: palette.textTertiary,
+      colorTextDisabled: palette.textDisabled,
+      navArrowColor: palette.textDisabled,
+    },
+    Pagination: {
+      itemBg: 'transparent',
+      itemActiveBg: 'rgba(76, 128, 236, 0.20)',
+      borderRadius: 8,
+    },
+    Empty: { colorText: palette.textTertiary, colorTextDisabled: palette.textCaption },
+    Skeleton: {
+      gradientFromColor: 'rgba(145, 169, 222, 0.08)',
+      gradientToColor: 'rgba(145, 169, 222, 0.16)',
+    },
+    Form: { labelColor: palette.textSecondary, itemMarginBottom: 20 },
+    Divider: { colorSplit: palette.borderSubtle, colorText: palette.textTertiary },
+    Collapse: {
+      headerBg: 'transparent',
+      contentBg: 'transparent',
+      colorBorder: palette.borderSubtle,
+      borderRadiusLG: 12,
+    },
+    List: { colorSplit: palette.borderSubtle, itemPaddingSM: '10px 16px' },
+    Tree: {
+      nodeHoverBg: palette.hover,
+      nodeSelectedBg: 'rgba(76, 128, 236, 0.20)',
+      directoryNodeSelectedBg: palette.primary,
+    },
+    Upload: { colorFillAlter: 'rgba(145, 169, 222, 0.05)' },
+    Breadcrumb: {
+      itemColor: palette.textTertiary,
+      lastItemColor: palette.textPrimary,
+      separatorColor: palette.textDisabled,
+      linkHoverColor: palette.primaryLight,
     },
   },
 };

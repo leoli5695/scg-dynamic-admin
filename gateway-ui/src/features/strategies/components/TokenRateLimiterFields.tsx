@@ -15,6 +15,7 @@ import {
 } from '@ant-design/icons';
 import type { StrategyTypeField, StrategyTypeSchema } from '../../../types/strategy';
 import type { TFunc } from './DynamicConfigFields';
+import { palette } from '../../../styles/palette';
 
 interface TokenRateLimiterFieldsProps {
   schema: StrategyTypeSchema | undefined;
@@ -153,7 +154,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <span>{subSchemas.tenantQuotas.sectionLabel || '租户配额配置'}</span>
               {subSchemas.tenantQuotas.sectionDescription && (
                 <Tooltip title={subSchemas.tenantQuotas.sectionDescription}>
-                  <InfoCircleOutlined style={{ color: '#999' }} />
+                  <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
             </Space>
@@ -167,7 +168,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
                     key={key}
                     size="small"
                     type="inner"
-                    style={{ marginBottom: 8, background: '#fafafa' }}
+                    style={{ marginBottom: 8, background: palette.bgElevated }}
                     title={
                       <Space>
                         <span>{subSchemas.tenantQuotas.ruleLabel || '租户'} {name + 1}</span>
@@ -224,7 +225,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <span>{subSchemas.defaultQuotas.sectionLabel || '默认配额设置'}</span>
               {subSchemas.defaultQuotas.sectionDescription && (
                 <Tooltip title={subSchemas.defaultQuotas.sectionDescription}>
-                  <InfoCircleOutlined style={{ color: '#999' }} />
+                  <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
             </Space>
@@ -249,7 +250,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <span>{subSchemas.responseFormat.sectionLabel || '响应格式配置'}</span>
               {subSchemas.responseFormat.sectionDescription && (
                 <Tooltip title={subSchemas.responseFormat.sectionDescription}>
-                  <InfoCircleOutlined style={{ color: '#999' }} />
+                  <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
             </Space>
@@ -274,7 +275,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <span>{subSchemas.tenantIdExtraction.sectionLabel || '租户识别配置'}</span>
               {subSchemas.tenantIdExtraction.sectionDescription && (
                 <Tooltip title={subSchemas.tenantIdExtraction.sectionDescription}>
-                  <InfoCircleOutlined style={{ color: '#999' }} />
+                  <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
             </Space>
@@ -299,7 +300,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <span>{subSchemas.alert.sectionLabel || '告警配置'}</span>
               {subSchemas.alert.sectionDescription && (
                 <Tooltip title={subSchemas.alert.sectionDescription}>
-                  <InfoCircleOutlined style={{ color: '#999' }} />
+                  <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
             </Space>
@@ -324,7 +325,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <span>{subSchemas.sseHandling.sectionLabel || 'SSE流处理配置'}</span>
               {subSchemas.sseHandling.sectionDescription && (
                 <Tooltip title={subSchemas.sseHandling.sectionDescription}>
-                  <InfoCircleOutlined style={{ color: '#999' }} />
+                  <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
             </Space>
@@ -349,7 +350,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <span>{subSchemas.preDeduct.sectionLabel || '预扣与退款策略'}</span>
               {subSchemas.preDeduct.sectionDescription && (
                 <Tooltip title={subSchemas.preDeduct.sectionDescription}>
-                  <InfoCircleOutlined style={{ color: '#999' }} />
+                  <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
             </Space>
@@ -374,7 +375,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <span>{subSchemas.windowLimit.sectionLabel || '窗口Token限流'}</span>
               {subSchemas.windowLimit.sectionDescription && (
                 <Tooltip title={subSchemas.windowLimit.sectionDescription}>
-                  <InfoCircleOutlined style={{ color: '#999' }} />
+                  <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
             </Space>

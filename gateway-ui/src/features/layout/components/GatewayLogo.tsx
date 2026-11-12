@@ -1,4 +1,5 @@
 import React from 'react';
+import { palette } from '../../../styles/palette';
 
 interface GatewayLogoProps {
   className?: string;
@@ -16,7 +17,7 @@ const GatewayLogo: React.FC<GatewayLogoProps> = ({ className, style }) => (
     <defs>
       <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stopColor="#818CF8" />
-        <stop offset="100%" stopColor="#60A5FA" />
+        <stop offset="100%" stopColor={palette.primaryLight} />
       </linearGradient>
     </defs>
     {/* Hexagon background */}

@@ -6,7 +6,7 @@
   padding: 12px 24px;
   box-sizing: border-box;
   gap: 12px;
-  background: #0e1727;
+  background: var(--bg-secondary);
 }
 .instance-detail-page .instance-detail-header-left {
   flex: 1 1 300px;
@@ -28,8 +28,8 @@
   flex-wrap: wrap;
   gap: 0 16px;
   padding: 0 24px;
-  background: #0e1727;
-  border-bottom: 1px solid #1e2c42;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-solid-soft);
 }
 .instance-navigation-groups {
   display: flex;
@@ -50,7 +50,7 @@
   margin: 0;
   border: 0;
   background: transparent;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
@@ -61,19 +61,19 @@
   height: 48px;
   padding: 0 2px;
 }
-.instance-navigation-group.is-active { color: #93c5fd; }
+.instance-navigation-group.is-active { color: var(--primary-light); }
 .instance-navigation-group.is-active::after {
   position: absolute;
   content: '';
   inset: auto 0 0;
   height: 2px;
   border-radius: 2px 2px 0 0;
-  background: #60a5fa;
+  background: var(--primary-light);
 }
 .instance-navigation-group:hover,
-.instance-navigation-page:hover { color: #eaf1fb; }
+.instance-navigation-page:hover { color: var(--text-primary); }
 .instance-navigation-group:focus-visible,
-.instance-navigation-page:focus-visible { outline: 2px solid #60a5fa; outline-offset: -3px; border-radius: 4px; }
+.instance-navigation-page:focus-visible { outline: 2px solid var(--primary-light); outline-offset: -3px; border-radius: 4px; }
 .instance-navigation-search { width: 184px; flex-shrink: 0; }
 .instance-navigation-pages {
   flex: 1 0 100%;
@@ -81,13 +81,13 @@
   min-width: 0;
   gap: 6px;
   padding: 9px 0;
-  border-top: 1px solid #1b283d;
+  border-top: 1px solid var(--bg-elevated);
   overflow-x: auto;
   scrollbar-width: thin;
 }
 .instance-navigation-page { padding: 6px 12px; border-radius: 6px; line-height: 20px; }
-.instance-navigation-page.is-active { color: #bfdbfe; background: #1a3152; font-weight: 500; }
-.instance-navigation-page.is-active:hover { background: #23446e; }
+.instance-navigation-page.is-active { color: var(--primary-light); background: var(--bg-switch); font-weight: 500; }
+.instance-navigation-page.is-active:hover { background: var(--seg-active); }
 .instance-detail-page .instance-detail-content { padding: 24px; min-width: 0; }
 @media (max-width: 1200px) {
   .instance-navigation { gap: 0 12px; }

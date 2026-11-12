@@ -10,6 +10,7 @@ import { message } from '../../../utils/antdStatic';
 import { FileAddOutlined, FileTextOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { CertificateType } from '../../../types/certificate';
+import { palette } from '../../../styles/palette';
 
 const { TextArea } = Input;
 const { Dragger } = Upload;
@@ -179,7 +180,7 @@ const UploadCertModal: React.FC<UploadCertModalProps> = ({ onCancel, onSubmit })
                           onRemove={() => setCertFileContent('')}
                         >
                           <p className="ant-upload-drag-icon">
-                            <SafetyCertificateOutlined style={{ fontSize: 48, color: '#1890ff' }} />
+                            <SafetyCertificateOutlined style={{ fontSize: 48, color: palette.primary }} />
                           </p>
                           <p className="ant-upload-text">{t('cert.click_upload')}</p>
                           <p className="ant-upload-hint">.crt, .cer, .pem</p>
@@ -193,7 +194,7 @@ const UploadCertModal: React.FC<UploadCertModalProps> = ({ onCancel, onSubmit })
                           onRemove={() => setKeyFileContent('')}
                         >
                           <p className="ant-upload-drag-icon">
-                            <SafetyCertificateOutlined style={{ fontSize: 48, color: '#52c41a' }} />
+                            <SafetyCertificateOutlined style={{ fontSize: 48, color: palette.success }} />
                           </p>
                           <p className="ant-upload-text">{t('cert.click_upload_key')}</p>
                           <p className="ant-upload-hint">.key, .pem</p>

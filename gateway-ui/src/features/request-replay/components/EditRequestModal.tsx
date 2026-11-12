@@ -9,6 +9,7 @@ import { Button, Col, Divider, Form, Input, Row, Select, Space, Statistic, Typog
 import { EditOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { ReplayableRequest, ReplayOptions } from '../../../types/replay';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -119,7 +120,7 @@ const EditRequestModal: React.FC<EditRequestModalProps> = ({
                     title={t('replay.original_status')}
                     value={request.originalStatusCode}
                     valueStyle={{
-                      color: request.originalStatusCode >= 400 ? '#ff4d4f' : '#52c41a',
+                      color: request.originalStatusCode >= 400 ? palette.error : palette.success,
                     }}
                   />
                 </Col>

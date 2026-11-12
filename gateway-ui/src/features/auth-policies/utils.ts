@@ -3,6 +3,7 @@
  * Labels/colors/descriptions for the five backend AuthType codes.
  */
 import type { AuthType } from '../../types/authPolicy';
+import { palette } from '../../styles/palette';
 
 export type TFunc = (key: string, options?: Record<string, unknown>) => string;
 
@@ -24,11 +25,11 @@ const TYPE_LITERAL: Partial<Record<AuthType, string>> = {
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  JWT: '#3b82f6',
-  API_KEY: '#10b981',
-  OAUTH2: '#8b5cf6',
-  BASIC: '#f59e0b',
-  HMAC: '#ef4444',
+  JWT: palette.primary,
+  API_KEY: palette.success,
+  OAUTH2: palette.accent,
+  BASIC: palette.warning,
+  HMAC: palette.error,
 };
 
 const TYPE_DESC_KEYS: Record<string, string> = {
@@ -45,7 +46,7 @@ export const getAuthTypeLabel = (type: string, t: TFunc): string => {
   return TYPE_LITERAL[type as AuthType] ?? type;
 };
 
-export const getAuthTypeColor = (type: string): string => TYPE_COLOR[type] ?? '#6b7280';
+export const getAuthTypeColor = (type: string): string => TYPE_COLOR[type] ?? palette.textMuted;
 
 /** i18n key of the tooltip description; undefined for unknown types. */
 export const getAuthTypeDescKey = (type: string): string | undefined => TYPE_DESC_KEYS[type];

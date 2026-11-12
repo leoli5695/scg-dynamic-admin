@@ -9,6 +9,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import type { AccessLogEntry } from '../../../types/accessLog';
 import { getDurationColor, getMethodColor, getStatusBadge, renderFormattedJson, renderRawJson } from '../utils';
+import { palette } from '../../../styles/palette';
 
 dayjs.extend(utc);
 
@@ -198,7 +199,7 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
           title={`📥 ${t('access_log.response_body')}`}
           body={record.responseBody}
           viewMode={bodyViewMode}
-          headerColor="var(--success-color, #52c41a)"
+          headerColor={`var(--success-color, ${palette.success})`}
           notRecordedLabel={t('access_log.not_recorded')}
         />
       </div>

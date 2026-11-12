@@ -14,6 +14,7 @@ import { BUILTIN_JAR_PATH } from '../../../types/plugin';
 import type { Plugin } from '../../../types/plugin';
 import { getPluginDescription } from '../../plugins/utils';
 import { CATEGORY_LABELS, getCategoryDesign, getPluginIcon } from '../utils';
+import { palette, withAlpha } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -52,7 +53,7 @@ const PluginSelectModal: React.FC<PluginSelectModalProps> = ({
               width: 40,
               height: 40,
               borderRadius: 10,
-              background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              background: `linear-gradient(135deg, ${palette.accent} 0%, ${palette.accentSolid} 100%)`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -93,8 +94,8 @@ const PluginSelectModal: React.FC<PluginSelectModalProps> = ({
                 <Divider style={{ margin: '0 0 16px 0' }}>
                   <Tag
                     style={{
-                      background: `${design.accentColor}20`,
-                      border: `1px solid ${design.accentColor}40`,
+                      background: withAlpha(design.accentColor, 0.13),
+                      border: `1px solid ${withAlpha(design.accentColor, 0.25)}`,
                       color: design.accentColor,
                       borderRadius: 8,
                       padding: '4px 12px',
@@ -197,8 +198,8 @@ const PluginSelectModal: React.FC<PluginSelectModalProps> = ({
                           >
                             <Tag
                               style={{
-                                background: `${pluginDesign.accentColor}20`,
-                                border: `1px solid ${pluginDesign.accentColor}40`,
+                                background: withAlpha(pluginDesign.accentColor, 0.13),
+                                border: `1px solid ${withAlpha(pluginDesign.accentColor, 0.25)}`,
                                 color: pluginDesign.accentColor,
                                 borderRadius: 6,
                                 fontSize: 11,
@@ -211,9 +212,9 @@ const PluginSelectModal: React.FC<PluginSelectModalProps> = ({
                               <Tag
                                 icon={<AppstoreAddOutlined />}
                                 style={{
-                                  background: 'rgba(139, 92, 246, 0.15)',
-                                  border: '1px solid rgba(139, 92, 246, 0.3)',
-                                  color: '#a78bfa',
+                                  background: 'rgba(155, 140, 245, 0.15)',
+                                  border: `1px solid rgba(155, 140, 245, 0.3)`,
+                                  color: palette.accentLight,
                                   borderRadius: 6,
                                   fontSize: 11,
                                   padding: '2px 8px',

@@ -23,6 +23,7 @@ import ComponentCard from './components/ComponentCard';
 import HistoryTrendCard from './components/HistoryTrendCard';
 import { getScoreColor, getScoreStatus, getStatusIcon } from './utils';
 import './diagnostic.css';
+import { palette } from '../../styles/palette';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -275,8 +276,8 @@ const DiagnosticPage: React.FC = () => {
       {!loading && !report && (
         <Card>
           <div style={{ textAlign: 'center', padding: 40 }}>
-            <MedicineBoxOutlined style={{ fontSize: 48, color: '#8c8c8c' }} />
-            <Paragraph style={{ marginTop: 16, color: '#8c8c8c' }}>
+            <MedicineBoxOutlined style={{ fontSize: 48, color: palette.textMuted }} />
+            <Paragraph style={{ marginTop: 16, color: palette.textMuted }}>
               {t('diagnostic.click_to_run')}
             </Paragraph>
           </div>

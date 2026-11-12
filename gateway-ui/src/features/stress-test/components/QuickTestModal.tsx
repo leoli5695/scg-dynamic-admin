@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { Form, InputNumber, Modal, Space, Typography } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { palette } from '../../../styles/palette';
 
 const { Paragraph } = Typography;
 
@@ -24,7 +25,7 @@ const QuickTestModal: React.FC<Props> = ({ open, onClose, onStart }) => {
     <Modal className="console-dialog"
       title={
         <Space>
-          <ThunderboltOutlined style={{ color: '#165DFF' }} />
+          <ThunderboltOutlined style={{ color: palette.primary }} />
           {t('stress_test.quick_test_title')}
         </Space>
       }

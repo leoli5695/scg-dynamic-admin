@@ -5,6 +5,7 @@ import React from 'react';
 import {
   CheckCircleOutlined, CloseCircleOutlined, WarningOutlined,
 } from '@ant-design/icons';
+import { palette } from '../../styles/palette';
 
 /** Component/report status → icon (uses global .status-icon-* colors). */
 export const getStatusIcon = (status: string) => {
@@ -34,9 +35,9 @@ export const getStatusColor = (status: string) => {
 
 /** Health score → progress color. */
 export const getScoreColor = (score: number) => {
-  if (score >= 80) return '#52c41a';
-  if (score >= 50) return '#faad14';
-  return '#ff4d4f';
+  if (score >= 80) return palette.success;
+  if (score >= 50) return palette.warning;
+  return palette.error;
 };
 
 /** Health score → antd progress status. */

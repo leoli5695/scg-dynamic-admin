@@ -5,6 +5,7 @@
  */
 import type * as echarts from 'echarts';
 import type { TopologyEdge, TopologyGraph, TopologyNode } from '../../types/topology';
+import { chartAxis, palette, withAlpha } from '../../styles/palette.ts';
 
 export interface ChartFilterOptions {
   showDisabledRoutes: boolean;
@@ -41,18 +42,18 @@ function getNodeSize(node: TopologyNode): number {
 
 function getNodeColor(node: TopologyNode): string {
   switch (node.type) {
-    case 'gateway': return '#165DFF';
+    case 'gateway': return palette.primary;
     case 'route':
-      if (node.enabled === false) return '#8C8C8C';
-      if (node.status === 'unhealthy') return '#F53F3F';
-      if (node.status === 'warning') return '#FA8C16';
-      return '#00D9C6';
+      if (node.enabled === false) return palette.textMuted;
+      if (node.status === 'unhealthy') return palette.error;
+      if (node.status === 'warning') return palette.warning;
+      return palette.info;
     case 'service':
       // Static services green, discovery services purple
-      if (node.serviceType === '静态服务') return '#52C41A';
-      return '#722ED1';
-    case 'client': return '#FA8C16';
-    default: return '#8C8C8C';
+      if (node.serviceType === '静态服务') return palette.success;
+      return palette.accent;
+    case 'client': return palette.warning;
+    default: return palette.textMuted;
   }
 }
 
@@ -62,10 +63,10 @@ function getNodeItemStyle(node: TopologyNode, isSelected: boolean): Record<strin
   if (isSelected) {
     return {
       color: baseColor,
-      borderColor: '#FFD700',
-      borderWidth: 5,
-      shadowBlur: 40,
-      shadowColor: 'rgba(255, 215, 0, 0.9)',
+      borderColor: palette.primaryTint,
+      borderWidth: 4,
+      shadowBlur: 32,
+      shadowColor: withAlpha(palette.primaryLight, 0.85),
       shadowOffsetX: 0,
       shadowOffsetY: 0,
       opacity: 1,
@@ -75,46 +76,46 @@ function getNodeItemStyle(node: TopologyNode, isSelected: boolean): Record<strin
   switch (node.type) {
     case 'client':
       return {
-        color: baseColor, borderColor: '#fff', borderWidth: 2,
-        shadowBlur: 6, shadowColor: 'rgba(250, 140, 16, 0.3)',
+        color: baseColor, borderColor: palette.bgBase, borderWidth: 2,
+        shadowBlur: 8, shadowColor: withAlpha(palette.warning, 0.35),
         shadowOffsetX: 0, shadowOffsetY: 0,
       };
     case 'gateway':
       return {
-        color: baseColor, borderColor: '#fff', borderWidth: 3,
-        shadowBlur: 20, shadowColor: 'rgba(22, 93, 255, 0.5)',
+        color: baseColor, borderColor: palette.bgBase, borderWidth: 3,
+        shadowBlur: 20, shadowColor: 'rgba(76, 128, 236, 0.5)',
         shadowOffsetX: 0, shadowOffsetY: 4,
       };
     case 'route':
       if (node.enabled === false) {
         return {
-          color: baseColor, borderColor: '#fff', borderWidth: 2,
+          color: baseColor, borderColor: palette.bgBase, borderWidth: 2,
           borderType: 'dashed', opacity: 0.65,
-          shadowBlur: 3, shadowColor: 'rgba(0, 0, 0, 0.2)',
+          shadowBlur: 3, shadowColor: 'rgba(4, 7, 15, 0.35)',
           shadowOffsetX: 0, shadowOffsetY: 1,
         };
       }
       return {
-        color: baseColor, borderColor: '#fff', borderWidth: 2,
-        shadowBlur: 8, shadowColor: 'rgba(15, 198, 194, 0.4)',
+        color: baseColor, borderColor: palette.bgBase, borderWidth: 2,
+        shadowBlur: 10, shadowColor: withAlpha(palette.info, 0.4),
         shadowOffsetX: 0, shadowOffsetY: 2,
       };
     case 'service': {
       const healthy = node.healthyInstances === node.totalInstances;
-      const serviceColor = node.serviceType === '静态服务' ? '#52C41A' : '#722ED1';
+      const serviceColor = node.serviceType === '静态服务' ? palette.success : palette.accent;
       return {
         color: serviceColor,
-        borderColor: healthy ? '#fff' : '#FA8C16',
+        borderColor: healthy ? palette.bgBase : palette.warning,
         borderWidth: healthy ? 2 : 3,
         shadowBlur: 10,
-        shadowColor: `rgba(${node.serviceType === '静态服务' ? '82, 196, 26' : '114, 46, 209'}, 0.3)`,
+        shadowColor: withAlpha(serviceColor, 0.32),
         shadowOffsetX: 0, shadowOffsetY: 2,
       };
     }
     default:
       return {
-        color: baseColor, borderColor: '#fff', borderWidth: 2,
-        shadowBlur: 5, shadowColor: 'rgba(0, 0, 0, 0.3)',
+        color: baseColor, borderColor: palette.bgBase, borderWidth: 2,
+        shadowBlur: 6, shadowColor: 'rgba(4, 7, 15, 0.45)',
         shadowOffsetX: 0, shadowOffsetY: 2,
       };
   }
@@ -122,7 +123,7 @@ function getNodeItemStyle(node: TopologyNode, isSelected: boolean): Record<strin
 
 function getNodeLabel(node: TopologyNode): Record<string, unknown> {
   const size = getNodeSize(node);
-  const baseLabel = { show: true, color: '#fff' };
+  const baseLabel = { show: true, color: palette.textPrimary };
 
   switch (node.type) {
     case 'client': {
@@ -137,7 +138,7 @@ function getNodeLabel(node: TopologyNode): Record<string, unknown> {
         fontSize: 11,
         fontWeight: 'bold',
         rich: {
-          metric: { fontSize: 9, color: '#FFB347', padding: [2, 0, 0, 0] },
+          metric: { fontSize: 9, color: palette.warning, padding: [2, 0, 0, 0] },
         },
       };
     }
@@ -150,7 +151,7 @@ function getNodeLabel(node: TopologyNode): Record<string, unknown> {
         fontSize: 10,
         fontWeight: node.enabled === false ? 'normal' : 'bold',
         rich: {
-          disabled: { color: '#5A5A5A', fontSize: 10 },
+          disabled: { color: palette.textDisabled, fontSize: 10 },
         },
       };
     }
@@ -167,8 +168,8 @@ function getNodeLabel(node: TopologyNode): Record<string, unknown> {
         fontSize: 11,
         fontWeight: 'bold',
         rich: {
-          green: { color: '#52C41A', fontSize: 10 },
-          orange: { color: '#FA8C16', fontSize: 10 },
+          green: { color: palette.success, fontSize: 10 },
+          orange: { color: palette.warning, fontSize: 10 },
         },
       };
     }
@@ -198,94 +199,94 @@ function getNodeLabel(node: TopologyNode): Record<string, unknown> {
 
 function formatNodeTooltip(node: TopologyNode): string {
   const typeInfo = {
-    gateway: { icon: '🚪', color: '#165DFF', label: 'Gateway' },
-    route: { icon: '🔗', color: node.enabled === false ? '#8C8C8C' : '#00D9C6', label: 'Route' },
-    service: { icon: '⚙️', color: node.serviceType === '静态服务' ? '#52C41A' : '#722ED1', label: 'Service' },
-    client: { icon: '👤', color: '#FA8C16', label: 'Client' },
+    gateway: { icon: '🚪', color: palette.primary, label: 'Gateway' },
+    route: { icon: '🔗', color: node.enabled === false ? palette.textMuted : palette.info, label: 'Route' },
+    service: { icon: '⚙️', color: node.serviceType === '静态服务' ? palette.success : palette.accent, label: 'Service' },
+    client: { icon: '👤', color: palette.warning, label: 'Client' },
   };
-  const info = typeInfo[node.type as keyof typeof typeInfo] || { icon: '📦', color: '#8C8C8C', label: node.type };
+  const info = typeInfo[node.type as keyof typeof typeInfo] || { icon: '📦', color: palette.textMuted, label: node.type };
 
   let html = '<div style="padding: 4px 0;">';
   html += `<div style="font-weight: 600; font-size: 15px; color: ${info.color}; margin-bottom: 8px;">${info.icon} ${node.name}</div>`;
-  html += `<div style="color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 8px;">${info.label}</div>`;
+  html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 8px;">${info.label}</div>`;
 
   if (node.type === 'gateway') {
     html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-    html += '<span style="color: rgba(255,255,255,0.7);">实例ID:</span>';
-    html += `<span style="color: #fff;">${node.instanceId || '-'}</span>`;
+    html += `<span style="color: ${palette.textSecondary};">实例ID:</span>`;
+    html += `<span style="color: ${palette.textPrimary};">${node.instanceId || '-'}</span>`;
     html += '</div>';
     if (node.uri) {
       html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-      html += '<span style="color: rgba(255,255,255,0.7);">监听地址:</span>';
-      html += `<span style="color: #fff; font-size: 12px;">${node.uri}</span>`;
+      html += `<span style="color: ${palette.textSecondary};">监听地址:</span>`;
+      html += `<span style="color: ${palette.textPrimary}; font-size: 12px;">${node.uri}</span>`;
       html += '</div>';
     }
     if (node.status) {
-      const statusColor = node.status === 'healthy' ? '#52C41A' : node.status === 'warning' ? '#FA8C16' : '#F53F3F';
+      const statusColor = node.status === 'healthy' ? palette.success : node.status === 'warning' ? palette.warning : palette.error;
       html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-      html += '<span style="color: rgba(255,255,255,0.7);">运行状态:</span>';
+      html += `<span style="color: ${palette.textSecondary};">运行状态:</span>`;
       html += `<span style="color: ${statusColor}; font-weight: 500;">● ${node.status}</span>`;
       html += '</div>';
     }
     if (node.metrics?.requestCount) {
       html += '<div style="margin-top: 8px; padding: 6px 10px; background: rgba(22, 93, 255, 0.2); border-radius: 4px;">';
       html += '<div style="display: flex; justify-content: space-between; align-items: center;">';
-      html += '<span style="color: rgba(255,255,255,0.7); font-size: 11px;">总请求量</span>';
+      html += `<span style="color: ${palette.textSecondary}; font-size: 11px;">总请求量</span>`;
       html += `<span style="color: #165DFF; font-weight: 600; font-size: 14px;">${node.metrics.requestCount}</span>`;
       html += '</div></div>';
     }
   } else if (node.type === 'route') {
     html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-    html += '<span style="color: rgba(255,255,255,0.7);">Route ID:</span>';
-    html += `<span style="color: #fff;">${node.routeId || '-'}</span>`;
+    html += `<span style="color: ${palette.textSecondary};">Route ID:</span>`;
+    html += `<span style="color: ${palette.textPrimary};">${node.routeId || '-'}</span>`;
     html += '</div>';
     if (node.uri) {
       html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-      html += '<span style="color: rgba(255,255,255,0.7);">URI:</span>';
-      html += `<span style="color: #fff; font-size: 12px;">${node.uri}</span>`;
+      html += `<span style="color: ${palette.textSecondary};">URI:</span>`;
+      html += `<span style="color: ${palette.textPrimary}; font-size: 12px;">${node.uri}</span>`;
       html += '</div>';
     }
-    const enabledColor = node.enabled === false ? '#8C8C8C' : '#52C41A';
+    const enabledColor = node.enabled === false ? palette.textMuted : palette.success;
     const enabledText = node.enabled === false ? '禁用' : '启用';
     html += '<div style="display: flex; align-items: center; gap: 8px;">';
-    html += '<span style="color: rgba(255,255,255,0.7);">路由状态:</span>';
+    html += `<span style="color: ${palette.textSecondary};">路由状态:</span>`;
     html += `<span style="color: ${enabledColor}; font-weight: 500;">● ${enabledText}</span>`;
     html += '</div>';
     if (node.status) {
-      const statusColor = node.status === 'healthy' ? '#52C41A' : node.status === 'warning' ? '#FA8C16' : '#F53F3F';
+      const statusColor = node.status === 'healthy' ? palette.success : node.status === 'warning' ? palette.warning : palette.error;
       html += '<div style="display: flex; align-items: center; gap: 8px;">';
-      html += '<span style="color: rgba(255,255,255,0.7);">健康状态:</span>';
+      html += `<span style="color: ${palette.textSecondary};">健康状态:</span>`;
       html += `<span style="color: ${statusColor}; font-weight: 500;">● ${node.status}</span>`;
       html += '</div>';
     }
   } else if (node.type === 'service') {
     html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-    html += '<span style="color: rgba(255,255,255,0.7);">Service ID:</span>';
-    html += `<span style="color: #fff;">${node.serviceId || '-'}</span>`;
+    html += `<span style="color: ${palette.textSecondary};">Service ID:</span>`;
+    html += `<span style="color: ${palette.textPrimary};">${node.serviceId || '-'}</span>`;
     html += '</div>';
     if (node.serviceType) {
-      const typeColor = node.serviceType === '静态服务' ? '#52C41A' : '#722ED1';
+      const typeColor = node.serviceType === '静态服务' ? palette.success : palette.accent;
       html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-      html += '<span style="color: rgba(255,255,255,0.7);">服务类型:</span>';
+      html += `<span style="color: ${palette.textSecondary};">服务类型:</span>`;
       html += `<span style="color: ${typeColor}; font-weight: 500;">${node.serviceType}</span>`;
       html += '</div>';
     }
     if (node.totalInstances !== undefined && node.totalInstances > 0) {
-      const healthyColor = node.healthyInstances === node.totalInstances ? '#52C41A' : '#FA8C16';
+      const healthyColor = node.healthyInstances === node.totalInstances ? palette.success : palette.warning;
       html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-      html += '<span style="color: rgba(255,255,255,0.7);">实例状态:</span>';
+      html += `<span style="color: ${palette.textSecondary};">实例状态:</span>`;
       html += `<span style="color: ${healthyColor}; font-weight: 500;">${node.healthyInstances}/${node.totalInstances} 健康</span>`;
       html += '</div>';
     }
     if (node.instances && node.instances.length > 0) {
       html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.15);">';
-      html += '<div style="color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 4px;">实例列表</div>';
+      html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 4px;">实例列表</div>`;
       html += '<div style="max-height: 100px; overflow-y: auto;">';
       node.instances.forEach((inst) => {
-        const statusColor = inst.enabled ? '#52C41A' : '#F53F3F';
+        const statusColor = inst.enabled ? palette.success : palette.error;
         html += '<div style="padding: 3px 0; display: flex; align-items: center; gap: 6px; font-size: 12px;">';
         html += `<span style="color: ${statusColor};">●</span>`;
-        html += `<span style="color: #fff;">${inst.ip}:${inst.port}</span>`;
+        html += `<span style="color: ${palette.textPrimary};">${inst.ip}:${inst.port}</span>`;
         if (inst.weight !== undefined) {
           html += `<span style="color: rgba(255,255,255,0.5); font-size: 11px;">(权重:${inst.weight})</span>`;
         }
@@ -295,30 +296,30 @@ function formatNodeTooltip(node: TopologyNode): string {
     }
   } else if (node.type === 'client') {
     html += '<div style="display: flex; align-items: center; gap: 8px;">';
-    html += '<span style="color: rgba(255,255,255,0.7);">IP:</span>';
-    html += `<span style="color: #fff;">${node.clientIp || '-'}</span>`;
+    html += `<span style="color: ${palette.textSecondary};">IP:</span>`;
+    html += `<span style="color: ${palette.textPrimary};">${node.clientIp || '-'}</span>`;
     html += '</div>';
   }
 
   if (node.metrics) {
     html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.15);">';
-    html += '<div style="color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 6px;">📊 流量指标</div>';
+    html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 6px;">📊 流量指标</div>`;
     if (node.metrics.requestCount) {
       html += '<div style="display: flex; justify-content: space-between; margin-bottom: 3px;">';
-      html += '<span style="color: rgba(255,255,255,0.7);">请求数</span>';
+      html += `<span style="color: ${palette.textSecondary};">请求数</span>`;
       html += `<span style="color: #165DFF; font-weight: 500;">${node.metrics.requestCount}</span>`;
       html += '</div>';
     }
     if (node.metrics.avgLatency) {
       html += '<div style="display: flex; justify-content: space-between; margin-bottom: 3px;">';
-      html += '<span style="color: rgba(255,255,255,0.7);">平均延迟</span>';
-      html += `<span style="color: #fff;">${node.metrics.avgLatency.toFixed(2)}ms</span>`;
+      html += `<span style="color: ${palette.textSecondary};">平均延迟</span>`;
+      html += `<span style="color: ${palette.textPrimary};">${node.metrics.avgLatency.toFixed(2)}ms</span>`;
       html += '</div>';
     }
     if (node.metrics.errorRate !== undefined) {
-      const rateColor = node.metrics.errorRate > 5 ? '#F53F3F' : '#52C41A';
+      const rateColor = node.metrics.errorRate > 5 ? palette.error : palette.success;
       html += '<div style="display: flex; justify-content: space-between;">';
-      html += '<span style="color: rgba(255,255,255,0.7);">错误率</span>';
+      html += `<span style="color: ${palette.textSecondary};">错误率</span>`;
       html += `<span style="color: ${rateColor}; font-weight: 500;">${node.metrics.errorRate.toFixed(2)}%</span>`;
       html += '</div>';
     }
@@ -338,7 +339,7 @@ function formatEdgeTooltip(edge: TopologyEdge): string {
 
   if (edge.metrics) {
     html += '<div style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 4px;">';
-    html += '<div style="color: rgba(255,255,255,0.7); font-size: 11px;">流量指标</div>';
+    html += `<div style="color: ${palette.textSecondary}; font-size: 11px;">流量指标</div>`;
     if (edge.metrics.requestCount) {
       html += `<div>请求数: ${edge.metrics.requestCount}</div>`;
     }
@@ -346,7 +347,7 @@ function formatEdgeTooltip(edge: TopologyEdge): string {
       html += `<div>平均延迟: ${edge.metrics.avgLatency.toFixed(2)}ms</div>`;
     }
     if (edge.metrics.errorRate !== undefined) {
-      const color = edge.metrics.errorRate > 5 ? '#F53F3F' : '#52C41A';
+      const color = edge.metrics.errorRate > 5 ? palette.error : palette.success;
       html += `<div style="color: ${color};">错误率: ${edge.metrics.errorRate.toFixed(2)}%</div>`;
     }
     html += '</div>';
@@ -496,18 +497,18 @@ export function buildChartOption(
     const isDisabledRoute = sourceNode?.type === 'route' && sourceNode?.enabled === false;
 
     const errorRate = edge.metrics?.errorRate || 0;
-    let lineColor = '#165DFF';
-    if (isFocusedPath) lineColor = '#0FC6C2';
-    else if (errorRate > 10) lineColor = '#F53F3F';
-    else if (errorRate > 5) lineColor = '#FA8C16';
-    else if (edge.type === 'client-gateway') lineColor = '#FA8C16';
+    let lineColor: string = palette.primary;
+    if (isFocusedPath) lineColor = palette.info;
+    else if (errorRate > 10) lineColor = palette.error;
+    else if (errorRate > 5) lineColor = palette.warning;
+    else if (edge.type === 'client-gateway') lineColor = palette.warning;
 
     return {
       source: edge.source,
       target: edge.target,
       lineStyle: {
         width: lineWidth,
-        color: isDisabledRoute ? '#6A6A6A' : lineColor,
+        color: isDisabledRoute ? palette.textDisabled : lineColor,
         curveness: 0.08,
         opacity: isDisabledRoute ? 0.5 : (isFocusedPath ? 1 : 0.5),
         type: (isDisabledRoute ? 'dashed' : 'solid') as 'dashed' | 'solid',
@@ -519,11 +520,11 @@ export function buildChartOption(
   });
 
   const categories = [
-    { name: 'gateway', itemStyle: { color: '#165DFF' } },
-    { name: 'route', itemStyle: { color: '#00D9C6' } },
-    { name: 'service-discovery', itemStyle: { color: '#722ED1' } },
-    { name: 'service-static', itemStyle: { color: '#52C41A' } },
-    { name: 'client', itemStyle: { color: '#FA8C16' } },
+    { name: 'gateway', itemStyle: { color: palette.primary } },
+    { name: 'route', itemStyle: { color: palette.info } },
+    { name: 'service-discovery', itemStyle: { color: palette.accent } },
+    { name: 'service-static', itemStyle: { color: palette.success } },
+    { name: 'client', itemStyle: { color: palette.warning } },
   ];
 
   // Recategorize service nodes by serviceType for the legend colors
@@ -549,20 +550,20 @@ export function buildChartOption(
         }
         return '';
       },
-      backgroundColor: 'rgba(31, 41, 55, 0.95)',
-      borderColor: 'rgba(255, 255, 255, 0.15)',
+      backgroundColor: chartAxis.tooltipBg,
+      borderColor: chartAxis.tooltipBorder,
       borderWidth: 1,
-      borderRadius: 8,
+      borderRadius: 12,
       padding: [12, 16],
-      textStyle: { color: '#fff', fontSize: 13 },
+      textStyle: { color: chartAxis.tooltipText, fontSize: 13 },
       confine: true,
-      extraCssText: 'box-shadow: 0 4px 12px rgba(0,0,0,0.3);',
+      extraCssText: 'box-shadow: 0 18px 44px rgba(4, 7, 15, 0.55);',
     },
     legend: {
       show: false,
       bottom: 5,
       left: 'center',
-      textStyle: { color: '#fff', fontSize: 10 },
+      textStyle: { color: chartAxis.label, fontSize: 10 },
       data: categories.map((c) => c.name),
       itemWidth: 12,
       itemHeight: 8,
@@ -590,10 +591,10 @@ export function buildChartOption(
         scale: 1.2,
         lineStyle: { width: 5 },
         itemStyle: {
-          borderColor: '#fff',
+          borderColor: palette.primaryTint,
           borderWidth: 4,
           shadowBlur: 25,
-          shadowColor: 'rgba(255, 255, 255, 0.8)',
+          shadowColor: withAlpha(palette.primaryLight, 0.7),
         },
         label: { fontSize: 14, fontWeight: 'bold' },
       },

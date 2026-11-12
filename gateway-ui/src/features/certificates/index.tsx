@@ -32,6 +32,7 @@ import type { SslCertificate } from '../../types/certificate';
 import StatusTag from './components/StatusTag';
 import CertDetailModal from './components/CertDetailModal';
 import UploadCertModal, { CertificateUploadPayload } from './components/UploadCertModal';
+import { palette } from '../../styles/palette';
 
 const { Title, Text } = Typography;
 
@@ -225,7 +226,7 @@ const CertificatePage: React.FC = () => {
             <Statistic
               title={t('cert.expiring_soon')}
               value={stats?.expiringSoon ?? 0}
-              valueStyle={{ color: '#faad14' }}
+              valueStyle={{ color: palette.warning }}
             />
           </Card>
         </Col>
@@ -234,7 +235,7 @@ const CertificatePage: React.FC = () => {
             <Statistic
               title={t('cert.expired')}
               value={stats?.expired ?? 0}
-              valueStyle={{ color: '#cf1322' }}
+              valueStyle={{ color: palette.error }}
             />
           </Card>
         </Col>

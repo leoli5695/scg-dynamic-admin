@@ -170,7 +170,7 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
                     marginBottom: '6px',
                     background: '#1a2338',
                     borderRadius: '6px',
-                    border: '1px solid rgba(148, 163, 184, 0.15)',
+                    border: `1px solid rgba(145, 169, 222, 0.15)`,
                   }}
                   >
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }}>

@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../../hooks/useRequest';
 import { getInstanceResourceMetrics } from '../../../api/instances';
 import { useInstanceDetail } from '../InstanceDetailContext';
+import { palette } from '../../../styles/palette';
 
 const { Title, Text } = Typography;
 
@@ -60,7 +61,7 @@ const ResourcesTab: React.FC = () => {
             <Row gutter={[16, 16]}>
               {metrics.nodes?.list?.map((node, idx) => (
                 <Col key={idx} xs={24} sm={12} md={8} lg={6}>
-                  <Card size="small" bordered={false} style={{ background: '#fafafa' }}>
+                  <Card size="small" bordered={false} style={{ background: palette.bgElevated }}>
                     <Space direction="vertical" size="small">
                       <Text strong>{node.name}</Text>
                       <Badge status={node.ready ? 'success' : 'error'} text={node.ready ? 'Ready' : 'Not Ready'} />
@@ -98,7 +99,7 @@ const ResourcesTab: React.FC = () => {
             <Row gutter={[16, 16]}>
               {metrics.pods?.list?.map((pod, idx) => (
                 <Col key={idx} xs={24} sm={12} md={8} lg={6}>
-                  <Card size="small" bordered={false} style={{ background: pod.phase === 'Running' ? '#f6ffed' : '#fff7e6' }}>
+                  <Card size="small" bordered={false} style={{ background: pod.phase === 'Running' ? palette.successSoft : palette.warningSoft }}>
                     <Space direction="vertical" size="small">
                       <Text strong style={{ fontSize: 12 }}>{pod.name}</Text>
                       <Tag color={pod.phase === 'Running' ? 'success' : 'warning'}>{pod.phase}</Tag>

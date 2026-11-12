@@ -19,7 +19,7 @@
 
 .access-log-config-page .header-icon {
   font-size: 24px;
-  color: #165dff;
+  color: var(--primary-color);
 }
 
 .access-log-config-page .config-card {
@@ -27,7 +27,7 @@
 }
 
 .access-log-config-page .config-card .ant-card-head-title {
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .access-log-config-page .ant-tabs-tab {

@@ -1,9 +1,9 @@
 .trace-row-error {
-  background-color: rgba(255, 77, 79, 0.1) !important;
+  background-color: rgba(242, 113, 127, 0.1) !important;
 }
 
 .trace-row-error:hover {
-  background-color: rgba(255, 77, 79, 0.15) !important;
+  background-color: rgba(242, 113, 127, 0.15) !important;
 }
 
 /* Compact cells for the dense trace tables (overrides App.premium.css padding). */

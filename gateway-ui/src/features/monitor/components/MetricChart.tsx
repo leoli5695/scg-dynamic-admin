@@ -2,18 +2,20 @@ import React from 'react';
 import { Card, Typography } from 'antd';
 import { ResponsiveLine } from '@nivo/line';
 import type { HistoryPoint } from '../../../types/monitor';
+import { chartColors as seriesColors, palette, withAlpha } from '../../../styles/palette';
+import { nivoTheme } from '../../../styles/chartTheme';
 
 const { Text } = Typography;
 
 /** Palette keyed by color name; falls back to blue for unknown keys. */
 const chartColors: Record<string, { main: string; gradient: string[] }> = {
-  blue: { main: '#1890ff', gradient: ['#1890ff', '#69c0ff', '#e6f7ff'] },
-  green: { main: '#52c41a', gradient: ['#52c41a', '#95de64', '#f6ffed'] },
-  purple: { main: '#722ed1', gradient: ['#722ed1', '#b37feb', '#f9f0ff'] },
-  orange: { main: '#fa8c16', gradient: ['#fa8c16', '#ffc069', '#fff7e6'] },
-  magenta: { main: '#eb2f96', gradient: ['#eb2f96', '#ff85c0', '#fff0f6'] },
-  cyan: { main: '#13c2c2', gradient: ['#13c2c2', '#5cdbd3', '#e6fffb'] },
-  red: { main: '#ff4d4f', gradient: ['#ff4d4f', '#ff7875', '#fff1f0'] },
+  blue: { main: palette.primary, gradient: [palette.primary, palette.primaryLight, withAlpha(palette.primary, 0.04)] },
+  green: { main: palette.success, gradient: [palette.success, palette.success, withAlpha(palette.success, 0.04)] },
+  purple: { main: palette.accent, gradient: [palette.accent, palette.accentLight, withAlpha(palette.accent, 0.04)] },
+  orange: { main: palette.warning, gradient: [palette.warning, palette.warningTint, withAlpha(palette.warning, 0.04)] },
+  magenta: { main: seriesColors[7], gradient: [seriesColors[7], palette.accentLight, withAlpha(seriesColors[7], 0.04)] },
+  cyan: { main: palette.info, gradient: [palette.info, seriesColors[1], withAlpha(palette.info, 0.04)] },
+  red: { main: palette.error, gradient: [palette.error, palette.errorTint, withAlpha(palette.error, 0.04)] },
 };
 
 interface MetricChartProps {
@@ -53,6 +55,7 @@ const MetricChart: React.FC<MetricChartProps> = ({
     <Card styles={{ body: { padding: '16px' } }} title={<Text strong style={{ fontSize: 13 }}>{title}</Text>}>
       <div style={{ height: 180 }}>
         <ResponsiveLine
+          theme={nivoTheme}
           data={chartData}
           margin={{ top: 10, right: 20, bottom: 40, left: 60 }}
           xScale={{ type: 'time', format: 'native' }}
@@ -122,11 +125,11 @@ const MetricChart: React.FC<MetricChartProps> = ({
             else yStr = `${yVal.toFixed(4)}${suffix}`;
             return (
               <div style={{
-                background: '#1e293b', padding: '8px 12px', border: '1px solid rgba(148, 163, 184, 0.3)',
-                borderRadius: 4, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)', whiteSpace: 'nowrap',
+                background: palette.bgElevated, padding: '8px 12px', border: `1px solid ${palette.borderStrong}`,
+                borderRadius: 10, boxShadow: '0 12px 28px rgba(4, 7, 15, 0.46)', whiteSpace: 'nowrap',
               }}
               >
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, color: '#f1f5f9' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, color: palette.textPrimary }}>
                   {(point.data.x as Date).toLocaleTimeString()}
                 </div>
                 <div style={{ fontSize: 13, color: color.main }}>{yStr}</div>

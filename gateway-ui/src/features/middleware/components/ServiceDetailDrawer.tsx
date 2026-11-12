@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import type { ServiceMiddlewareView } from '../../../types/middleware';
 import { getMiddlewareTypeInfo, getServiceHealth, getStatusColor } from '../utils';
 import { parseServerTime } from '../../../utils/serverTime';
+import { palette } from '../../../styles/palette';
 
 const { Text, Title } = Typography;
 
@@ -34,8 +35,8 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({ service, onCl
     const s = m.status?.toLowerCase();
     return s === 'healthy' || s === 'up';
   }).length ?? 0;
-  const healthColor = health.status === 'healthy' ? '#52c41a'
-    : health.status === 'warning' ? '#faad14' : '#ff4d4f';
+  const healthColor = health.status === 'healthy' ? palette.success
+    : health.status === 'warning' ? palette.warning : palette.error;
 
   return (
     <Drawer rootClassName="console-drawer"
@@ -70,7 +71,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({ service, onCl
 
         {/* Health Overview */}
         <div className="drawer-health-section">
-          <Card size="small" styles={{ body: { background: '#fafafa' } }}>
+          <Card size="small" styles={{ body: { background: palette.bgElevated } }}>
             <Row gutter={16}>
               <Col span={8}>
                 <Statistic

@@ -37,7 +37,7 @@ const AiUpstreamsForm: React.FC<AiUpstreamsFormProps> = ({ aiServices }) => {
             {fields.map(({ key, name, ...restField }) => (
               <div key={key} style={{
                 padding: '10px 12px', marginBottom: 8, borderRadius: 6,
-                border: '1px solid rgba(148, 163, 184, 0.2)',
+                border: `1px solid rgba(145, 169, 222, 0.2)`,
               }}
               >
                 <div className="editor-rule-fields"

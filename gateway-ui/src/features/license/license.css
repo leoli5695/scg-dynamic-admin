@@ -171,7 +171,7 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
-  background: rgba(59, 130, 246, 0.15);
+  background: rgba(76, 128, 236, 0.15);
   color: var(--primary-color);
   margin-right: var(--space-4);
 }
@@ -203,62 +203,62 @@
 
 /* Feature BASIC State - Green background for free features */
 .feature-item.basic {
-  background: rgba(34, 197, 94, 0.12);
-  border-color: rgba(34, 197, 94, 0.25);
+  background: rgba(61, 220, 151, 0.12);
+  border-color: rgba(61, 220, 151, 0.25);
 }
 
 .feature-item.basic:hover {
-  background: rgba(34, 197, 94, 0.18);
-  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(61, 220, 151, 0.18);
+  border-color: rgba(61, 220, 151, 0.4);
 }
 
 .feature-item.basic .feature-icon {
-  background: rgba(34, 197, 94, 0.2);
+  background: rgba(61, 220, 151, 0.2);
   color: var(--success-color);
 }
 
 /* Feature Enabled State */
 .feature-item.enabled .feature-icon {
-  background: rgba(34, 197, 94, 0.15);
+  background: rgba(61, 220, 151, 0.15);
   color: var(--success-color);
 }
 
 .feature-item.enabled:not(.basic) {
-  background: rgba(34, 197, 94, 0.08);
+  background: rgba(61, 220, 151, 0.08);
 }
 
 /* Feature Disabled State */
 .feature-item.disabled .feature-icon {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(242, 113, 127, 0.15);
   color: var(--error-color);
 }
 
 /* Feature ADVANCED State - Blue theme */
 .feature-item.advanced {
-  border-color: rgba(59, 130, 246, 0.2);
+  border-color: rgba(76, 128, 236, 0.2);
 }
 
 .feature-item.advanced:hover {
-  border-color: rgba(59, 130, 246, 0.4);
+  border-color: rgba(76, 128, 236, 0.4);
 }
 
 .feature-item.advanced .feature-icon {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgba(76, 128, 236, 0.15);
   color: var(--primary-color);
 }
 
 /* Feature ENTERPRISE State - Purple theme */
 .feature-item.enterprise {
-  border-color: rgba(124, 58, 237, 0.2);
+  border-color: rgba(155, 140, 245, 0.2);
 }
 
 .feature-item.enterprise:hover {
-  border-color: rgba(124, 58, 237, 0.4);
+  border-color: rgba(155, 140, 245, 0.4);
 }
 
 .feature-item.enterprise .feature-icon {
-  background: rgba(124, 58, 237, 0.15);
-  color: #7c3aed;
+  background: rgba(155, 140, 245, 0.15);
+  color: var(--accent-color);
 }
 
 /* ==================== Feature Matrix Tabs ==================== */
@@ -328,11 +328,11 @@
 }
 
 .license-page .ant-table-cell .ant-btn-text:hover {
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(76, 128, 236, 0.1);
 }
 
 .license-page .ant-table-cell .ant-btn-text.ant-btn-dangerous:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(242, 113, 127, 0.1);
 }
 
 /* ==================== Empty State ==================== */
@@ -461,7 +461,7 @@
 .license-page .ant-select-focused .ant-select-selector,
 .license-page .ant-picker-focused {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 2px rgba(76, 128, 236, 0.1);
 }
 
 .license-page .ant-input::placeholder {
@@ -482,7 +482,7 @@
 }
 
 .license-page .ant-select-item-option-selected {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgba(76, 128, 236, 0.15);
   color: var(--primary-color);
 }
 
@@ -521,38 +521,38 @@
 }
 
 .license-page .ant-tag-success {
-  background: rgba(34, 197, 94, 0.15);
-  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(61, 220, 151, 0.15);
+  border-color: rgba(61, 220, 151, 0.3);
   color: var(--success-color);
 }
 
 .license-page .ant-tag-error {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(242, 113, 127, 0.15);
+  border-color: rgba(242, 113, 127, 0.3);
   color: var(--error-color);
 }
 
 .license-page .ant-tag-warning {
-  background: rgba(234, 179, 8, 0.15);
-  border-color: rgba(234, 179, 8, 0.3);
+  background: rgba(232, 180, 100, 0.15);
+  border-color: rgba(232, 180, 100, 0.3);
   color: var(--warning-color);
 }
 
 .license-page .ant-tag-blue {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(76, 128, 236, 0.15);
+  border-color: rgba(76, 128, 236, 0.3);
   color: var(--primary-color);
 }
 
 .license-page .ant-tag-cyan {
-  background: rgba(6, 182, 212, 0.15);
-  border-color: rgba(6, 182, 212, 0.3);
-  color: #06b6d4;
+  background: rgba(95, 201, 216, 0.15);
+  border-color: rgba(95, 201, 216, 0.3);
+  color: var(--info-color);
 }
 
 .license-page .ant-tag-gold {
-  background: rgba(251, 191, 36, 0.15);
-  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(232, 180, 100, 0.15);
+  border-color: rgba(232, 180, 100, 0.3);
   color: var(--accent-color);
 }
 

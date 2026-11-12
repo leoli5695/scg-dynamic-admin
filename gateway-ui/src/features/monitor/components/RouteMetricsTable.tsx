@@ -4,6 +4,7 @@ import {
 } from 'antd';
 import { useTranslation } from 'react-i18next';
 import type { MonitorRouteMetric } from '../../../types/monitor';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -60,7 +61,7 @@ const RouteMetricsTable: React.FC<RouteMetricsTableProps> = ({ data, loading }) 
         <Progress
           percent={text}
           size="small"
-          strokeColor={text > 10 ? '#ff4d4f' : text > 5 ? '#faad14' : '#52c41a'}
+          strokeColor={text > 10 ? palette.error : text > 5 ? palette.warning : palette.success}
           format={(p) => `${p?.toFixed(1)}%`}
         />
       ),
@@ -72,7 +73,7 @@ const RouteMetricsTable: React.FC<RouteMetricsTableProps> = ({ data, loading }) 
       key: 'avgResponseTimeMs',
       width: 100,
       render: (text: number) => (
-        <Text style={{ color: text > 1000 ? '#ff4d4f' : text > 500 ? '#faad14' : 'inherit' }}>
+        <Text style={{ color: text > 1000 ? palette.error : text > 500 ? palette.warning : 'inherit' }}>
           {text} ms
         </Text>
       ),

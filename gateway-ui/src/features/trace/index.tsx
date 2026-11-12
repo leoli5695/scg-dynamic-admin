@@ -36,6 +36,7 @@ import TraceDetailDrawer from './components/TraceDetailDrawer';
 import FullChainTab from './components/FullChainTab';
 import { requestJourneyUrl, routeConfigurationUrl } from '../request-journey/links';
 import './trace.css';
+import { palette } from '../../styles/palette';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -280,7 +281,7 @@ const TracePage: React.FC = () => {
       width: 55,
       sorter: (a, b) => (a.latencyMs || 0) - (b.latencyMs || 0),
       render: (ms: number) => {
-        const color = ms > 3000 ? '#cf1322' : ms > 1000 ? '#faad14' : undefined;
+        const color = ms > 3000 ? palette.error : ms > 1000 ? palette.warning : undefined;
         return <Text style={{ color, fontSize: 12 }}>{ms}ms</Text>;
       },
     },
@@ -307,7 +308,7 @@ const TracePage: React.FC = () => {
       dataIndex: 'replayCount',
       key: 'replayCount',
       width: 60,
-      render: (count: number) => <Badge count={count} showZero style={{ backgroundColor: '#1890ff' }} />,
+      render: (count: number) => <Badge count={count} showZero style={{ backgroundColor: palette.primary }} />,
     },
     {
       title: '',
@@ -367,12 +368,12 @@ const TracePage: React.FC = () => {
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card className="tracing-stat-card" size="small">
-            <Statistic title={t('trace.errors_today')} value={stats?.errorsToday || 0} valueStyle={{ color: '#cf1322' }} />
+            <Statistic title={t('trace.errors_today')} value={stats?.errorsToday || 0} valueStyle={{ color: palette.error }} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card className="tracing-stat-card" size="small">
-            <Statistic title={t('trace.errors_last_hour')} value={stats?.errorsLastHour || 0} valueStyle={{ color: '#faad14' }} />
+            <Statistic title={t('trace.errors_last_hour')} value={stats?.errorsLastHour || 0} valueStyle={{ color: palette.warning }} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>

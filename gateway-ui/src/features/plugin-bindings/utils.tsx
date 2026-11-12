@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons';
 import { BUILTIN_JAR_PATH } from '../../types/plugin';
 import type { Plugin } from '../../types/plugin';
+import { chartColors, palette, withAlpha } from '../../styles/palette';
 
 export interface CategoryDesign {
   gradient: string;
@@ -51,152 +52,53 @@ export const CATEGORY_LABELS: Record<string, string> = {
 
 /**
  * Gradient / glow styling per category. Supports both Chinese labels and the
- * English category keys stored by the backend.
+ * English category keys stored by the backend. Every hue comes from the shared
+ * palette, so a category chip here matches the same category elsewhere.
  */
+const design = (from: string, to: string, accent: string, icon: React.ReactNode): CategoryDesign => ({
+  gradient: `linear-gradient(135deg, ${from} 0%, ${to} 100%)`,
+  glowColor: withAlpha(accent, 0.4),
+  primaryIcon: icon,
+  accentColor: accent,
+});
+
+const TRAFFIC = design(palette.brandFrom, palette.brandTo, palette.primaryLight, <ThunderboltOutlined />);
+const SECURITY = design(palette.error, palette.errorSolid, palette.error, <SafetyCertificateOutlined />);
+const RESILIENCE = design(palette.warning, palette.warningSolid, palette.warning, <CheckCircleOutlined />);
+const TRANSFORM = design(palette.accent, palette.accentSolid, palette.accentLight, <SyncOutlined />);
+const OBSERVABILITY = design(palette.success, palette.successSolid, palette.success, <FileTextOutlined />);
+const CUSTOM = design(chartColors[2], palette.accentSolid, chartColors[2], <AppstoreAddOutlined />);
+const NEUTRAL = design(palette.textMuted, palette.textDisabled, palette.textTertiary, <ThunderboltOutlined />);
+
 const CATEGORY_DESIGN: Record<string, CategoryDesign> = {
   // 中文分类名
-  '流量控制': {
-    gradient: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-    glowColor: 'rgba(59, 130, 246, 0.4)',
-    primaryIcon: <ThunderboltOutlined />,
-    accentColor: '#60a5fa',
-  },
-  '安全防护': {
-    gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-    glowColor: 'rgba(239, 68, 68, 0.4)',
-    primaryIcon: <SafetyCertificateOutlined />,
-    accentColor: '#f87171',
-  },
-  '弹性容错': {
-    gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    glowColor: 'rgba(245, 158, 11, 0.4)',
-    primaryIcon: <CheckCircleOutlined />,
-    accentColor: '#fbbf24',
-  },
-  '数据转换': {
-    gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-    glowColor: 'rgba(139, 92, 246, 0.4)',
-    primaryIcon: <SyncOutlined />,
-    accentColor: '#a78bfa',
-  },
-  '可观测性': {
-    gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-    glowColor: 'rgba(16, 185, 129, 0.4)',
-    primaryIcon: <FileTextOutlined />,
-    accentColor: '#34d399',
-  },
+  '流量控制': TRAFFIC,
+  '安全防护': SECURITY,
+  '弹性容错': RESILIENCE,
+  '数据转换': TRANSFORM,
+  '可观测性': OBSERVABILITY,
+  '其他': NEUTRAL,
   // 英文分类名 (来自后端数据库)
-  traffic: {
-    gradient: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-    glowColor: 'rgba(59, 130, 246, 0.4)',
-    primaryIcon: <ThunderboltOutlined />,
-    accentColor: '#60a5fa',
-  },
-  security: {
-    gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-    glowColor: 'rgba(239, 68, 68, 0.4)',
-    primaryIcon: <SafetyCertificateOutlined />,
-    accentColor: '#f87171',
-  },
-  resilience: {
-    gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    glowColor: 'rgba(245, 158, 11, 0.4)',
-    primaryIcon: <CheckCircleOutlined />,
-    accentColor: '#fbbf24',
-  },
-  transform: {
-    gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-    glowColor: 'rgba(139, 92, 246, 0.4)',
-    primaryIcon: <SyncOutlined />,
-    accentColor: '#a78bfa',
-  },
-  observability: {
-    gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-    glowColor: 'rgba(16, 185, 129, 0.4)',
-    primaryIcon: <FileTextOutlined />,
-    accentColor: '#34d399',
-  },
-  custom: {
-    gradient: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
-    glowColor: 'rgba(168, 85, 247, 0.4)',
-    primaryIcon: <AppstoreAddOutlined />,
-    accentColor: '#c084fc',
-  },
-  // 其他英文分类
-  'Request Headers': {
-    gradient: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-    glowColor: 'rgba(99, 102, 241, 0.4)',
-    primaryIcon: <EditOutlined />,
-    accentColor: '#818cf8',
-  },
-  'Request Parameters': {
-    gradient: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
-    glowColor: 'rgba(20, 184, 166, 0.4)',
-    primaryIcon: <SettingOutlined />,
-    accentColor: '#2dd4bf',
-  },
-  'Response Headers': {
-    gradient: 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)',
-    glowColor: 'rgba(244, 114, 182, 0.4)',
-    primaryIcon: <LogoutOutlined />,
-    accentColor: '#f9a8d4',
-  },
-  Path: {
-    gradient: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)',
-    glowColor: 'rgba(14, 165, 233, 0.4)',
-    primaryIcon: <FolderAddOutlined />,
-    accentColor: '#38bdf8',
-  },
-  'Path Modification': {
-    gradient: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
-    glowColor: 'rgba(168, 85, 247, 0.4)',
-    primaryIcon: <ScissorOutlined />,
-    accentColor: '#c084fc',
-  },
-  'Status Code': {
-    gradient: 'linear-gradient(135deg, #fb923c 0%, #f97316 100%)',
-    glowColor: 'rgba(251, 146, 60, 0.4)',
-    primaryIcon: <FileExclamationOutlined />,
-    accentColor: '#fdba74',
-  },
-  Security: {
-    gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-    glowColor: 'rgba(239, 68, 68, 0.4)',
-    primaryIcon: <SafetyCertificateOutlined />,
-    accentColor: '#f87171',
-  },
-  'Request Size': {
-    gradient: 'linear-gradient(135deg, #84cc16 0%, #65a30d 100%)',
-    glowColor: 'rgba(132, 204, 22, 0.4)',
-    primaryIcon: <MinusOutlined />,
-    accentColor: '#a3e635',
-  },
-  '其他': {
-    gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
-    glowColor: 'rgba(100, 116, 139, 0.4)',
-    primaryIcon: <ThunderboltOutlined />,
-    accentColor: '#94a3b8',
-  },
-  Other: {
-    gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
-    glowColor: 'rgba(100, 116, 139, 0.4)',
-    primaryIcon: <ThunderboltOutlined />,
-    accentColor: '#94a3b8',
-  },
+  traffic: TRAFFIC,
+  security: SECURITY,
+  resilience: RESILIENCE,
+  transform: TRANSFORM,
+  observability: OBSERVABILITY,
+  Other: NEUTRAL,
+  custom: CUSTOM,
+  'Request Headers': design(palette.accent, chartColors[7], chartColors[2], <EditOutlined />),
+  'Request Parameters': design(palette.info, palette.infoSolid, chartColors[1], <SettingOutlined />),
+  'Response Headers': design(chartColors[7], palette.accentSolid, chartColors[7], <LogoutOutlined />),
+  Path: design(chartColors[6], palette.brandFrom, chartColors[6], <FolderAddOutlined />),
+  'Path Modification': design(chartColors[2], palette.accentSolid, chartColors[2], <ScissorOutlined />),
+  'Status Code': RESILIENCE,
+  Security: SECURITY,
+  'Request Size': design(palette.success, palette.successSolid, palette.success, <MinusOutlined />),
 };
 
-/** Resolve category styling with lowercase + purple fallbacks. */
-export const getCategoryDesign = (category: string): CategoryDesign => {
-  const normalized = category?.toLowerCase() || 'custom';
-  const design = CATEGORY_DESIGN[category] || CATEGORY_DESIGN[normalized];
-  if (design) return design;
-  return {
-    gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-    glowColor: 'rgba(139, 92, 246, 0.4)',
-    primaryIcon: <ThunderboltOutlined />,
-    accentColor: '#a78bfa',
-  };
-};
+/** Resolve category styling, falling back to the custom-plugin violet. */
+export const getCategoryDesign = (category: string): CategoryDesign =>
+  CATEGORY_DESIGN[category] || CATEGORY_DESIGN[category?.toLowerCase()] || CUSTOM;
 
 const PLUGIN_ICON_MAP: Record<string, React.ReactNode> = {
   PlusOutlined: <PlusOutlined />,

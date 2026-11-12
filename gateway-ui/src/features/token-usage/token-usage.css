@@ -3,7 +3,7 @@
 }
 .token-usage-page .metric-unit {
   margin-left: 5px;
-  color: #8498b8;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 400;
 }
@@ -19,7 +19,7 @@
   min-width: 0;
 }
 .token-filter-field > span {
-  color: #9eafc9;
+  color: var(--text-tertiary);
   font-size: 11px;
 }
 .token-filter-wide {
@@ -44,7 +44,7 @@
 }
 .token-usage-page .token-filter-card .ant-btn-link {
   font-size: 11px;
-  color: #9bbcf5;
+  color: var(--primary-light);
 }
 .token-usage-page .ant-table {
   font-variant-numeric: tabular-nums;

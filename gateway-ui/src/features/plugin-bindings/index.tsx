@@ -58,6 +58,7 @@ import type {
 } from '../../types/plugin';
 import PluginSelectModal from './components/PluginSelectModal';
 import BindingFormModal, { BindingFormPayload } from './components/BindingFormModal';
+import { palette } from '../../styles/palette';
 
 const { Text, Title } = Typography;
 
@@ -400,7 +401,7 @@ const RoutePluginBindingsPage: React.FC = () => {
       >
         <div>
           <Title level={3} style={{ margin: 0, color: 'var(--text-primary)' }}>
-            <ThunderboltOutlined style={{ marginRight: 8, color: '#8b5cf6' }} />
+            <ThunderboltOutlined style={{ marginRight: 8, color: palette.accent }} />
             {t('plugin_bindings.plugins_title')}
           </Title>
           <Text type="secondary" style={{ color: 'var(--text-muted)' }}>
@@ -436,7 +437,7 @@ const RoutePluginBindingsPage: React.FC = () => {
             icon={<PlusOutlined />}
             onClick={() => setSelectOpen(true)}
             style={{
-              background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              background: `linear-gradient(135deg, ${palette.accentSolid} 0%, ${palette.accentSolid} 100%)`,
               border: 'none',
               borderRadius: 8,
             }}

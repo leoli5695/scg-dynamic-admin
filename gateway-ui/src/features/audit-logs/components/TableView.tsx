@@ -28,6 +28,7 @@ import type { AuditLog } from '../../../types/auditLog';
 import {
   formatIpAddress, getOperationTag, getRowStyle, getTargetName, getTargetTypeTag,
 } from '../utils';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -283,12 +284,12 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
         </Col>
         <Col span={4}>
           <Card size="small">
-            <Statistic title={t('audit.today_ops')} value={stats?.today ?? 0} prefix={<ClockCircleOutlined />} valueStyle={{ color: '#1890ff' }} />
+            <Statistic title={t('audit.today_ops')} value={stats?.today ?? 0} prefix={<ClockCircleOutlined />} valueStyle={{ color: palette.primary }} />
           </Card>
         </Col>
         <Col span={4}>
           <Card size="small">
-            <Statistic title={t('audit.create_ops')} value={stats?.creates ?? 0} prefix={<PlusOutlined />} valueStyle={{ color: '#52c41a' }} />
+            <Statistic title={t('audit.create_ops')} value={stats?.creates ?? 0} prefix={<PlusOutlined />} valueStyle={{ color: palette.success }} />
           </Card>
         </Col>
         <Col span={12}>

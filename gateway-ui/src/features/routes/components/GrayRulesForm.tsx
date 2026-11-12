@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import type { RouteServiceBinding } from '../../../types/route';
 import type { ServiceDefinition } from '../../../types/service';
 import { resolveServiceDisplayName, splitServiceUri } from '../utils';
+import { palette } from '../../../styles/palette';
 
 interface GrayRulesFormProps {
   form: FormInstance;
@@ -65,7 +66,7 @@ const GrayRulesForm: React.FC<GrayRulesFormProps> = ({
                           style={{ width: 85, flexShrink: 0 }}
                           placeholder={t('routes.rule_type')}
                           size="small"
-                          suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+                          suffixIcon={<span style={{ color: palette.textTertiary, fontSize: '12px' }}>▼</span>}
                         >
                           <Select.Option value="HEADER">Header</Select.Option>
                           <Select.Option value="COOKIE">Cookie</Select.Option>
@@ -108,7 +109,7 @@ const GrayRulesForm: React.FC<GrayRulesFormProps> = ({
                             allowClear
                             showSearch
                             size="small"
-                            suffixIcon={<span style={{ color: '#94a3b8', fontSize: '12px' }}>▼</span>}
+                            suffixIcon={<span style={{ color: palette.textTertiary, fontSize: '12px' }}>▼</span>}
                             popupClassName="gray-rule-select-dropdown"
                             labelRender={(option: DefaultOptionType) => {
                               const value = option?.value;

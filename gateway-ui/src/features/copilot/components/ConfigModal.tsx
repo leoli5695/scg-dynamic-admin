@@ -5,6 +5,7 @@ import { Button, Card, Divider, Form, Input, Modal, Select, Space, Tabs, Tag } f
 import { CheckCircleOutlined, SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { AiProvider } from '../../../types/copilot';
+import { palette } from '../../../styles/palette';
 
 interface ConfigModalProps {
   open: boolean;
@@ -68,13 +69,13 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
       size="small"
       style={{
         marginBottom: 8,
-        borderColor: selectedProvider === p.provider ? '#1890ff' : undefined,
+        borderColor: selectedProvider === p.provider ? palette.primary : undefined,
       }}
       onClick={() => onProviderChange(p.provider)}
     >
       <Space>
         <Tag color={p.isValid ? 'success' : 'default'}>{p.providerName}</Tag>
-        {p.isValid && <CheckCircleOutlined style={{ color: '#52c41a' }} />}
+        {p.isValid && <CheckCircleOutlined style={{ color: palette.success }} />}
       </Space>
     </Card>
   );
@@ -157,7 +158,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                         autoComplete="new-password"
                         suffix={
                           validated ? (
-                            <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                            <CheckCircleOutlined style={{ color: palette.success }} />
                           ) : (
                             <Button
                               type="link"

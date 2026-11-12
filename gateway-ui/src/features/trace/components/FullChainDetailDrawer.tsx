@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import FullChainWaterfallChart from './FullChainWaterfallChart';
 import type { FullChainDetail } from '../../../types/trace';
 import { formatJson } from '../utils';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -40,7 +41,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
   const { t } = useTranslation();
 
   const preStyle: React.CSSProperties = {
-    background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 11,
+    background: palette.bgElevated, padding: 8, borderRadius: 4, fontSize: 11,
     maxHeight: 150, overflow: 'auto', margin: '4px 0 0',
   };
 
@@ -107,7 +108,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
               size="small"
               title={(
                 <Space>
-                  <ApiOutlined style={{ color: '#1890ff' }} />
+                  <ApiOutlined style={{ color: palette.primary }} />
                   <Text strong>{t('trace.gateway_node')}</Text>
                   <Tag color={chain.gateway.statusCode >= 400 ? 'error' : 'success'}>
                     {chain.gateway.statusCode}
@@ -128,7 +129,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                 </Descriptions.Item>
                 <Descriptions.Item label={t('trace.gateway_overhead')}>
                   {chain.durationBreakdown ? (
-                    <Text style={{ color: (chain.durationBreakdown.gatewayOverheadMs ?? 0) > 200 ? '#cf1322' : undefined }}>
+                    <Text style={{ color: (chain.durationBreakdown.gatewayOverheadMs ?? 0) > 200 ? palette.error : undefined }}>
                       {chain.durationBreakdown.gatewayOverheadMs == null ? t('trace.unknown') : chain.durationBreakdown.gatewayOverheadMs + 'ms'}
                     </Text>
                   ) : (
@@ -222,7 +223,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
           {/* Arrow */}
           {chain.hasGatewayTrace && chain.hasServiceTrace && (
             <div style={{ textAlign: 'center', margin: '8px 0' }}>
-              <DownOutlined style={{ fontSize: 20, color: '#1890ff' }} />
+              <DownOutlined style={{ fontSize: 20, color: palette.primary }} />
             </div>
           )}
 
@@ -233,7 +234,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
               size="small"
               title={(
                 <Space>
-                  <CloudServerOutlined style={{ color: '#52c41a' }} />
+                  <CloudServerOutlined style={{ color: palette.success }} />
                   <Text strong>{service.serviceName}</Text>
                   <Tag color={service.success ? 'success' : 'error'}>
                     {service.statusCode || (service.success ? 'OK' : 'ERROR')}

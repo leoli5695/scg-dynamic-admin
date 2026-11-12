@@ -9,6 +9,7 @@ import {
 
 const { Text } = Typography;
 import { useTranslation } from 'react-i18next';
+import { palette } from '../../../styles/palette';
 
 // Span 类型枚举 (对应后端 SpanType.java)
 type SpanType = 'SERVICE' | 'REDIS' | 'DB' | 'MQ' | 'HTTP' | 'INTERNAL' | 'FILTER';
@@ -94,14 +95,14 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
   // 获取 SpanType 对应的颜色
   const getSpanTypeColor = (spanType?: SpanType): string => {
     switch (spanType) {
-      case 'FILTER': return '#1890ff';  // 蓝色 - Gateway Filter
-      case 'SERVICE': return '#52c41a'; // 绿色 - 服务层
-      case 'REDIS': return '#faad14';   // 橙色 - Redis 操作
-      case 'DB': return '#722ed1';      // 紫色 - 数据库操作
-      case 'MQ': return '#13c2c2';      // 青色 - 消息队列
+      case 'FILTER': return palette.primary;  // 蓝色 - Gateway Filter
+      case 'SERVICE': return palette.success; // 绿色 - 服务层
+      case 'REDIS': return palette.warning;   // 橙色 - Redis 操作
+      case 'DB': return palette.accent;      // 紫色 - 数据库操作
+      case 'MQ': return palette.info;      // 青色 - 消息队列
       case 'HTTP': return '#eb2f96';    // 粉色 - HTTP 调用
-      case 'INTERNAL': return '#8c8c8c';// 灰色 - 内部操作
-      default: return '#52c41a';        // 默认绿色
+      case 'INTERNAL': return palette.textMuted;// 灰色 - 内部操作
+      default: return palette.success;        // 默认绿色
     }
   };
 
@@ -164,7 +165,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
   // 如果没有数据，显示空状态
   if (!filterExecutions.length && !serviceSpans.length) {
     return (
-      <div style={{ textAlign: 'center', padding: 24, color: '#999' }}>
+      <div style={{ textAlign: 'center', padding: 24, color: palette.textMuted }}>
         <BranchesOutlined style={{ fontSize: 24, marginBottom: 8 }} />
         <Text type="secondary">{t('trace.no_spans')}</Text>
       </div>
@@ -180,8 +181,8 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
       ? Math.max((span.durationMs / timeRange) * 100, 1)
       : 1;
 
-    const barColor = !span.success ? '#ff4d4f' :
-      span.durationMs > slowThreshold ? '#faad14' :
+    const barColor = !span.success ? palette.error :
+      span.durationMs > slowThreshold ? palette.warning :
       getSpanTypeColor(span.spanType);
 
     const depth = span.depth || 0;
@@ -200,7 +201,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
           marginBottom: 3,
           display: 'flex',
           alignItems: 'center',
-          backgroundColor: !span.success ? 'rgba(255, 77, 79, 0.08)' : 'transparent',
+          backgroundColor: !span.success ? 'rgba(242, 113, 127, 0.08)' : 'transparent',
           padding: '2px 0',
           borderRadius: 2,
           cursor: onSpanClick ? 'pointer' : 'default',
@@ -232,9 +233,9 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
           flex: 1,
           position: 'relative',
           height: 20,
-          background: '#fafafa',
+          background: palette.bgElevated,
           borderRadius: 2,
-          border: '1px solid #f0f0f0',
+          border: `1px solid ${palette.bgElevated}`,
           marginRight: 60
         }}>
           <Tooltip title={
@@ -273,12 +274,12 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
         <div style={{ width: 60, textAlign: 'center' }}>
           {span.success ? (
             span.durationMs > slowThreshold ? (
-              <WarningOutlined style={{ color: '#faad14', fontSize: 12 }} />
+              <WarningOutlined style={{ color: palette.warning, fontSize: 12 }} />
             ) : (
-              <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />
+              <CheckCircleOutlined style={{ color: palette.success, fontSize: 12 }} />
             )
           ) : (
-            <WarningOutlined style={{ color: '#ff4d4f', fontSize: 12 }} />
+            <WarningOutlined style={{ color: palette.error, fontSize: 12 }} />
           )}
         </div>
       </div>
@@ -301,9 +302,9 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
     const healthStatus: 'normal' | 'warning' | 'error' = !exec.success ? 'error' :
       exec.selfTimeMs > slowThreshold ? 'warning' : 'normal';
 
-    const barColor = healthStatus === 'error' ? '#ff4d4f' :
-      healthStatus === 'warning' ? '#faad14' : '#1890ff';
-    const downstreamColor = '#52c41a'; // 下游时间用绿色表示服务处理
+    const barColor = healthStatus === 'error' ? palette.error :
+      healthStatus === 'warning' ? palette.warning : palette.primary;
+    const downstreamColor = palette.success; // 下游时间用绿色表示服务处理
 
     return (
       <div
@@ -312,7 +313,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
           marginBottom: 4,
           display: 'flex',
           alignItems: 'center',
-          backgroundColor: healthStatus === 'error' ? 'rgba(255, 77, 79, 0.08)' : 'transparent',
+          backgroundColor: healthStatus === 'error' ? 'rgba(242, 113, 127, 0.08)' : 'transparent',
           padding: '4px 0',
           borderRadius: 4,
           cursor: onSpanClick ? 'pointer' : 'default'
@@ -321,7 +322,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
       >
         {/* Filter 名称和顺序 */}
         <div style={{ width: 180, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Badge count={exec.order} style={{ backgroundColor: '#1890ff', fontSize: 10 }} />
+          <Badge count={exec.order} style={{ backgroundColor: palette.primary, fontSize: 10 }} />
           <Tooltip title={exec.filterName}>
             <Tag
               color={healthStatus === 'error' ? 'error' : healthStatus === 'warning' ? 'warning' : 'blue'}
@@ -338,9 +339,9 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
           flex: 1,
           position: 'relative',
           height: 24,
-          background: '#fafafa',
+          background: palette.bgElevated,
           borderRadius: 2,
-          border: '1px solid #f0f0f0',
+          border: `1px solid ${palette.bgElevated}`,
           marginRight: 60
         }}>
           <Tooltip title={
@@ -405,12 +406,12 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
         <div style={{ width: 60, textAlign: 'center' }}>
           {exec.success ? (
             healthStatus === 'warning' ? (
-              <WarningOutlined style={{ color: '#faad14' }} />
+              <WarningOutlined style={{ color: palette.warning }} />
             ) : (
-              <CheckCircleOutlined style={{ color: '#52c41a' }} />
+              <CheckCircleOutlined style={{ color: palette.success }} />
             )
           ) : (
-            <WarningOutlined style={{ color: '#ff4d4f' }} />
+            <WarningOutlined style={{ color: palette.error }} />
           )}
         </div>
       </div>
@@ -422,36 +423,36 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
       {/* 图例 */}
       <div style={{ marginBottom: 12, display: 'flex', gap: 12, fontSize: 11, alignItems: 'center', flexWrap: 'wrap' }}>
         <span>
-          <span style={{ display: 'inline-block', width: 10, height: 10, background: '#1890ff', marginRight: 4, borderRadius: 2 }}></span>
+          <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.primary, marginRight: 4, borderRadius: 2 }}></span>
           <FilterOutlined style={{ fontSize: 10, marginRight: 2 }} />
           Filter
         </span>
         <span>
-          <span style={{ display: 'inline-block', width: 10, height: 10, background: '#52c41a', marginRight: 4, borderRadius: 2 }}></span>
+          <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.successSolid, marginRight: 4, borderRadius: 2 }}></span>
           <CloudServerOutlined style={{ fontSize: 10, marginRight: 2 }} />
           Service
         </span>
         <span>
-          <span style={{ display: 'inline-block', width: 10, height: 10, background: '#faad14', marginRight: 4, borderRadius: 2 }}></span>
+          <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.warningSolid, marginRight: 4, borderRadius: 2 }}></span>
           <ThunderboltOutlined style={{ fontSize: 10, marginRight: 2 }} />
           Redis
         </span>
         <span>
-          <span style={{ display: 'inline-block', width: 10, height: 10, background: '#722ed1', marginRight: 4, borderRadius: 2 }}></span>
+          <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.accentSolid, marginRight: 4, borderRadius: 2 }}></span>
           <DatabaseOutlined style={{ fontSize: 10, marginRight: 2 }} />
           DB
         </span>
         <span>
-          <span style={{ display: 'inline-block', width: 10, height: 10, background: '#13c2c2', marginRight: 4, borderRadius: 2 }}></span>
+          <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.infoSolid, marginRight: 4, borderRadius: 2 }}></span>
           <ApiOutlined style={{ fontSize: 10, marginRight: 2 }} />
           MQ
         </span>
         <span>
-          <span style={{ display: 'inline-block', width: 10, height: 10, background: '#ff4d4f', marginRight: 4, borderRadius: 2 }}></span>
+          <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.errorSolid, marginRight: 4, borderRadius: 2 }}></span>
           Error
         </span>
         <span style={{ marginLeft: 8 }}>
-          <span style={{ display: 'inline-block', width: 10, height: 10, background: '#52c41a', marginRight: 4, borderRadius: 2, opacity: 0.5 }}></span>
+          <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.successSolid, marginRight: 4, borderRadius: 2, opacity: 0.5 }}></span>
           下游耗时
         </span>
       </div>
@@ -462,7 +463,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
         justifyContent: 'space-between',
         marginBottom: 8,
         fontSize: 11,
-        color: '#666',
+        color: palette.textMuted,
         paddingLeft: 180,
         paddingRight: 60
       }}>
@@ -481,14 +482,14 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
             alignItems: 'center',
             marginBottom: 8,
             padding: '4px 8px',
-            background: '#e6f7ff',
+            background: palette.primarySoft,
             borderRadius: 4
           }}>
-            <ApiOutlined style={{ color: '#1890ff', marginRight: 8 }} />
+            <ApiOutlined style={{ color: palette.primary, marginRight: 8 }} />
             <Text strong style={{ fontSize: 12 }}>Gateway Filters</Text>
             <Badge
               count={filterExecutions.length}
-              style={{ marginLeft: 8, backgroundColor: '#1890ff' }}
+              style={{ marginLeft: 8, backgroundColor: palette.primary }}
               showZero
             />
             {gatewayTotalDurationMs > 0 && (
@@ -509,16 +510,16 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
             alignItems: 'center',
             marginBottom: 8,
             padding: '4px 8px',
-            background: '#f6ffed',
+            background: palette.successSoft,
             borderRadius: 4
           }}>
-            <CloudServerOutlined style={{ color: '#52c41a', marginRight: 8 }} />
+            <CloudServerOutlined style={{ color: palette.success, marginRight: 8 }} />
             <Text strong style={{ fontSize: 12 }}>
               {serviceName ? `Service: ${serviceName}` : 'Service Spans'}
             </Text>
             <Badge
               count={processedSpans.length}
-              style={{ marginLeft: 8, backgroundColor: '#52c41a' }}
+              style={{ marginLeft: 8, backgroundColor: palette.successSolid }}
               showZero
             />
             {/* 层级深度提示 */}

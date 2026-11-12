@@ -26,6 +26,7 @@ import {
   formatJson, getFilterPercentageColor, getHeadersCount, getMethodColor,
   getStatusColor, isBodyLarge, parsePercentage, toFilterExecutionBars,
 } from '../utils';
+import { palette } from '../../../styles/palette';
 
 const { Title, Text, Link } = Typography;
 
@@ -99,7 +100,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
       dataIndex: 'filterOrder',
       key: 'filterOrder',
       width: 60,
-      render: (order: number) => <Badge count={order} style={{ backgroundColor: '#1890ff' }} />,
+      render: (order: number) => <Badge count={order} style={{ backgroundColor: palette.primary }} />,
     },
     {
       title: t('trace.filter_name'),
@@ -135,8 +136,8 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
       key: 'success',
       width: 80,
       render: (success: boolean) => (success
-        ? <CheckCircleOutlined style={{ color: '#52c41a' }} />
-        : <WarningOutlined style={{ color: '#faad14' }} />),
+        ? <CheckCircleOutlined style={{ color: palette.success }} />
+        : <WarningOutlined style={{ color: palette.warning }} />),
     },
     {
       title: t('trace.filter_error'),
@@ -151,7 +152,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
   const waterfallBars = toFilterExecutionBars(executions);
 
   const preStyle: React.CSSProperties = {
-    background: '#f5f5f5',
+    background: palette.bgElevated,
     padding: 8,
     borderRadius: 4,
     fontSize: 11,
@@ -294,7 +295,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
                       children: (
                         <pre style={{
                           ...preStyle,
-                          background: viewMode === 'formatted' ? '#f5f5f5' : 'transparent',
+                          background: viewMode === 'formatted' ? palette.bgElevated : 'transparent',
                           whiteSpace: viewMode === 'raw' ? 'pre-wrap' : 'pre',
                         }}
                         >
@@ -391,14 +392,14 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
                   <Statistic
                     title={t('trace.filter_success')}
                     value={selectedTrace.filterChain.successCount}
-                    valueStyle={{ color: '#52c41a' }}
+                    valueStyle={{ color: palette.success }}
                   />
                 </Col>
                 <Col span={4}>
                   <Statistic
                     title={t('trace.filter_failure')}
                     value={selectedTrace.filterChain.failureCount}
-                    valueStyle={{ color: (selectedTrace.filterChain.failureCount ?? 0) > 0 ? '#cf1322' : '#52c41a' }}
+                    valueStyle={{ color: (selectedTrace.filterChain.failureCount ?? 0) > 0 ? palette.error : palette.success }}
                   />
                 </Col>
                 <Col span={8}>

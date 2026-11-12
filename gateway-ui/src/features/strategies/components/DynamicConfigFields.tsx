@@ -9,6 +9,7 @@ import type { FormInstance } from 'antd';
 import { PlusOutlined, DeleteOutlined, SyncOutlined, PlayCircleOutlined, UserOutlined } from '@ant-design/icons';
 import type { StrategyTypeField, StrategyTypeSchema, StrategyTypeSubSchema } from '../../../types/strategy';
 import type { StrategyFormValues } from '../utils';
+import { palette } from '../../../styles/palette';
 
 /** i18next translate function subset used by schema renderers. */
 export type TFunc = (key: string, options?: Record<string, unknown>) => string;
@@ -586,7 +587,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => {
               const enabled = getFieldValue(['protocolTransform', 'enabled']);
-              if (!enabled) return <span style={{ color: '#999' }}>启用后可配置协议转换选项</span>;
+              if (!enabled) return <span style={{ color: palette.textMuted }}>启用后可配置协议转换选项</span>;
               return (
                 <Row gutter={16}>
                   {subSchemas.protocolTransform.fields
@@ -623,7 +624,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
                     key={key}
                     size="small"
                     type="inner"
-                    style={{ marginBottom: 8, background: '#fafafa' }}
+                    style={{ marginBottom: 8, background: palette.bgElevated }}
                     title={`${subSchemas.fieldMapping.ruleLabel || '映射规则'} ${name + 1}`}
                     extra={
                       <Button
@@ -676,7 +677,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
                     key={key}
                     size="small"
                     type="inner"
-                    style={{ marginBottom: 8, background: '#fafafa' }}
+                    style={{ marginBottom: 8, background: palette.bgElevated }}
                     title={`${subSchemas.dataMasking.ruleLabel || '脱敏规则'} ${name + 1}`}
                     extra={
                       <Button
@@ -761,7 +762,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => {
               const enabled = getFieldValue(['protocolTransform', 'enabled']);
-              if (!enabled) return <span style={{ color: '#999' }}>启用后可配置协议转换选项</span>;
+              if (!enabled) return <span style={{ color: palette.textMuted }}>启用后可配置协议转换选项</span>;
               return (
                 <Row gutter={16}>
                   {subSchemas.protocolTransform.fields
@@ -798,7 +799,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
                     key={key}
                     size="small"
                     type="inner"
-                    style={{ marginBottom: 8, background: '#fafafa' }}
+                    style={{ marginBottom: 8, background: palette.bgElevated }}
                     title={`${subSchemas.fieldMapping.ruleLabel || '映射规则'} ${name + 1}`}
                     extra={
                       <Button
@@ -851,7 +852,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
                     key={key}
                     size="small"
                     type="inner"
-                    style={{ marginBottom: 8, background: '#fafafa' }}
+                    style={{ marginBottom: 8, background: palette.bgElevated }}
                     title={`${subSchemas.dataMasking.ruleLabel || '脱敏规则'} ${name + 1}`}
                     extra={
                       <Button
@@ -1058,7 +1059,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                             key={key}
                             size="small"
                             type="inner"
-                            style={{ marginBottom: 8, background: '#fafafa' }}
+                            style={{ marginBottom: 8, background: palette.bgElevated }}
                             title={`${subSchemas.dynamicMock.ruleLabel || '条件规则'} ${name + 1}`}
                             extra={
                               <Button
@@ -1131,7 +1132,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                   <Form.Item noStyle shouldUpdate>
                     {({ getFieldValue }) => {
                       const enabled = getFieldValue(['delay', 'enabled']);
-                      if (!enabled) return <span style={{ color: '#999' }}>启用后可配置延迟模拟</span>;
+                      if (!enabled) return <span style={{ color: palette.textMuted }}>启用后可配置延迟模拟</span>;
                       return (
                         <Row gutter={16}>
                           {subSchemas.delay.fields
@@ -1166,7 +1167,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                   <Form.Item noStyle shouldUpdate>
                     {({ getFieldValue }) => {
                       const enabled = getFieldValue(['errorSimulation', 'enabled']);
-                      if (!enabled) return <span style={{ color: '#999' }}>启用后可配置错误模拟</span>;
+                      if (!enabled) return <span style={{ color: palette.textMuted }}>启用后可配置错误模拟</span>;
                       return (
                         <Row gutter={16}>
                           {subSchemas.errorSimulation.fields

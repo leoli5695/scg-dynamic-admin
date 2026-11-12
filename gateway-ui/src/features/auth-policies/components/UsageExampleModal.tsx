@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../../hooks/useRequest';
 import { getAuthPolicyUsageExample } from '../../../api/authPolicies';
 import type { AuthPolicyDefinition } from '../../../types/authPolicy';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -178,7 +179,7 @@ const UsageExampleModal: React.FC<UsageExampleModalProps> = ({ policy, onClose }
     <Modal
       title={
         <div className="modal-header-modern">
-          <div className="modal-icon-wrapper" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+          <div className="modal-icon-wrapper" style={{ background: `linear-gradient(135deg, ${palette.successSolid}, ${palette.successSolid})` }}>
             <QuestionCircleOutlined />
           </div>
           <div className="modal-title-text">

@@ -20,6 +20,7 @@ import type { MiddlewareInfo, ServiceMiddlewareView } from '../../types/middlewa
 import { getMiddlewareTypeInfo, getServiceHealth, getStatusIcon } from './utils';
 import ServiceDetailDrawer from './components/ServiceDetailDrawer';
 import './index.css';
+import { palette } from '../../styles/palette';
 
 const { Text, Title } = Typography;
 
@@ -67,7 +68,7 @@ const ServiceMiddlewarePage: React.FC = () => {
       width: 200,
       render: (name: string) => (
         <Space>
-          <CloudServerOutlined style={{ color: '#1890ff' }} />
+          <CloudServerOutlined style={{ color: palette.primary }} />
           <Text strong>{name}</Text>
         </Space>
       ),
@@ -100,8 +101,8 @@ const ServiceMiddlewarePage: React.FC = () => {
       width: 120,
       render: (_: unknown, record: ServiceMiddlewareView) => {
         const health = getServiceHealth(record);
-        const color = health.status === 'healthy' ? '#52c41a'
-          : health.status === 'warning' ? '#faad14' : '#ff4d4f';
+        const color = health.status === 'healthy' ? palette.success
+          : health.status === 'warning' ? palette.warning : palette.error;
         return (
           <Space>
             {getStatusIcon(health.status)}
@@ -167,7 +168,7 @@ const ServiceMiddlewarePage: React.FC = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
             allowClear
             className="search-input"
-            suffix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+            suffix={<SearchOutlined style={{ color: palette.textTertiary }} />}
           />
           <Button
             icon={<ReloadOutlined />}
@@ -205,7 +206,7 @@ const ServiceMiddlewarePage: React.FC = () => {
           locale={{
             emptyText: (
               <Empty
-                image={<CloudServerOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />}
+                image={<CloudServerOutlined style={{ fontSize: 48, color: palette.borderSolid }} />}
                 description={t('middleware.empty_description')}
               />
             ),

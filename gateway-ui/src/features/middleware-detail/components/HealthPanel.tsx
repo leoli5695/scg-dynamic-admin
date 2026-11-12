@@ -7,6 +7,7 @@ import {
 } from 'antd';
 import type { MiddlewareHealthStatus } from '../../../types/middleware';
 import { getStatusColor, getStatusIcon, type MiddlewareTypeConfig } from '../utils';
+import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
 
@@ -32,8 +33,8 @@ const HealthPanel: React.FC<HealthPanelProps> = ({
   healthStatus, serviceName, exporterUrl, typeConfig, timeRange, onTimeRangeChange,
 }) => {
   const { overall, issues, score } = healthStatus;
-  const statusColor = overall === 'healthy' ? '#52c41a'
-    : overall === 'warning' ? '#faad14' : '#ff4d4f';
+  const statusColor = overall === 'healthy' ? palette.success
+    : overall === 'warning' ? palette.warning : palette.error;
 
   return (
     <Card className="health-panel" style={{ marginBottom: 16 }}>
