@@ -8,9 +8,13 @@
 # to ./gateway-admin neither was reachable, so `mvn dependency:go-offline` failed
 # with "Non-resolvable parent POM" and this image could never be built.
 #
-# All seven module POMs are copied even though only license-client and
-# gateway-admin are compiled: Maven parses the aggregator's full <modules> list
-# up front and fails with "Child module ... does not exist" if any is missing.
+# Every child POM in the aggregator's default <modules> list must be copied, even
+# though only license-client and gateway-admin are compiled: Maven validates the
+# whole list up front and fails with "Child module ... does not exist" if any is
+# missing. Profile-only modules (seckill) are exempt - profiles are evaluated
+# before module directories are checked - but its POM is copied anyway so the list
+# stays complete. Keep this in sync with pom.xml; DockerfileModuleCoverageTest
+# fails the build when a module is added without a matching COPY here.
 FROM maven:3.9-eclipse-temurin-21 AS build
 
 WORKDIR /app
@@ -20,6 +24,7 @@ COPY pom.xml ./
 COPY license-client/pom.xml ./license-client/
 COPY gateway-trace-starter/pom.xml ./gateway-trace-starter/
 COPY license-server/pom.xml ./license-server/
+COPY gateway-moderation-spi/pom.xml ./gateway-moderation-spi/
 COPY my-gateway/pom.xml ./my-gateway/
 COPY gateway-admin/pom.xml ./gateway-admin/
 COPY demo-service/pom.xml ./demo-service/

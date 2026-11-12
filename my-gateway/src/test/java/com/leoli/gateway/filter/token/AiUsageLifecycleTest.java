@@ -50,13 +50,13 @@ class AiUsageLifecycleTest {
             var bytes = Mono.just(new DefaultDataBufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8)));
             return streaming ? terminal.getResponse().writeAndFlushWith(Mono.just(bytes)) : terminal.getResponse().writeWith(bytes);
         }).block();
-        verify(reporter, timeout(3000)).report(anyMap());
+        verify(reporter, timeout(3000)).reportDurably(anyMap());
         return exchange;
     }
 
     @Test void aiUsageIsCollectedWithoutQuotaOrTenantAndWithoutChargingRedis() {
         runWithoutQuota("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"total_tokens\":30}}", false, Map.of());
-        verify(reporter).report(argThat(row -> Long.valueOf(30).equals(row.get("totalTokens"))
+        verify(reporter).reportDurably(argThat(row -> Long.valueOf(30).equals(row.get("totalTokens"))
                 && TokenUsageCollectorFilter.UNASSIGNED_TENANT.equals(row.get("tenantId"))
                 && "NOT_REQUIRED".equals(row.get("settlementStatus")) && Long.valueOf(0).equals(row.get("chargedTokens"))));
         verifyNoInteractions(quota);
@@ -66,21 +66,21 @@ class AiUsageLifecycleTest {
         ReflectionTestUtils.setField(collector, "tokenQuotaManager", null);
         runWithoutQuota("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20}}", false,
                 Map.of("api_key_metadata", Map.of("tenantId", "verified-tenant")));
-        verify(reporter).report(argThat(row -> "verified-tenant".equals(row.get("tenantId"))
+        verify(reporter).reportDurably(argThat(row -> "verified-tenant".equals(row.get("tenantId"))
                 && Long.valueOf(30).equals(row.get("totalTokens"))));
         verifyNoInteractions(quota);
     }
 
     @Test void streamingAiUsageIsCollectedWithoutQuota() {
         runWithoutQuota("data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20}}\n\ndata: [DONE]\n\n", true, Map.of());
-        verify(reporter).report(argThat(row -> Long.valueOf(30).equals(row.get("totalTokens"))
+        verify(reporter).reportDurably(argThat(row -> Long.valueOf(30).equals(row.get("totalTokens"))
                 && "CONFIRMED".equals(row.get("usageStatus"))));
         verifyNoInteractions(quota);
     }
 
     @Test void missingUsageIsVisibleEvenWithoutQuota() {
         runWithoutQuota("{\"choices\":[]}", false, Map.of());
-        verify(reporter).report(argThat(row -> "UNKNOWN".equals(row.get("usageStatus"))
+        verify(reporter).reportDurably(argThat(row -> "UNKNOWN".equals(row.get("usageStatus"))
                 && row.get("totalTokens") == null));
     }
 
@@ -88,7 +88,7 @@ class AiUsageLifecycleTest {
         String body = "{\"content\":\"" + "x".repeat(70000) + "\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20}}";
         var exchange = runWithoutQuota(body, false, Map.of());
         assertEquals(body, exchange.getResponse().getBodyAsString().block());
-        verify(reporter).report(argThat(row -> "UNKNOWN".equals(row.get("usageStatus"))));
+        verify(reporter).reportDurably(argThat(row -> "UNKNOWN".equals(row.get("usageStatus"))));
     }
 
     @Test void enabledQuotaWithoutTenantStillCollectsAiUsage() {
@@ -97,7 +97,7 @@ class AiUsageLifecycleTest {
         var exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/v1/chat/completions"));
         collector.filter(exchange, terminal -> terminal.getResponse().writeWith(Mono.just(new DefaultDataBufferFactory()
                 .wrap("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20}}".getBytes(StandardCharsets.UTF_8))))).block();
-        verify(reporter, timeout(3000)).report(argThat(row -> Long.valueOf(30).equals(row.get("totalTokens"))));
+        verify(reporter, timeout(3000)).reportDurably(argThat(row -> Long.valueOf(30).equals(row.get("totalTokens"))));
         verifyNoInteractions(quota);
     }
 
@@ -134,7 +134,7 @@ class AiUsageLifecycleTest {
             return terminal.getResponse().writeWith(Mono.just(new DefaultDataBufferFactory()
                     .wrap(body.getBytes(StandardCharsets.UTF_8))));
         }))).verifyComplete();
-        verify(reporter, timeout(3000)).report(anyMap());
+        verify(reporter, timeout(3000)).reportDurably(anyMap());
         return exchange;
     }
 
@@ -143,7 +143,7 @@ class AiUsageLifecycleTest {
         assertEquals(10, meters.get("ai.tokens.input").counter().count());
         assertEquals(20, meters.get("ai.tokens.output").counter().count());
         verify(quota).settleTokenUsage("tenant", 100L, 30L, config, STAMP);
-        verify(reporter).report(argThat(row -> "CONFIRMED".equals(row.get("usageStatus"))
+        verify(reporter).reportDurably(argThat(row -> "CONFIRMED".equals(row.get("usageStatus"))
                 && "APPLIED".equals(row.get("settlementStatus")) && Long.valueOf(30).equals(row.get("chargedTokens"))
                 && "202610".equals(row.get("quotaMonth")) && "20261028".equals(row.get("quotaDay"))));
     }
@@ -157,7 +157,7 @@ class AiUsageLifecycleTest {
         verifyNoInteractions(quota);
         assertNull(meters.find("ai.tokens.input").counter());
         assertEquals(1, meters.get("ai.usage.requests").tag("status", "UNKNOWN").counter().count());
-        verify(reporter).report(argThat(row -> "PENDING".equals(row.get("settlementStatus"))
+        verify(reporter).reportDurably(argThat(row -> "PENDING".equals(row.get("settlementStatus"))
                 && row.get("totalTokens") == null && Long.valueOf(100).equals(row.get("reservedTokens"))));
     }
 
@@ -175,7 +175,7 @@ class AiUsageLifecycleTest {
         run("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"total_tokens\":30}}");
         verify(quota).settleTokenUsage("tenant", 100L, 30L, config, STAMP);
         verifyNoMoreInteractions(quota);
-        verify(reporter).report(argThat(row -> "FAILED".equals(row.get("settlementStatus"))
+        verify(reporter).reportDurably(argThat(row -> "FAILED".equals(row.get("settlementStatus"))
                 && Long.valueOf(30).equals(row.get("totalTokens"))));
     }
 

@@ -1,6 +1,7 @@
 package com.leoli.gateway.admin.controller;
 
 import com.leoli.gateway.admin.service.GatewayInstanceService;
+import com.leoli.gateway.admin.service.SystemSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,13 @@ class FilterChainControllerTest {
 
     @MockBean
     private RestTemplate restTemplate;
+
+    // @WebMvcTest includes every servlet Filter, so FeatureGateFilter is loaded here even though
+    // only FilterChainController is under test. Its SystemSettingsService collaborator is a
+    // @Service and therefore outside the slice; without this mock the context cannot load.
+    // No stubbing needed: none of the /api/filter-chain paths are gated.
+    @MockBean
+    private SystemSettingsService systemSettingsService;
 
     private Map<String, Object> mockStats;
     private Map<String, Object> mockRecords;

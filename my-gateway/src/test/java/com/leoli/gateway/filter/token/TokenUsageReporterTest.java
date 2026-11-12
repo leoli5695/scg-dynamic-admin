@@ -89,7 +89,7 @@ class TokenUsageReporterTest {
         ReflectionTestUtils.setField(reporter, "adminUrl", "http://127.0.0.1:" + server.getAddress().getPort());
         try {
             var data = new java.util.HashMap<String,Object>(Map.of("tenantId", "租户", "totalTokens", 9));
-            reporter.report(data); data.put("totalTokens", 999); reporter.report(Map.of("tenantId", "second"));
+            reporter.reportDurably(data); data.put("totalTokens", 999); reporter.reportDurably(Map.of("tenantId", "second"));
             reporter.flush();
             var rows = new ObjectMapper().readTree(body.get());
             assertEquals(1, requests.get()); assertEquals(2, rows.size());
@@ -104,11 +104,11 @@ class TokenUsageReporterTest {
         var meters = new SimpleMeterRegistry(); var reporter = reporter(meters);
         ReflectionTestUtils.setField(reporter, "maxRecords", 3);
         try {
-            for (int i = 0; i < 5; i++) reporter.report(Map.of("tenantId", "t"));
+            for (int i = 0; i < 5; i++) reporter.reportDurably(Map.of("tenantId", "t"));
             assertEquals(3, meters.get("token.usage.report.queued").gauge().value());
             assertEquals(2, meters.get("token.usage.report.failures").counter().count());
         } finally { reporter.close(); }
-        reporter.report(Map.of("tenantId", "t"));
+        reporter.reportDurably(Map.of("tenantId", "t"));
         try (var store = new TokenUsageOutbox(directory, 67108864, 4096)) { assertEquals(3, store.size()); }
     }
 
@@ -127,7 +127,7 @@ class TokenUsageReporterTest {
         var first = reporter(firstMeters);
         try {
             ReflectionTestUtils.setField(first, "adminUrl", url);
-            first.report(Map.of("tenantId", "t", "totalTokens", 9));
+            first.reportDurably(Map.of("tenantId", "t", "totalTokens", 9));
             first.flush();
             assertEquals(1, firstMeters.get("token.usage.report.queued").gauge().value());
             first.flush(); // Backoff prevents hammering the unavailable admin.
@@ -162,7 +162,7 @@ class TokenUsageReporterTest {
     @Test void unexpectedEventLoopCallerDoesNotPerformDiskIo() {
         var meters = new SimpleMeterRegistry(); var reporter = reporter(meters);
         try {
-            reactor.core.publisher.Mono.fromRunnable(() -> reporter.report(Map.of("tenantId", "t")))
+            reactor.core.publisher.Mono.fromRunnable(() -> reporter.reportDurably(Map.of("tenantId", "t")))
                     .subscribeOn(reactor.core.scheduler.Schedulers.parallel()).block();
             assertEquals(1, meters.get("token.usage.report.failures").counter().count());
             assertFalse(java.nio.file.Files.exists(directory.resolve(".lock")));

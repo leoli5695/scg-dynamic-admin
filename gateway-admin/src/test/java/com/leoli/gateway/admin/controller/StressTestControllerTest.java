@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.license.LicenseFeatureHelper;
 import com.leoli.gateway.admin.model.StressTest;
 import com.leoli.gateway.admin.service.StressTestService;
+import com.leoli.gateway.admin.service.SystemSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,11 +48,22 @@ class StressTestControllerTest {
     @MockBean
     private LicenseFeatureHelper licenseFeatureHelper;
 
+    // @WebMvcTest includes every servlet Filter, so FeatureGateFilter is loaded here even though
+    // only StressTestController is under test. Its SystemSettingsService collaborator is a
+    // @Service and therefore outside the slice; without this mock the context cannot load.
+    @MockBean
+    private SystemSettingsService systemSettingsService;
+
     private StressTest testStressTest;
     private StressTestService.StressTestConfig testConfig;
 
     @BeforeEach
     void setUp() {
+        // FeatureGateFilter answers 403 for POST /api/stress-test/start and /quick unless the
+        // feature is on, and a Mockito mock defaults to false. These tests exercise the
+        // controller, so the gate is held open; the gate itself is covered by FeatureGateFilterTest.
+        when(systemSettingsService.isStressTestEnabled()).thenReturn(true);
+
         testStressTest = new StressTest();
         testStressTest.setId(1L);
         testStressTest.setInstanceId("test-instance");

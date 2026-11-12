@@ -344,8 +344,8 @@ public class TokenUsageCollectorFilter implements GlobalFilter, Ordered {
                                             meteringTenant, preDeductedTokens, error.getMessage(), error);
                                     });
                 });
-        if (tokenUsageReporter != null && tokenUsageReporter.isConfigured()
-                && exchange.getAttribute(TokenQuotaLedger.REQUEST_ATTR) == null) {
+        if (exchange.getAttribute(TokenQuotaLedger.REQUEST_ATTR) == null
+                && tokenUsageReporter != null && tokenUsageReporter.isConfigured()) {
             return Mono.fromCallable(() -> {
                         try {
                             var context = usagePayload(exchange, meteringTenant, null, 0);

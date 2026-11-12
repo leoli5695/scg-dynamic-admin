@@ -67,10 +67,6 @@ public class TokenUsageReporter {
             return outbox;
         }
     }
-    public void report(Map<String, Object> data) {
-        reportDurably(data);
-    }
-
     public Admission begin(Map<String, Object> context) {
         try {
             if (!enabled() || reactor.core.scheduler.Schedulers.isInNonBlockingThread())
