@@ -1,18 +1,32 @@
 package com.leoli.gateway.util;
 
 import com.leoli.gateway.config.TrustedProxyProperties;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import java.util.ArrayList;
 import java.util.List;
 
 /** Resolves a canonical literal IP without DNS or trusting caller-inserted proxy hops. */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ClientIpResolver {
     private static final String UNKNOWN = "unknown";
     private final TrustedProxyProperties trustedProxyProperties;
+
+    @PostConstruct
+    void warnWhenPrivateNetworksAreTrusted() {
+        if (trustedProxyProperties.isEnabled() && trustedProxyProperties.isTrustPrivateNetworks()) {
+            log.warn("gateway.trusted-proxy.trust-private-networks is ON: any peer in a private range is "
+                    + "treated as a proxy, so a caller arriving from a private IP chooses its own client IP "
+                    + "(X-Forwarded-For leftmost hop). That IP drives IP allow/deny and rate-limit keys. "
+                    + "Published Docker ports usually arrive from a private bridge address. "
+                    + "Prefer listing the real proxy addresses in gateway.trusted-proxy.proxy-ips.");
+        }
+    }
 
     public String resolve(ServerWebExchange exchange) {
         String remote = getRemoteAddress(exchange);

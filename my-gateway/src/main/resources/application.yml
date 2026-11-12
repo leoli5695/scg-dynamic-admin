@@ -272,9 +272,14 @@ gateway:
   # configure trusted proxy IPs to securely extract real client IP.
   trusted-proxy:
     enabled: ${TRUSTED_PROXY_ENABLED:true}
-    # Trust all private network IPs as proxies (10.x, 172.16-31.x, 192.168.x, 127.x)
-    # Disable this in public cloud deployments with public-facing load balancers
-    trust-private-networks: ${TRUSTED_PROXY_PRIVATE_NETWORKS:true}
+    # Must stay false by default, matching TrustedProxyProperties. When true, ANY peer in a
+    # private range is treated as a proxy, so a caller reaching the gateway from a private IP
+    # picks its own client IP: ClientIpResolver walks FIRST past every trusted hop and lands on
+    # the leftmost, caller-written entry. That IP drives IPFilterGlobalFilter allow/deny and the
+    # rate-limit keys. Published Docker ports usually arrive from the bridge gateway (a private
+    # IP), which makes every external caller "trusted". Enable only behind a proxy that
+    # overwrites X-Forwarded-For, and prefer listing its exact addresses in proxy-ips below.
+    trust-private-networks: ${TRUSTED_PROXY_PRIVATE_NETWORKS:false}
     # Additional trusted proxy IPs (optional, supports CIDR notation)
     # Example: proxy-ips: ["1.2.3.4", "5.6.7.0/24"]
     proxy-ips: []

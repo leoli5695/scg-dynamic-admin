@@ -121,6 +121,17 @@ gateway:
 
 Gateway extracts the real client IP from the `X-Forwarded-For` Header.
 
+> **`trust-private-networks` defaults to `false` in both `TrustedProxyProperties` and
+> `application.yml`, and must stay that way.** When it is `true`, *any* peer in a private range
+> counts as a proxy, so a caller arriving from a private IP picks its own client IP: `FIRST` walks
+> left past every trusted hop and lands on the leftmost, caller-written entry. That IP drives the
+> allow/deny decision below and the rate-limit keys. Published Docker ports usually arrive from the
+> bridge gateway (a private address), which would make every external caller "trusted".
+> `application.yml` shipped with `true` here while the class and this document said `false`; the
+> three are now aligned and pinned by `GatewayConfigurationTest`. Enable it only behind a proxy that
+> overwrites `X-Forwarded-For`, and prefer listing that proxy's exact addresses in `proxy-ips`.
+> The gateway logs a warning at startup whenever it is on.
+
 ### IP Extraction Logic
 
 ```

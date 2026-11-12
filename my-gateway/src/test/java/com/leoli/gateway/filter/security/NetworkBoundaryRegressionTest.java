@@ -90,4 +90,42 @@ class NetworkBoundaryRegressionTest {
         var allowed = forwarded("198.51.100.7"); filter.filter(allowed, ex -> Mono.empty()).block();
         assertNull(allowed.getResponse().getStatusCode());
     }
+
+    @Test void privatePeerWithNoTrustedProxyConfigIgnoresCallerSuppliedForwardedFor() {
+        // All defaults: proxy-ips empty and trust-private-networks false, so a private peer is
+        // still just a peer and cannot nominate its own address.
+        assertEquals("10.0.0.1", new ClientIpResolver(new TrustedProxyProperties()).resolve(forwarded("1.2.3.4")));
+    }
+
+    @Test void trustingPrivateNetworksLetsAPrivatePeerChooseItsOwnIp() {
+        var properties = new TrustedProxyProperties();
+        properties.setTrustPrivateNetworks(true);
+        var resolver = new ClientIpResolver(properties);
+        // Documents the exposure rather than endorsing it: FIRST walks past every trusted hop and
+        // lands on the leftmost, caller-written entry. This is why the shipped default is false.
+        assertEquals("1.2.3.4", resolver.resolve(forwarded("1.2.3.4")));
+        // A public peer is never a private-network proxy, so the same config stays safe for it.
+        var publicPeer = MockServerWebExchange.from(MockServerHttpRequest.get("/api")
+                .remoteAddress(new InetSocketAddress("203.0.113.9", 443))
+                .header("X-Forwarded-For", "1.2.3.4"));
+        assertEquals("203.0.113.9", resolver.resolve(publicPeer));
+    }
+
+    @Test void privateNetworkTrustWouldLetACallerForgeItsWayPastAnIpWhitelist() {
+        var manager = mock(StrategyManager.class);
+        when(manager.getIPFilterConfig(anyString()))
+                .thenReturn(Map.of("mode", "WHITELIST", "ipList", List.of("198.51.100.7")));
+
+        var closed = new IPFilterGlobalFilter(manager, new ClientIpResolver(new TrustedProxyProperties()));
+        var denied = forwarded("198.51.100.7");
+        closed.filter(denied, ex -> Mono.error(new AssertionError("must not reach upstream"))).block();
+        assertEquals(HttpStatus.FORBIDDEN, denied.getResponse().getStatusCode());
+
+        var properties = new TrustedProxyProperties();
+        properties.setTrustPrivateNetworks(true);
+        var open = new IPFilterGlobalFilter(manager, new ClientIpResolver(properties));
+        var allowed = forwarded("198.51.100.7");
+        open.filter(allowed, ex -> Mono.empty()).block();
+        assertNull(allowed.getResponse().getStatusCode());
+    }
 }
