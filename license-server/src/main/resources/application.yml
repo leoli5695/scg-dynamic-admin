@@ -33,6 +33,12 @@ spring:
 license:
   server:
     production-mode: ${LICENSE_PRODUCTION_MODE:false}
+    # HTTP Basic credentials for the management API (create / revoke / renew / generate-keys).
+    # Both blank by default: SecurityConfig then denies those endpoints outright rather than
+    # advertising a login nothing can satisfy. There is no built-in account and no default password.
+    management:
+      username: ${LICENSE_SERVER_MANAGEMENT_USERNAME:}
+      password: ${LICENSE_SERVER_MANAGEMENT_PASSWORD:}
     rsa:
       # 生产环境必须设置环境变量
       private-key: ${LICENSE_RSA_PRIVATE_KEY:}
@@ -55,12 +61,9 @@ license:
 # ============================================================================
 # Security 配置
 # ============================================================================
-# License Server 需要认证才能管理 License
+# License 管理接口用 HTTP Basic 认证，凭据在 license.server.management（见上方）。
+# 客户端用的 validate / features / quotas 与 health、swagger 保持公开。
 # ============================================================================
-license-server:
-  jwt:
-    secret: ${LICENSE_SERVER_JWT_SECRET:local-dev-license-server-secret-key-min-32-chars!}
-    expiration: 86400000  # 24 hours
 
 # ============================================================================
 # SpringDoc OpenAPI 配置

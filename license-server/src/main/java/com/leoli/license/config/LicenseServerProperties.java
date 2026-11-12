@@ -33,6 +33,25 @@ public class LicenseServerProperties {
      */
     private boolean productionMode = false;
 
+    /**
+     * Credentials for the license management API (create / revoke / renew / generate-keys).
+     */
+    private ManagementConfig management = new ManagementConfig();
+
+    @Data
+    public static class ManagementConfig {
+        /**
+         * Management API username. Blank by default: there is no built-in account, so an
+         * unconfigured server keeps the management API closed instead of exposing a guessable login.
+         */
+        private String username = "";
+
+        /**
+         * Management API password, supplied via LICENSE_SERVER_MANAGEMENT_PASSWORD.
+         */
+        private String password = "";
+    }
+
     @Data
     public static class RsaConfig {
         /**
