@@ -552,4 +552,49 @@ class StrategyConfigValidatorTest {
             assertTrue(result.getErrors().isEmpty());
         }
     }
+
+    @Nested
+    @DisplayName("CORS Validation")
+    class CorsValidationTests {
+
+        @Test
+        @DisplayName("Wildcard origin with credentials is rejected")
+        void rejectsWildcardWithCredentials() {
+            var result = validator.validateCors(java.util.Map.of(
+                    "allowedOrigins", List.of("*"), "allowCredentials", true));
+            assertFalse(result.isValid());
+            assertTrue(result.getErrorMessage().contains("allowCredentials"));
+        }
+
+        @Test
+        @DisplayName("An empty origin list defaults to wildcard, so credentials are rejected too")
+        void rejectsEmptyOriginListWithCredentials() {
+            assertFalse(validator.validateCors(java.util.Map.of("allowCredentials", true)).isValid());
+            assertFalse(validator.validateCors(java.util.Map.of(
+                    "allowedOrigins", List.of(), "allowCredentials", true)).isValid());
+        }
+
+        @Test
+        @DisplayName("Explicit origins with credentials are allowed")
+        void allowsExplicitOriginsWithCredentials() {
+            assertTrue(validator.validateCors(java.util.Map.of(
+                    "allowedOrigins", List.of("https://a.example"), "allowCredentials", true)).isValid());
+        }
+
+        @Test
+        @DisplayName("Wildcard without credentials is allowed")
+        void allowsWildcardWithoutCredentials() {
+            assertTrue(validator.validateCors(java.util.Map.of("allowedOrigins", List.of("*"))).isValid());
+            assertTrue(validator.validateCors(java.util.Map.of(
+                    "allowedOrigins", List.of("*"), "allowCredentials", false)).isValid());
+        }
+
+        @Test
+        @DisplayName("String-typed credentials and null config are handled")
+        void handlesStringCredentialsAndNullConfig() {
+            assertFalse(validator.validateCors(java.util.Map.of(
+                    "allowedOrigins", List.of("*"), "allowCredentials", "true")).isValid());
+            assertTrue(validator.validateCors(null).isValid());
+        }
+    }
 }

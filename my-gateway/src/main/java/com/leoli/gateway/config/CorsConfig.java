@@ -131,6 +131,17 @@ public class CorsConfig {
 
             // Allow credentials
             Boolean allowCredentials = getBoolValue(config, "allowCredentials", false);
+            // An empty list means "*" here (see above), unlike CorsGlobalFilter where it allows nothing.
+            List<String> effectiveOrigins = (allowedOrigins == null || allowedOrigins.isEmpty())
+                    ? List.of("*") : allowedOrigins;
+            if (com.leoli.gateway.util.CorsSafety.isWildcardWithCredentials(effectiveOrigins, allowCredentials)) {
+                // addAllowedOriginPattern("*") + credentials makes Spring reflect the caller's Origin,
+                // which exposes authenticated responses to any website. Drop the credentials half.
+                log.warn("CORS strategy combines a wildcard origin with allowCredentials; credentials are "
+                        + "dropped because reflecting the Origin would expose authenticated responses to any "
+                        + "website. List explicit origins to keep credentials.");
+                allowCredentials = false;
+            }
             corsConfig.setAllowCredentials(allowCredentials);
 
             // Max age

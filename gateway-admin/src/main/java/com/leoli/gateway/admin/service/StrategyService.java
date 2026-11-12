@@ -1234,6 +1234,9 @@ public class StrategyService {
             case StrategyDefinition.TYPE_IP_FILTER:
                 result = validateIpFilterConfig(config);
                 break;
+            case StrategyDefinition.TYPE_CORS:
+                result = configValidator.validateCors(config);
+                break;
             case StrategyDefinition.TYPE_CIRCUIT_BREAKER:
                 result = validateCircuitBreakerConfig(config);
                 break;

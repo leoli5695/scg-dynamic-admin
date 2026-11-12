@@ -136,6 +136,14 @@ public class CorsGlobalFilter implements GlobalFilter, Ordered {
         List<String> allowedOrigins = getStringListValue(config, "allowedOrigins");
         if (!isOriginAllowed(origin, allowedOrigins)) return;
         boolean allowCredentials = getBoolValue(config, "allowCredentials", false);
+        if (com.leoli.gateway.util.CorsSafety.isWildcardWithCredentials(allowedOrigins, allowCredentials)) {
+            // Reflecting the Origin here would let any site make credentialed cross-origin calls.
+            // Keep the wide origin, drop the credentials, and say so loudly.
+            log.warn("CORS config for route combines allowedOrigins '*' with allowCredentials; "
+                    + "credentials are dropped because reflecting the Origin would expose authenticated "
+                    + "responses to any website. List explicit origins to keep credentials.");
+            allowCredentials = false;
+        }
         if (allowedOrigins.contains("*")) {
             headers.set("Access-Control-Allow-Origin", allowCredentials ? origin : "*");
         } else if (origin != null && isOriginAllowed(origin, allowedOrigins)) {

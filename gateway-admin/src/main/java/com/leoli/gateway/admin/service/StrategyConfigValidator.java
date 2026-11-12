@@ -148,6 +148,32 @@ public class StrategyConfigValidator {
     }
 
     /**
+     * Rejects the one CORS combination browsers forbid: a wildcard origin together with credentials.
+     * Honouring both requires reflecting the caller's Origin, which lets any website read
+     * authenticated responses. Mirrors {@code CorsSafety} in my-gateway (the modules share no
+     * dependency); the gateway also drops credentials at runtime as a backstop for configs that
+     * were stored before this rule existed.
+     */
+    public ValidationResult validateCors(java.util.Map<String, Object> config) {
+        if (config == null) {
+            return ValidationResult.success();
+        }
+        boolean allowCredentials = Boolean.parseBoolean(String.valueOf(config.getOrDefault("allowCredentials", false)));
+        Object origins = config.get("allowedOrigins");
+        List<String> allowedOrigins = origins instanceof List<?> list
+                ? list.stream().map(String::valueOf).toList()
+                : List.of();
+        // An empty list defaults to "*" in the gateway's CorsConfig path.
+        boolean wildcard = allowedOrigins.isEmpty() || allowedOrigins.contains("*");
+        if (allowCredentials && wildcard) {
+            return ValidationResult.failure(List.of(
+                    "allowCredentials cannot be combined with a wildcard origin: list explicit origins "
+                            + "instead, or disable allowCredentials"));
+        }
+        return ValidationResult.success();
+    }
+
+    /**
      * Validate circuit breaker configuration.
      */
     public ValidationResult validateCircuitBreaker(StrategyConfig.CircuitBreakerConfig config) {

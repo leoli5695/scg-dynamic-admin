@@ -39,12 +39,22 @@ class CorsPolicyRegressionTest {
         return exchange;
     }
 
-    @Test void credentialsWithWildcardReflectsTheAllowedOriginAndAddsVary() {
+    @Test void credentialsWithWildcardDropsCredentialsInsteadOfReflectingTheOrigin() {
+        // This used to assert the opposite: ACAO reflected the caller's Origin and Allow-Credentials
+        // was true. That combination lets any website read authenticated responses, so the wildcard
+        // is kept and the credentials half is dropped. Explicit origins still get credentials.
         var filter = filter(Map.of("allowedOrigins", List.of("*"), "allowCredentials", true));
+        var exchange = get(); filter.filter(exchange, ex -> Mono.empty()).block();
+        assertEquals("*", exchange.getResponse().getHeaders().getAccessControlAllowOrigin());
+        assertNull(exchange.getResponse().getHeaders().getFirst("Access-Control-Allow-Credentials"));
+        assertTrue(exchange.getResponse().getHeaders().getVary().contains("Origin"));
+    }
+
+    @Test void explicitOriginsKeepCredentials() {
+        var filter = filter(Map.of("allowedOrigins", List.of("https://a.example"), "allowCredentials", true));
         var exchange = get(); filter.filter(exchange, ex -> Mono.empty()).block();
         assertEquals("https://a.example", exchange.getResponse().getHeaders().getAccessControlAllowOrigin());
         assertTrue(exchange.getResponse().getHeaders().getAccessControlAllowCredentials());
-        assertTrue(exchange.getResponse().getHeaders().getVary().contains("Origin"));
     }
 
     @Test void preflightRejectsMethodsOutsideAllowlist() {
