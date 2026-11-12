@@ -2076,8 +2076,13 @@ The reconcile task ensures consistency between database and Nacos configuration.
 > `TokenUsageCollectorFilter` from `TokenUsageReporter.report(...)` to `reportDurably(...)` and the
 > test still verified `report(...)`. Usage was collected correctly — the mock expectation was stale.
 > The test now verifies `reportDurably(...)` and the unused `report(...)` alias is removed. This was
-> also the sole cause of the red CI Backend job at `280acde` (run `40879153086`:
-> `Tests run: 1042, Failures: 11`), confirmed from CI's uploaded surefire artifact.
+> the only red class in CI's surefire artifact at `280acde` (run `40879153086`:
+> `Tests run: 1042, Failures: 11`) - but that artifact holds only four modules, because the reactor
+> fails fast and SKIPPED gateway-admin. Clearing the 11 let gateway-admin run for the first time
+> (run `43209492897`), which reported 8 failures + 2 errors in `RouteApiTest`, `RouteNamespaceTest`
+> and `StrategyApiTest`: `2209032` added the mandatory-namespace guard at `RouteService.java:327` and
+> those classes create routes without an `instanceId`. `2209032` is the commit where CI first went
+> red, so this was the original failure all along, later masked by the my-gateway one.
 >
 > **25 further errors were a real defect, not infrastructure.** `FeatureGateFilter` (`0d75ef5`) is a
 > `@Component` servlet `Filter` and `@WebMvcTest` includes every `Filter`, so both web-slice tests in

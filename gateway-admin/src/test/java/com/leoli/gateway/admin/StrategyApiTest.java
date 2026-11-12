@@ -359,6 +359,7 @@ public class StrategyApiTest extends BaseIntegrationTest {
         route.putArray("predicates").addObject().put("name", "Path").putObject("args").put("pattern", "/test/**");
 
         MvcResult routeResult = mockMvc.perform(post("/api/routes")
+                        .param("instanceId", strategyInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(route.toString()))
                 .andReturn();

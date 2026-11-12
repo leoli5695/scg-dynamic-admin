@@ -50,6 +50,7 @@ public class RouteApiTest extends BaseIntegrationTest {
         predicate.putObject("args").put("pattern", "/api/test/**");
 
         MvcResult result = mockMvc.perform(post("/api/routes")
+                        .param("instanceId", routeInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(route.toString()))
                 .andExpect(status().isOk())
@@ -202,6 +203,7 @@ public class RouteApiTest extends BaseIntegrationTest {
         svc2.put("enabled", true);
 
         MvcResult result = mockMvc.perform(post("/api/routes")
+                        .param("instanceId", routeInstanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(route.toString()))
                 .andExpect(status().isOk())

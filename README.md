@@ -713,21 +713,32 @@ At `280acde` (run `40879153086`) the conclusions were `Frontend` **success**, `B
   is added without a matching `COPY`.
 - **Backend** died at `Build and test` (`mvn -B -ntp verify`) with
   `Tests run: 1042, Failures: 11, Errors: 0, Skipped: 2` in My Gateway - the same 11
-  `AiUsageLifecycleTest` failures described above, and the only red class in the entire artifact.
-  An earlier revision of this document argued CI must have an *additional* failure invisible
-  locally, reasoning from `a69fd71` being later than `2209032` where CI first went red. The artifact
-  disproves that at `280acde`: there is no other failure. Whatever was red at `2209032` has since
-  been fixed.
+  `AiUsageLifecycleTest` failures described above, and the only red class in the artifact *for that
+  run*. That is not the whole story: the artifact only holds four modules because the reactor stopped
+  at my-gateway. An earlier revision of this document argued CI must have an additional failure
+  invisible locally, reasoning from `a69fd71` being later than `2209032` where CI first went red.
+  That inference was **right** - the additional failure was masked by fail-fast, not absent. See the
+  next run below.
 
-> **The Backend job fails fast, so `gateway-admin` has never run in CI.** `mvn -B -ntp verify` has no
+> **The Backend job fails fast, so `gateway-admin` had never run in CI.** `mvn -B -ntp verify` has no
 > `-fae`, and the reactor summary reads `gateway-admin ... SKIPPED`, `demo-service ... SKIPPED`; the
 > uploaded artifact holds only license-client, gateway-trace-starter, license-server and my-gateway.
 > So the claim that CI is "the only place those `@SpringBootTest` classes actually execute" was
 > wrong - they executed nowhere: not locally (no MySQL) and not in CI (skipped behind the my-gateway
-> failure). Clearing the 11 lets them run for the first time, which is a separate verdict.
+> failure).
 >
-> Running them locally surfaced a second, non-environmental defect that CI would have hit next - the
-> `FeatureGateFilter` / `@WebMvcTest` one described under the table above.
+> **Confirmed by the next run.** At `7047282` (run `43209492897`) `Images build` turned **success** and
+> my-gateway went green, so gateway-admin ran for the first time - and reported **8 failures + 2
+> errors** in `RouteApiTest`, `RouteNamespaceTest` and `StrategyApiTest`. One root cause: `2209032`
+> (the exact commit where CI first went red) added the mandatory-namespace guard at
+> `RouteService.java:327`, and those three classes create routes without an `instanceId`, so the
+> create returns 400 and every later assertion cascades. `2209032` predates `a69fd71`, which is why
+> the admin failure was the original one and the my-gateway failure later hid it. The tests now pass
+> the instance they already create, and the "without instanceId" case asserts the 400 instead of
+> expecting the pre-`2209032` default-namespace behaviour.
+>
+> Running them locally also surfaced a second, non-environmental defect - the `FeatureGateFilter` /
+> `@WebMvcTest` one described under the table above.
 >
 > Adding `-fae` to the Backend job would report every module's result in one run instead of hiding
 > the rest behind the first failure. Deliberately not changed here: it alters what CI blocks on.

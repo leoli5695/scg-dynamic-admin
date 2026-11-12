@@ -250,8 +250,8 @@ public class RouteNamespaceTest extends NamespaceIntegrationTest {
 
     @Test
     @Order(9)
-    @DisplayName("Create route without instanceId - should work with default instance")
-    void test09_CreateRoute_WithoutInstanceId() throws Exception {
+    @DisplayName("Create route without instanceId - rejected, a route must belong to an instance")
+    void test09_CreateRoute_WithoutInstanceId_IsRejected() throws Exception {
         ObjectNode route = objectMapper.createObjectNode();
         route.put("routeName", "test-no-instance");
         route.put("uri", "static://default-service");
@@ -262,20 +262,17 @@ public class RouteNamespaceTest extends NamespaceIntegrationTest {
         ArrayNode predicates = route.putArray("predicates");
         predicates.addObject().put("name", "Path").putObject("args").put("pattern", "/api/no-instance/**");
 
-        MvcResult result = mockMvc.perform(post("/api/routes")
+        // 2209032 made the namespace mandatory: getNacosNamespace(null) returns null, and
+        // RouteService rejects a null/blank namespace rather than publishing to the default
+        // namespace, where no instance-scoped gateway would ever read it.
+        mockMvc.perform(post("/api/routes")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(route.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andReturn();
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("instance")));
 
-        JsonNode data = extractData(result);
-        String routeId = data.get("id").asText();
-
-        // Cleanup
-        mockMvc.perform(delete("/api/routes/" + routeId));
-
-        System.out.println("[PASS] Route created without instanceId (uses default)");
+        System.out.println("[PASS] Route without instanceId rejected");
     }
 
     @Test

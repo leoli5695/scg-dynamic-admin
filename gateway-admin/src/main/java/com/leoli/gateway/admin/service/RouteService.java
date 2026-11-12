@@ -165,7 +165,9 @@ public class RouteService {
      */
     private String getNacosNamespace(String instanceId) {
         if (instanceId == null || instanceId.isEmpty()) {
-            return null; // Use default namespace
+            // No instance, so no namespace. createRoute rejects this rather than falling back to
+            // the default namespace, where an instance-scoped gateway would never read the route.
+            return null;
         }
         Optional<GatewayInstanceEntity> instance = gatewayInstanceRepository.findByInstanceId(instanceId);
         return instance.map(GatewayInstanceEntity::getNacosNamespace).orElse(null);

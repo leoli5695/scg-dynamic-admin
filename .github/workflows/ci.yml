@@ -14,11 +14,18 @@
 # Backend failed with 11 AiUsageLifecycleTest failures in my-gateway (a stale
 # `report` vs `reportDurably` mock expectation, since fixed). Because `mvn verify`
 # here has no -fae, the reactor stopped there: gateway-admin and demo-service were
-# SKIPPED, so the gateway-admin integration classes below have never actually
-# executed in CI. Locally they cannot run either without MySQL on localhost:3306.
-# Treat the Actions tab as the authoritative verdict, and note that it is currently
-# a partial one - adding -fae would make the job report every module instead of
-# hiding the rest behind the first failure.
+# SKIPPED, so the gateway-admin integration classes had never actually executed in
+# CI. Locally they cannot run either without MySQL on localhost:3306.
+#
+# Follow-up (run 43209492897 at 7047282, same day): Images build turned success and
+# my-gateway went green, so gateway-admin ran for the first time and reported 8
+# failures + 2 errors in RouteApiTest / RouteNamespaceTest / StrategyApiTest. One
+# root cause: 2209032 - the commit where CI first went red - added the mandatory
+# namespace guard in RouteService, and those classes create routes without an
+# instanceId. So the admin failure was the original one, later masked by the
+# my-gateway failure. Treat the Actions tab as the authoritative verdict, and note
+# that a fail-fast job reports a partial one - adding -fae would make it report
+# every module instead of hiding the rest behind the first failure.
 #
 # Images build failed at "Build gateway-admin image" with "Child module
 # /app/gateway-moderation-spi of /app/pom.xml does not exist": a module was added to

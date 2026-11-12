@@ -86,6 +86,16 @@ license-server **47**、gateway-trace-starter **160**、license-client **83**、
   `mvn -B -ntp verify` 没有 `-fae`,反应堆在 my-gateway 就停了,Reactor Summary 里
   `gateway-admin ... SKIPPED`、`demo-service ... SKIPPED`,制品也只含 4 个模块。
   即那些集成测试**在 CI 也从未跑过**;修掉 11 个失败后它们才会第一次执行。
+- **后续实测(同日,run `43209492897` @ `7047282`):上一句的预言兑现了。** Images build 转 **success**、
+  my-gateway 全绿,gateway-admin 第一次真正执行,报出 **8 失败 + 2 错误**
+  (`RouteApiTest` / `RouteNamespaceTest` / `StrategyApiTest`)。单一根因:`2209032`
+  (**正是 CI 首次转红的那个提交**)在 `RouteService.java:327` 加了"命名空间必须存在"的守卫,
+  而这三个类建路由时不传 `instanceId`,于是 create 返回 400、其后断言全部级联失败。
+  `2209032` 早于 `a69fd71`,所以**admin 的失败才是最初那个,my-gateway 的 11 个失败后来把它挡住了**。
+  据此再更正一条:旧 README 推断"CI 另有一个本机看不到的失败"——**方向是对的**,
+  我先前据 `280acde` 制品写下"没有别的失败、2209032 的红已被修掉"是**错的**(制品只含 4 个模块,
+  是被 fail-fast 截断的,不是全量结论)。已改:三个测试传它们本来就已创建的 instance,
+  "不传 instanceId"那例改为断言 400。
 - 生产部署(见下)已核实包含全部安全修复,但部署流程此前**没有**"换 jar 后校验 JVM 确实重启"
   这一步;2026-10-27 起由 `scripts/deploy-gateway.sh` 补齐(强制重启 + 断言 JVM 启动时间晚于
   jar 落盘时间 + 健康检查 + 失败回滚)。
