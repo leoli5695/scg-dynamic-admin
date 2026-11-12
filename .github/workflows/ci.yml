@@ -23,9 +23,8 @@
 # root cause: 2209032 - the commit where CI first went red - added the mandatory
 # namespace guard in RouteService, and those classes create routes without an
 # instanceId. So the admin failure was the original one, later masked by the
-# my-gateway failure. Treat the Actions tab as the authoritative verdict, and note
-# that a fail-fast job reports a partial one - adding -fae would make it report
-# every module instead of hiding the rest behind the first failure.
+# my-gateway failure. The Build and test step now passes -fae so a red module no
+# longer hides the rest; the job still fails if any module fails.
 #
 # Images build failed at "Build gateway-admin image" with "Child module
 # /app/gateway-moderation-spi of /app/pom.xml does not exist": a module was added to
@@ -125,7 +124,10 @@ jobs:
           exit 1
 
       - name: Build and test
-        run: mvn -B -ntp verify
+        # -fae: report every module instead of stopping at the first failure. Without it a red
+        # my-gateway SKIPPED gateway-admin entirely, which hid 10 real integration failures for
+        # weeks. The job still fails if any module fails; it just no longer hides the others.
+        run: mvn -B -ntp -fae verify
         env:
           REDIS_PORT: 30379
 
