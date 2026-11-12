@@ -48,6 +48,28 @@ Request Flow:
 | `retryOnStatusCodes` | HTTP status codes that trigger retry | `[500, 502, 503, 504]` |
 | `retryOnExceptions` | Full class path of exceptions that trigger retry | See defaults below |
 | `enabled` | Whether to enable retry | `true` |
+| `retryNonIdempotent` | Allow retrying `POST`/`PATCH` (see below) | `false` |
+
+### Non-idempotent methods are not retried by default
+
+Only the RFC 9110 idempotent methods are retried: `GET`, `HEAD`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`.
+`POST` and `PATCH` run a single attempt unless `retryNonIdempotent` is set to `true` on the strategy
+(or `gateway.retry.default-retry-non-idempotent` globally).
+
+The reason is duplicate side effects, not lost bodies. A `POST` that times out after the upstream
+already applied it would be applied again on the next attempt — and `retryOnStatusCodes` includes
+`500`, which means the upstream definitely processed the request. Caching the request body (which
+this filter does, bounded) fixed retries being sent with an *empty* body; it never made a replay
+safe. This follows nginx's `proxy_next_upstream`, which skips non-idempotent requests unless the
+operator adds `non_idempotent`; Spring Cloud Gateway's own Retry filter defaults to `GET` only.
+
+> **The instance-level failover path is separate and still replays non-idempotent requests.**
+> `InstanceRetryExecutor` (STATIC / `lb://` routes) switches to another instance when a request
+> fails and the response is uncommitted, with no method filter — see
+> `InstanceRetryExecutorTest.smallBodiesCanStillBeReplayedOnAnAlternativeBackend`, which pins that
+> behaviour for `POST`. Its failure mode is transport-level rather than a returned `500`, so whether
+> it should also refuse non-idempotent replays is an availability-versus-duplicate-write trade-off
+> that has not been decided here.
 
 ---
 

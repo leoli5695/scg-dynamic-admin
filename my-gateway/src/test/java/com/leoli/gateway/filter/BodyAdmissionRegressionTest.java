@@ -56,7 +56,9 @@ class BodyAdmissionRegressionTest {
         StrategyManager manager = mock(StrategyManager.class);
         when(manager.isStrategyEnabled(any(), any())).thenReturn(true);
         RetryGlobalFilter filter = new RetryGlobalFilter(manager, new RetryProperties());
-        var exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/upload").contentLength(1).body("a"));
+        // PUT, not POST: this test is about the body budget, and non-idempotent methods now skip
+        // retry entirely unless opted in, so a POST would never reach the budget at all.
+        var exchange = MockServerWebExchange.from(MockServerHttpRequest.put("/upload").contentLength(1).body("a"));
         var budget = (com.leoli.gateway.util.ByteBudget) ReflectionTestUtils.getField(filter, "bodyBudget");
         var subscription = filter.filter(exchange, request -> Mono.never()).subscribe();
         assertTrue(budget.used() > 0); subscription.dispose(); assertEquals(0, budget.used());

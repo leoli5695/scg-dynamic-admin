@@ -57,6 +57,16 @@ public class RetryProperties {
             "org.springframework.cloud.gateway.support.NotFoundException"
     );
 
+    /**
+     * Whether non-idempotent methods (POST, PATCH) may be retried by default.
+     * <p>
+     * False, following nginx's {@code proxy_next_upstream}, which skips non-idempotent requests
+     * unless the operator adds {@code non_idempotent}. A POST that times out after the upstream
+     * already applied it would otherwise be applied a second time. Per-route config can override
+     * this with {@code retryNonIdempotent}.
+     */
+    private boolean defaultRetryNonIdempotent = false;
+
     public int getDefaultMaxAttempts() {
         return defaultMaxAttempts;
     }
@@ -95,5 +105,13 @@ public class RetryProperties {
 
     public void setDefaultRetryOnExceptions(Set<String> defaultRetryOnExceptions) {
         this.defaultRetryOnExceptions = defaultRetryOnExceptions;
+    }
+
+    public boolean isDefaultRetryNonIdempotent() {
+        return defaultRetryNonIdempotent;
+    }
+
+    public void setDefaultRetryNonIdempotent(boolean defaultRetryNonIdempotent) {
+        this.defaultRetryNonIdempotent = defaultRetryNonIdempotent;
     }
 }

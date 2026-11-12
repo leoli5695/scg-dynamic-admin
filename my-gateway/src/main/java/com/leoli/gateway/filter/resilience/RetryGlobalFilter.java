@@ -119,6 +119,15 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         // stream was already consumed by the first attempt, so retries were sent with an EMPTY body,
         // causing dirty data on non-idempotent endpoints. Cache the body (bounded) before first attempt.
         HttpMethod method = exchange.getRequest().getMethod();
+        // nginx's proxy_next_upstream skips non-idempotent requests unless the operator adds
+        // `non_idempotent`; Spring Cloud Gateway's Retry filter defaults to GET only. Same rule:
+        // a POST that times out after the upstream already applied it would be applied twice.
+        // Caching the body below fixed retries sent with an EMPTY body, not duplicate side effects.
+        if (!config.retryNonIdempotent && !isIdempotent(method)) {
+            log.debug("Retry skipped for non-idempotent {} on route {}; set retryNonIdempotent to override",
+                    method, routeId);
+            return chain.filter(exchange);
+        }
         long contentLength = exchange.getRequest().getHeaders().getContentLength();
         boolean mayHaveBody = contentLength > 0
                 || exchange.getRequest().getHeaders().containsKey(org.springframework.http.HttpHeaders.TRANSFER_ENCODING)
@@ -141,6 +150,13 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         }
 
         return executeWithRetry(exchange, chain, config, 0);
+    }
+
+    /** RFC 9110 idempotent methods. POST, PATCH and anything unrecognised are not. */
+    private static boolean isIdempotent(HttpMethod method) {
+        return HttpMethod.GET.equals(method) || HttpMethod.HEAD.equals(method)
+                || HttpMethod.PUT.equals(method) || HttpMethod.DELETE.equals(method)
+                || HttpMethod.OPTIONS.equals(method) || HttpMethod.TRACE.equals(method);
     }
 
     /**
@@ -442,6 +458,8 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
             retryConfig.maxAttempts = getIntValue(config, "maxAttempts", retryProperties.getDefaultMaxAttempts());
             retryConfig.retryIntervalMs = getLongValue(config, "retryIntervalMs", retryProperties.getDefaultRetryIntervalMs());
             retryConfig.enabled = getBoolValue(config, "enabled", true);
+            retryConfig.retryNonIdempotent = getBoolValue(config, "retryNonIdempotent",
+                    retryProperties.isDefaultRetryNonIdempotent());
 
             Object statusCodes = config.get("retryOnStatusCodes");
             if (statusCodes instanceof List) {
@@ -510,12 +528,14 @@ public class RetryGlobalFilter implements GlobalFilter, Ordered {
         int maxAttempts;
         long retryIntervalMs;
         boolean enabled = true;
+        boolean retryNonIdempotent;
         Set<Integer> retryOnStatusCodes;
         Set<String> retryOnExceptions;
 
         RetryConfig(RetryProperties props) {
             this.maxAttempts = props.getDefaultMaxAttempts();
             this.retryIntervalMs = props.getDefaultRetryIntervalMs();
+            this.retryNonIdempotent = props.isDefaultRetryNonIdempotent();
             this.retryOnStatusCodes = props.getDefaultRetryOnStatusCodes();
             this.retryOnExceptions = props.getDefaultRetryOnExceptions();
         }

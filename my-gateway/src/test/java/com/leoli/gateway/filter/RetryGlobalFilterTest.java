@@ -380,6 +380,92 @@ class RetryGlobalFilterTest {
         }
     }
 
+    @Nested
+    @DisplayName("Idempotency guard")
+    class IdempotencyTests {
+
+        private MockServerWebExchange exchangeWithMethod(org.springframework.http.HttpMethod method) {
+            // Content-Length: 0 keeps the body-caching branch out of the way (an unknown length
+            // there means "stream, do not retry"), so these tests isolate the idempotency guard.
+            MockServerWebExchange exchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.method(method, "/api/test").header("Content-Length", "0").build());
+            exchange.getAttributes().put(ROUTE_ID_ATTR, "test-route");
+            return exchange;
+        }
+
+        private void enableRetry(Map<String, Object> config) {
+            when(strategyManager.isStrategyEnabled(anyString(), eq(StrategyDefinition.TYPE_RETRY))).thenReturn(true);
+            when(strategyManager.getRetryConfig(anyString())).thenReturn(config);
+        }
+
+        private int attemptsFor(org.springframework.http.HttpMethod method, Map<String, Object> config) {
+            enableRetry(config);
+            when(chain.filter(any()))
+                    .thenReturn(Mono.error(new java.net.ConnectException("Connection refused")))
+                    .thenReturn(Mono.empty());
+            // Without a retry the failure propagates to the caller, which is the point; swallow it
+            // here so the attempt count is what gets asserted.
+            filter.filter(exchangeWithMethod(method), chain).onErrorResume(e -> Mono.empty()).block();
+            return mockingDetails(chain).getInvocations().size();
+        }
+
+        @Test
+        @DisplayName("POST is not retried by default - the upstream may already have applied it")
+        void postIsNotRetriedByDefault() {
+            assertEquals(1, attemptsFor(org.springframework.http.HttpMethod.POST, createEnabledConfig()));
+        }
+
+        @Test
+        @DisplayName("PATCH is not retried by default")
+        void patchIsNotRetriedByDefault() {
+            assertEquals(1, attemptsFor(org.springframework.http.HttpMethod.PATCH, createEnabledConfig()));
+        }
+
+        @Test
+        @DisplayName("RFC 9110 idempotent methods are still retried")
+        void idempotentMethodsAreStillRetried() {
+            for (var method : List.of(org.springframework.http.HttpMethod.GET,
+                    org.springframework.http.HttpMethod.HEAD,
+                    org.springframework.http.HttpMethod.PUT,
+                    org.springframework.http.HttpMethod.DELETE,
+                    org.springframework.http.HttpMethod.OPTIONS)) {
+                var freshChain = mock(GatewayFilterChain.class);
+                var freshFilter = new RetryGlobalFilter(strategyManager, retryProperties);
+                enableRetry(createEnabledConfig());
+                when(freshChain.filter(any()))
+                        .thenReturn(Mono.error(new java.net.ConnectException("Connection refused")))
+                        .thenReturn(Mono.empty());
+                freshFilter.filter(exchangeWithMethod(method), freshChain).block();
+                assertEquals(2, mockingDetails(freshChain).getInvocations().size(),
+                        method + " is idempotent and must still be retried");
+            }
+        }
+
+        @Test
+        @DisplayName("Per-route retryNonIdempotent opts POST back in")
+        void perRouteOverrideRetriesPost() {
+            Map<String, Object> config = createEnabledConfig();
+            config.put("retryNonIdempotent", true);
+            assertEquals(2, attemptsFor(org.springframework.http.HttpMethod.POST, config));
+        }
+
+        @Test
+        @DisplayName("Global default can opt non-idempotent retry in")
+        void globalDefaultOverrideRetriesPost() {
+            when(retryProperties.isDefaultRetryNonIdempotent()).thenReturn(true);
+            assertEquals(2, attemptsFor(org.springframework.http.HttpMethod.POST, createEnabledConfig()));
+        }
+
+        @Test
+        @DisplayName("Explicit false overrides a permissive global default")
+        void explicitFalseBeatsPermissiveGlobalDefault() {
+            when(retryProperties.isDefaultRetryNonIdempotent()).thenReturn(true);
+            Map<String, Object> config = createEnabledConfig();
+            config.put("retryNonIdempotent", false);
+            assertEquals(1, attemptsFor(org.springframework.http.HttpMethod.POST, config));
+        }
+    }
+
     // ============== Helper Methods ==============
 
     private MockServerWebExchange createMockExchange(String path, String routeId) {
