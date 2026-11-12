@@ -47,7 +47,7 @@ const CollectionGuide: React.FC<CollectionGuideProps> = ({ activeDeployMode }) =
               type="success"
               showIcon
               icon={<CheckCircleOutlined />}
-              message={t('access_log.collection_k8s_msg')}
+              title={t('access_log.collection_k8s_msg')}
               description={t('access_log.collection_k8s_desc')}
               style={{ marginBottom: 12 }}
             />
@@ -82,7 +82,7 @@ const CollectionGuide: React.FC<CollectionGuideProps> = ({ activeDeployMode }) =
             <Alert
               type="info"
               showIcon
-              message={t('access_log.collection_docker_msg')}
+              title={t('access_log.collection_docker_msg')}
               description={
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
                   <li><strong>{t('access_log.collection_docker_sidecar')}</strong></li>
@@ -113,7 +113,7 @@ const CollectionGuide: React.FC<CollectionGuideProps> = ({ activeDeployMode }) =
             <Alert
               type="info"
               showIcon
-              message={t('access_log.collection_local_msg')}
+              title={t('access_log.collection_local_msg')}
               description={t('access_log.collection_local_desc')}
               style={{ marginBottom: 12 }}
             />
@@ -139,7 +139,7 @@ const CollectionGuide: React.FC<CollectionGuideProps> = ({ activeDeployMode }) =
             <Alert
               type="warning"
               showIcon
-              message={t('access_log.collection_custom_msg')}
+              title={t('access_log.collection_custom_msg')}
               description={t('access_log.collection_custom_desc')}
               style={{ marginBottom: 12 }}
             />

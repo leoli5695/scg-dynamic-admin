@@ -63,8 +63,8 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
         </Space>
       )}
       placement="right"
-      width={950}
-      destroyOnClose
+      size={950}
+      destroyOnHidden
       onClose={onClose}
       open={open}
       styles={{ body: { padding: 16 } }}
@@ -307,7 +307,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
             <Alert
               type="info"
               showIcon
-              message={t('trace.no_service_trace')}
+              title={t('trace.no_service_trace')}
               description={t('trace.no_service_trace_desc')}
               style={{ marginTop: 16 }}
             />

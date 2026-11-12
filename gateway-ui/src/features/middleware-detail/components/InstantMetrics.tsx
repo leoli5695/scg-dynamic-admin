@@ -84,10 +84,12 @@ const InstantMetrics: React.FC<InstantMetricsProps> = ({ instant }) => {
                       <Statistic
                         title={title}
                         value={formatMetricValue(metric.value, metric.unit, metric.name)}
-                        valueStyle={{
+                        styles={{
+                          content: {
                           color: metric.status === 'healthy' ? palette.success
                             : metric.status === 'warning' ? palette.warning : palette.error,
                           fontSize: 18,
+                        }
                         }}
                       />
                     </Card>

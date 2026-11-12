@@ -239,7 +239,7 @@ const PluginsPage: React.FC = () => {
                 <Statistic
                   title={t('plugins.enabled')}
                   value={stats.enabled}
-                  valueStyle={{ color: '#3f8600' }}
+                  styles={{ content: { color: '#3f8600' } }}
                   prefix={<PlayCircleOutlined />}
                 />
               </Col>
@@ -247,7 +247,7 @@ const PluginsPage: React.FC = () => {
                 <Statistic
                   title={t('plugins.disabled')}
                   value={stats.disabled}
-                  valueStyle={{ color: palette.error }}
+                  styles={{ content: { color: palette.error } }}
                   prefix={<StopOutlined />}
                 />
               </Col>
@@ -255,7 +255,7 @@ const PluginsPage: React.FC = () => {
                 <Statistic
                   title={t('plugins.loaded')}
                   value={stats.loaded}
-                  valueStyle={{ color: palette.primary }}
+                  styles={{ content: { color: palette.primary } }}
                   prefix={<ThunderboltOutlined />}
                 />
               </Col>
@@ -263,7 +263,7 @@ const PluginsPage: React.FC = () => {
                 <Statistic
                   title={t('plugins.registered')}
                   value={stats.registered}
-                  valueStyle={{ color: palette.success }}
+                  styles={{ content: { color: palette.success } }}
                   prefix={<FileTextOutlined />}
                 />
               </Col>

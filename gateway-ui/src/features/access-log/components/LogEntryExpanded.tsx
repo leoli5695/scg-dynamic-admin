@@ -71,7 +71,7 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
       <Descriptions
         size="small"
         column={4}
-        labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
+        styles={{ label: { width: 80, color: 'var(--text-secondary)' } }}
         style={{ marginBottom: 8 }}
       >
         <Descriptions.Item label={t('access_log.time')}>{formatTime(record['@timestamp'])}</Descriptions.Item>
@@ -90,7 +90,7 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
       <Descriptions
         size="small"
         column={3}
-        labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
+        styles={{ label: { width: 80, color: 'var(--text-secondary)' } }}
         style={{ marginBottom: 8 }}
       >
         <Descriptions.Item label={t('access_log.method_label')}>
@@ -108,7 +108,7 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
       <Descriptions
         size="small"
         column={4}
-        labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
+        styles={{ label: { width: 80, color: 'var(--text-secondary)' } }}
         style={{ marginBottom: 8 }}
       >
         <Descriptions.Item label={t('access_log.request_id')}>
@@ -134,7 +134,7 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
         <Descriptions
           size="small"
           column={3}
-          labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
+          styles={{ label: { width: 80, color: 'var(--text-secondary)' } }}
           style={{ marginBottom: 8 }}
         >
           {record.authType && <Descriptions.Item label={t('access_log.auth')}><Tag color="purple">{record.authType}</Tag></Descriptions.Item>}
@@ -148,7 +148,7 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
         <Descriptions
           size="small"
           column={2}
-          labelStyle={{ width: 80, color: 'var(--text-secondary)' }}
+          styles={{ label: { width: 80, color: 'var(--text-secondary)' } }}
           style={{ marginBottom: 8 }}
         >
           {record.routeId && (
@@ -206,7 +206,7 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
 
       {record.errorMessage && (
         <Alert
-          message={t('access_log.error_info')}
+          title={t('access_log.error_info')}
           description={record.errorMessage}
           type="error"
           showIcon

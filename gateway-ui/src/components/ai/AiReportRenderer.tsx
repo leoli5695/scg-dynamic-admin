@@ -535,7 +535,7 @@ const createComponents = (): Components => ({
             background: 'rgba(76, 128, 236, 0.1)',
             border: `1px solid rgba(76, 128, 236, 0.3)`,
           }}
-          message={<Text style={{ color: 'rgba(255,255,255,0.85)' }}>{content}</Text>}
+          title={<Text style={{ color: 'rgba(255,255,255,0.85)' }}>{content}</Text>}
         />
       );
     }
@@ -646,7 +646,7 @@ const createComponents = (): Components => ({
         background: 'rgba(76, 128, 236, 0.1)',
         border: `1px solid rgba(76, 128, 236, 0.3)`,
       }}
-      message={<div style={{ color: 'rgba(255,255,255,0.85)' }}>{children}</div>}
+      title={<div style={{ color: 'rgba(255,255,255,0.85)' }}>{children}</div>}
     />
   ),
 

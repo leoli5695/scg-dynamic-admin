@@ -113,9 +113,9 @@ function RequestQuery({ instanceId }: { instanceId: string }) {
         { key: 'traces', label: t('requestSearch.traces') },
         { key: 'logs', label: t('requestSearch.logs') },
       ]} />
-      <Alert type="info" showIcon message={t(`requestSearch.${query.source}Hint`)} style={{ marginBottom: 16 }} />
-      {query.error ? <Alert type="error" showIcon message={t(`requestSearch.invalid.${query.error}`)} />
-        : request.error ? <Alert type="error" showIcon message={t('requestSearch.loadFailed')} description={request.error.message}
+      <Alert type="info" showIcon title={t(`requestSearch.${query.source}Hint`)} style={{ marginBottom: 16 }} />
+      {query.error ? <Alert type="error" showIcon title={t(`requestSearch.invalid.${query.error}`)} />
+        : request.error ? <Alert type="error" showIcon title={t('requestSearch.loadFailed')} description={request.error.message}
           action={<Button onClick={request.run}>{t('common.refresh')}</Button>} />
         : <Table<RequestRow> rowKey="key" loading={request.loading} dataSource={request.data?.rows ?? []} scroll={{ x: 1000 }}
           locale={{ emptyText: t('requestSearch.empty') }} pagination={{

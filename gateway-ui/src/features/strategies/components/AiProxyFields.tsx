@@ -346,7 +346,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
         confirmLoading={creating}
         okText={t('common.create', { defaultValue: '创建' })}
         cancelText={t('common.cancel', { defaultValue: '取消' })}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={credForm} layout="vertical">
           <Form.Item name="name" label={t('strategy.ai.cred_name', { defaultValue: '凭据名称' })} rules={[{ required: true }]}>

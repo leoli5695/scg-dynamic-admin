@@ -182,8 +182,8 @@ test('unsampled requests display access-log evidence without enabling trace repl
     const h = journey({ request: { data: { trace: null, accessLog, usage: [] }, loading: false, run() {} } });
     const tree = h.render();
     assert.ok(byType(tree, 'Card').some(card => card.props.title === 'journey.accessLog'));
-    assert.ok(byType(tree, 'Alert').some(alert => alert.props.message === 'journey.result.logOnly'));
-    assert.ok(!byType(tree, 'Alert').some(alert => alert.props.message === 'journey.result.pending'));
+    assert.ok(byType(tree, 'Alert').some(alert => alert.props.title === 'journey.result.logOnly'));
+    assert.ok(!byType(tree, 'Alert').some(alert => alert.props.title === 'journey.result.pending'));
     const items = byType(tree, 'Descriptions')[0].props.items;
     assert.equal(items.find(item => item.key === 'path').children, 'GET /recorded');
     assert.equal(items.find(item => item.key === 'latency').children, '37 ms');
@@ -205,7 +205,7 @@ test('access-log fallback does not replace trace evidence or imply AI metering e
   assert.equal(byType(h.render(), 'Descriptions')[0].props.items.find(item => item.key === 'path').children, 'POST /ai/chat');
   h.unmount();
   const ai = journey({ request: { data: { trace: null, accessLog, usage: [] }, loading: false, run() {} }, route: { data: { category: 'AI' } } });
-  assert.ok(byType(ai.render(), 'Alert').some(alert => alert.props.message === 'journey.result.usageMissing'));
+  assert.ok(byType(ai.render(), 'Alert').some(alert => alert.props.title === 'journey.result.usageMissing'));
   assert.equal(button(ai.render(), 'journey.editAndResend').props.disabled, true);
   ai.unmount();
 });
@@ -293,7 +293,7 @@ test('mount, refresh and preparation never send; editing requires a separate exp
   editor(h).props.onExecute(false, { modifiedPath: '/edited' });
   assert.equal(modal(h).props.open, true);
   assert.equal(modal(h).props.title, 'journey.confirmResendTitle');
-  assert.equal(byType(modal(h), 'Alert')[0].props.message, 'journey.resendWarning');
+  assert.equal(byType(modal(h), 'Alert')[0].props.title, 'journey.resendWarning');
   assert.equal(h.calls.execute.length, 0);
   modal(h).props.onCancel();
   assert.equal(modal(h).props.open, false);
@@ -356,14 +356,14 @@ test('preparation rejects unavailable or mismatched data and shows failures with
     const h = journey({ api: { prepare: async () => response } });
     await prepare(h);
     assert.equal(editor(h), undefined);
-    assert.ok(byType(h.render(), 'Alert').some(node => node.props.message === expected));
+    assert.ok(byType(h.render(), 'Alert').some(node => node.props.title === expected));
     assert.equal(h.calls.execute.length, 0);
     if (!response.replayable) assert.equal(button(h.render(), 'journey.editAndResend').props.disabled, true);
     h.unmount();
   }
   const h = journey({ api: { prepare: async () => { throw new Error('offline'); } } });
   await prepare(h);
-  assert.ok(byType(h.render(), 'Alert').some(node => node.props.message === 'journey.replayPrepareError offline'));
+  assert.ok(byType(h.render(), 'Alert').some(node => node.props.title === 'journey.replayPrepareError offline'));
   assert.equal(button(h.render(), 'journey.editAndResend').props.loading, false);
   h.api.prepare = async () => editable;
   await prepare(h);
@@ -377,7 +377,7 @@ test('execution failures stay visible in confirmation and never automatically re
   await confirmation.props.onOk();
   assert.equal(modal(h).props.open, true);
   assert.equal(modal(h).props.confirmLoading, false);
-  assert.ok(byType(modal(h), 'Alert').some(node => node.props.message === 'journey.replayExecuteError connection lost'));
+  assert.ok(byType(modal(h), 'Alert').some(node => node.props.title === 'journey.replayExecuteError connection lost'));
   h.render();
   assert.equal(h.calls.execute.length, 1);
   assert.ok(editor(h));
@@ -389,7 +389,7 @@ test('unsuccessful replay responses show result and error feedback', async () =>
   const h = journey({ api: { execute: async () => failed } });
   await (await confirm(h)).props.onOk();
   assert.equal(byType(h.render(), 'ReplayResultModal')[0].props.result, failed);
-  assert.ok(byType(h.render(), 'Alert').some(node => node.props.message === 'journey.replayFailed upstream response'));
+  assert.ok(byType(h.render(), 'Alert').some(node => node.props.title === 'journey.replayFailed upstream response'));
   h.unmount();
 });
 

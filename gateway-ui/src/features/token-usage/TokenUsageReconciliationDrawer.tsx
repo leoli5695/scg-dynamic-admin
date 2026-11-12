@@ -169,7 +169,7 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
   return (
     <Drawer
       open
-      width={620}
+      size={620}
       title={t(unresolved ? 'tokenUsage.reconcile.title' : 'tokenUsage.details.title')}
       onClose={onClose}
     >
@@ -234,12 +234,12 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
         ]}
       />
       {quota.loading ? (
-        <Spin tip={t('tokenUsage.reconcile.quotaLoading')}><div style={{ minHeight: 48 }} /></Spin>
+        <Spin description={t('tokenUsage.reconcile.quotaLoading')}><div style={{ minHeight: 48 }} /></Spin>
       ) : quota.error ? (
         <Alert
           type="warning"
           showIcon
-          message={t('tokenUsage.reconcile.quotaError')}
+          title={t('tokenUsage.reconcile.quotaError')}
           description={quota.error.message}
           action={<Button onClick={quota.run}>{t('tokenUsage.reconcile.refresh')}</Button>}
           style={{ marginTop: 16 }}
@@ -307,21 +307,21 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
           ]}
         />
       </details>
-      {error && <Alert type="error" showIcon message={error} style={{ marginTop: 16 }} />}
+      {error && <Alert type="error" showIcon title={error} style={{ marginTop: 16 }} />}
       {request.loading ? (
         <Spin />
       ) : request.error ? (
         <Alert
           type="error"
-          message={request.error.message}
+          title={request.error.message}
           action={<Button onClick={request.run}>{t('tokenUsage.reconcile.refresh')}</Button>}
         />
       ) : command ? (
-        <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+        <Space orientation="vertical" style={{ width: '100%', marginTop: 16 }}>
           <Alert
             type={command.status === 'APPLIED' ? 'success' : 'warning'}
             showIcon
-            message={t(`tokenUsage.reconcile.${command.status}`)}
+            title={t(`tokenUsage.reconcile.${command.status}`)}
             description={command.last_error}
           />
           <Descriptions
@@ -370,13 +370,13 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
               </pre>
             </details>
           ) : (
-            <Alert type="info" message={t('tokenUsage.reconcile.noSnapshot')} />
+            <Alert type="info" title={t('tokenUsage.reconcile.noSnapshot')} />
           )}
         </Space>
       ) : unresolved && ledgerPending ? (
         <Alert
           type="info"
-          message={t('tokenUsage.reconcile.ledgerPending')}
+          title={t('tokenUsage.reconcile.ledgerPending')}
           style={{ marginTop: 16 }}
         />
       ) : unresolved && canWrite ? (
@@ -399,13 +399,13 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
           <Alert
             type="warning"
             showIcon
-            message={t('tokenUsage.reconcile.instructions')}
+            title={t('tokenUsage.reconcile.instructions')}
             style={{ marginBottom: 16 }}
           />
           {!monthly && !daily && (
             <Alert
               type="info"
-              message={t('tokenUsage.reconcile.noPeriod')}
+              title={t('tokenUsage.reconcile.noPeriod')}
               style={{ marginBottom: 16 }}
             />
           )}
@@ -475,13 +475,13 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
       ) : unresolved ? (
         <Alert
           type="info"
-          message={t('tokenUsage.reconcile.unavailable')}
+          title={t('tokenUsage.reconcile.unavailable')}
           style={{ marginTop: 16 }}
         />
       ) : meteringOnly ? (
         <Alert
           type="info"
-          message={t('tokenUsage.reconcile.meteringOnly')}
+          title={t('tokenUsage.reconcile.meteringOnly')}
           style={{ marginTop: 16 }}
         />
       ) : null}

@@ -43,7 +43,7 @@ const AnalysisModal: React.FC<Props> = ({ open, testId, loading, content, onClos
             <AiReportRenderer content={content} />
           </div>
         ) : (
-          <Alert type="info" message={t('stress_test.waiting_analysis')} showIcon />
+          <Alert type="info" title={t('stress_test.waiting_analysis')} showIcon />
         )}
       </Spin>
     </Modal>

@@ -20,7 +20,7 @@ export const FeatureDetailDrawer: React.FC<FeatureDetailDrawerProps> = ({ featur
       </Space>
     }
     placement="right"
-    width={480}
+    size={480}
     open={!!feature}
     onClose={onClose}
     destroyOnHidden
@@ -95,7 +95,7 @@ export const FeatureDetailDrawer: React.FC<FeatureDetailDrawerProps> = ({ featur
         {feature.requiredEdition !== 'BASIC' && !feature.enabled && (
           <Alert
             type="info"
-            message="升级提示"
+            title="升级提示"
             description={`此功能需要 ${EDITION_CONFIG[feature.requiredEdition].label} 才可使用，请联系商务获取 License Code。`}
             showIcon
             style={{ marginTop: 16 }}

@@ -640,7 +640,7 @@ const FilterChainPage: React.FC = () => {
 
       {error && (
         <Alert
-          message={t('common.error')}
+          title={t('common.error')}
           description={error}
           type="error"
           showIcon
@@ -652,9 +652,9 @@ const FilterChainPage: React.FC = () => {
 
       {/* Data source notice */}
       <Alert
-        message="数据来源说明"
+        title="数据来源说明"
         description={(
-          <Space direction="vertical" size={0}>
+          <Space orientation="vertical" size={0}>
             <Text style={{ fontSize: 12 }}>• 数据来源：网关实例内存实时数据，不持久化到数据库</Text>
             <Text style={{ fontSize: 12 }}>• 历史窗口：保留最近60分钟的性能快照（每分钟采集一次）</Text>
             <Text style={{ fontSize: 12 }}>• 重启影响：网关实例重启后，统计数据和历史记录将清空</Text>
@@ -672,7 +672,7 @@ const FilterChainPage: React.FC = () => {
             <Statistic
               title={<span style={{ color: palette.textTertiary }}>{t('filterChain.total_executions')}</span>}
               value={totalExecutions}
-              valueStyle={{ fontSize: 20 }}
+              styles={{ content: { fontSize: 20 } }}
             />
           </Card>
         </Col>
@@ -682,7 +682,9 @@ const FilterChainPage: React.FC = () => {
               title={<span style={{ color: palette.textTertiary }}>{t('filterChain.success_rate')}</span>}
               value={overallSuccessRate}
               suffix="%"
-              valueStyle={{ fontSize: 20, color: parseFloat(overallSuccessRate) >= 99 ? palette.success : palette.warning }}
+              styles={{
+                content: { fontSize: 20, color: parseFloat(overallSuccessRate) >= 99 ? palette.success : palette.warning }
+              }}
             />
           </Card>
         </Col>
@@ -691,7 +693,9 @@ const FilterChainPage: React.FC = () => {
             <Statistic
               title={<span style={{ color: palette.textTertiary }}>{t('filterChain.failures')}</span>}
               value={totalFailures}
-              valueStyle={{ fontSize: 20, color: totalFailures > 0 ? palette.error : palette.success }}
+              styles={{
+                content: { fontSize: 20, color: totalFailures > 0 ? palette.error : palette.success }
+              }}
             />
           </Card>
         </Col>
@@ -700,7 +704,7 @@ const FilterChainPage: React.FC = () => {
             <Statistic
               title={<span style={{ color: palette.textTertiary }}>{t('filterChain.filter_count')}</span>}
               value={filterStats.length}
-              valueStyle={{ fontSize: 20 }}
+              styles={{ content: { fontSize: 20 } }}
             />
           </Card>
         </Col>
@@ -734,7 +738,9 @@ const FilterChainPage: React.FC = () => {
                   title="平均自身耗时"
                   value={avgSelfTime}
                   suffix="ms"
-                  valueStyle={{ fontSize: 16, color: parseFloat(avgSelfTime) < 1 ? palette.success : palette.warning }}
+                  styles={{
+                    content: { fontSize: 16, color: parseFloat(avgSelfTime) < 1 ? palette.success : palette.warning }
+                  }}
                 />
               </Col>
               <Col span={8}>
@@ -742,7 +748,9 @@ const FilterChainPage: React.FC = () => {
                   title="P95耗时"
                   value={avgP95}
                   suffix="ms"
-                  valueStyle={{ fontSize: 16, color: parseFloat(avgP95) < 5 ? palette.success : palette.warning }}
+                  styles={{
+                    content: { fontSize: 16, color: parseFloat(avgP95) < 5 ? palette.success : palette.warning }
+                  }}
                 />
               </Col>
               <Col span={8}>
@@ -750,7 +758,9 @@ const FilterChainPage: React.FC = () => {
                   title="P99耗时"
                   value={avgP99}
                   suffix="ms"
-                  valueStyle={{ fontSize: 16, color: parseFloat(avgP99) < 10 ? palette.success : palette.warning }}
+                  styles={{
+                    content: { fontSize: 16, color: parseFloat(avgP99) < 10 ? palette.success : palette.warning }
+                  }}
                 />
               </Col>
             </Row>
@@ -857,14 +867,16 @@ const FilterChainPage: React.FC = () => {
               <Statistic
                 title={t('filterChain.success')}
                 value={selectedRecord.successCount}
-                valueStyle={{ color: palette.success }}
+                styles={{ content: { color: palette.success } }}
               />
             </Col>
             <Col span={6}>
               <Statistic
                 title={t('filterChain.failures')}
                 value={selectedRecord.failureCount}
-                valueStyle={{ color: selectedRecord.failureCount > 0 ? palette.error : palette.success }}
+                styles={{
+                  content: { color: selectedRecord.failureCount > 0 ? palette.error : palette.success }
+                }}
               />
             </Col>
           </Row>
@@ -961,7 +973,7 @@ const FilterChainPage: React.FC = () => {
         onCancel={() => setShowExportModal(false)}
         footer={null}
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
           <Button block icon={<DownloadOutlined />} onClick={() => exportData('json')}>
             导出JSON文件 (完整数据)
           </Button>

@@ -176,7 +176,7 @@ const MonitorPage: React.FC = () => {
 
       {viewMode === 'historical' && (
         <Alert
-          message={t('monitor.historical_mode_hint')}
+          title={t('monitor.historical_mode_hint')}
           description={t('monitor.historical_mode_desc_simple', { hours: historyHoursForHistorical })}
           type="info"
           showIcon
@@ -187,7 +187,7 @@ const MonitorPage: React.FC = () => {
 
       {!prometheusAvailable && (
         <Alert
-          message={t('monitor.prometheus_unavailable')}
+          title={t('monitor.prometheus_unavailable')}
           description={t('monitor.prometheus_unavailable_desc')}
           type="warning"
           showIcon
@@ -196,7 +196,7 @@ const MonitorPage: React.FC = () => {
       )}
       {metricsRequest.error && (
         <Alert
-          message={t('common.error')}
+          title={t('common.error')}
           description={metricsRequest.error.message}
           type="error"
           showIcon

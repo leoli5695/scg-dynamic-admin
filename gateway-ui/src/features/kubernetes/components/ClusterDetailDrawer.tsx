@@ -273,7 +273,7 @@ export const ClusterDetailDrawer: React.FC<ClusterDetailDrawerProps> = ({ cluste
       dataIndex: 'containers',
       key: 'containers',
       render: (containers: KubernetesPodInfo['containers']) => (
-        <Space direction="vertical" size="small" style={{ margin: 0 }}>
+        <Space orientation="vertical" size="small" style={{ margin: 0 }}>
           {containers?.map(c => (
             <Tag key={c.name} className="pod-container-tag" color={c.ready ? 'green' : 'red'}>
               {c.name} ({c.restartCount})
@@ -328,7 +328,7 @@ export const ClusterDetailDrawer: React.FC<ClusterDetailDrawerProps> = ({ cluste
         </Space>
       }
       placement="right"
-      width={720}
+      size={720}
       open={!!cluster}
       onClose={onClose}
       destroyOnHidden

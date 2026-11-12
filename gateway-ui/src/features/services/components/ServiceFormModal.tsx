@@ -126,7 +126,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
       mask={{ closable: false }}
       closable={!submitting}
       keyboard={!submitting}
-      focusTriggerAfterClose
+      focusable={{ focusTriggerAfterClose: true }}
     >
       <Form
         form={form}
@@ -249,7 +249,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                 type="warning"
                 showIcon
                 icon={<ExclamationCircleOutlined />}
-                message={instances.length === 0 ? t('services.modal_no_instances_warning') : t('services.modal_all_disabled_warning')}
+                title={instances.length === 0 ? t('services.modal_no_instances_warning') : t('services.modal_all_disabled_warning')}
                 className="modal-instances-warning"
               />
             )}

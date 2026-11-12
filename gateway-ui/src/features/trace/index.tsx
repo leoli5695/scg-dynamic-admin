@@ -368,12 +368,12 @@ const TracePage: React.FC = () => {
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card className="tracing-stat-card" size="small">
-            <Statistic title={t('trace.errors_today')} value={stats?.errorsToday || 0} valueStyle={{ color: palette.error }} />
+            <Statistic title={t('trace.errors_today')} value={stats?.errorsToday || 0} styles={{ content: { color: palette.error } }} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card className="tracing-stat-card" size="small">
-            <Statistic title={t('trace.errors_last_hour')} value={stats?.errorsLastHour || 0} valueStyle={{ color: palette.warning }} />
+            <Statistic title={t('trace.errors_last_hour')} value={stats?.errorsLastHour || 0} styles={{ content: { color: palette.warning } }} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -412,7 +412,7 @@ const TracePage: React.FC = () => {
                 format="YYYY-MM-DD HH:mm"
                 getPopupContainer={(triggerNode) => triggerNode.parentNode as HTMLElement}
                 placement="bottomLeft"
-                popupStyle={{ zIndex: 9999 }}
+                styles={{ popup: { root: { zIndex: 9999 } } }}
                 style={{ width: 280 }}
               />
             </Col>
@@ -464,7 +464,7 @@ const TracePage: React.FC = () => {
           <Col>
             <Dropdown
               trigger={['click']}
-              dropdownRender={() => (
+              popupRender={() => (
                 <Card size="small" style={{ width: 200, padding: 8 }}>
                   <Text strong style={{ marginBottom: 8, display: 'block' }}>{t('trace.visible_columns')}</Text>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

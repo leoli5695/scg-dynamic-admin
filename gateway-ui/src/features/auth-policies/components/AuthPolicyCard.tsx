@@ -89,7 +89,7 @@ const AuthPolicyCard: React.FC<AuthPolicyCardProps> = ({
           <Tooltip
             title={t(descKey)}
             placement="bottom"
-            overlayStyle={{ maxWidth: '350px' }}
+            styles={{ root: { maxWidth: '350px' } }}
             align={{ offset: [8, 0] }}
           >
             <QuestionCircleOutlined style={{ marginLeft: 4, color: palette.textMuted, cursor: 'pointer' }} />

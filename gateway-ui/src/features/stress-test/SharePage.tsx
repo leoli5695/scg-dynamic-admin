@@ -116,7 +116,7 @@ const StressTestSharePage: React.FC = () => {
       >
         <Alert
           type="error"
-          message="Report Not Available"
+          title="Report Not Available"
           description={error}
           showIcon
         />

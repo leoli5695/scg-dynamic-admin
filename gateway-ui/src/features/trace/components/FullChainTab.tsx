@@ -174,7 +174,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
           type={traceConfig.gateway?.reported ? 'info' : 'warning'}
           showIcon
           style={{ marginBottom: 12 }}
-          message={(
+          title={(
             <Space>
               <span>采样配置提示</span>
               {traceConfig.gateway?.reported ? (

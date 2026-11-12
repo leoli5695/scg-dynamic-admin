@@ -104,7 +104,7 @@ export const ImportClusterModal: React.FC<ImportClusterModalProps> = ({
       <Alert
         type="info"
         showIcon
-        message={t('k8s.import_info')}
+        title={t('k8s.import_info')}
         style={{ marginBottom: 16 }}
       />
       <Form form={form} layout="vertical">
@@ -158,7 +158,7 @@ export const ImportClusterModal: React.FC<ImportClusterModalProps> = ({
             type={testResult.success ? 'success' : 'error'}
             showIcon
             style={{ marginBottom: 16 }}
-            message={testResult.success ? t('k8s.test_success') : t('k8s.test_failed')}
+            title={testResult.success ? t('k8s.test_success') : t('k8s.test_failed')}
             description={
               testResult.success ? (
                 <div>

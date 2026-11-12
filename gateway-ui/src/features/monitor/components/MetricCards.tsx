@@ -41,7 +41,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                   value={formatBytes(metrics?.jvmMemory?.heapUsed || 0).value}
                   suffix={formatBytes(metrics?.jvmMemory?.heapUsed || 0).unit}
                   precision={2}
-                  valueStyle={{ fontSize: 14 }}
+                  styles={{ content: { fontSize: 14 } }}
                 />
               </Col>
               <Col span={12}>
@@ -50,7 +50,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                   value={formatBytes(metrics?.jvmMemory?.heapMax || 0).value}
                   suffix={formatBytes(metrics?.jvmMemory?.heapMax || 0).unit}
                   precision={2}
-                  valueStyle={{ fontSize: 14 }}
+                  styles={{ content: { fontSize: 14 } }}
                 />
               </Col>
             </Row>
@@ -123,7 +123,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
               </Tag>
               {gc?.healthStatus !== 'HEALTHY' && gc?.healthReason && (
                 <Alert
-                  message={gc.healthReason}
+                  title={gc.healthReason}
                   type={gc.healthStatus === 'WARNING' ? 'warning' : 'error'}
                   showIcon
                   style={{ marginTop: 8, fontSize: 12 }}
@@ -135,10 +135,10 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
             </div>
             <Row gutter={8}>
               <Col span={12}>
-                <Statistic title={t('monitor.gc_count')} value={gc?.gcCount || 0} suffix={t('monitor.times')} valueStyle={{ fontSize: 14 }} />
+                <Statistic title={t('monitor.gc_count')} value={gc?.gcCount || 0} suffix={t('monitor.times')} styles={{ content: { fontSize: 14 } }} />
               </Col>
               <Col span={12}>
-                <Statistic title={t('monitor.gc_time')} value={gc?.gcTimeSeconds?.toFixed(2) || '0'} suffix="s" valueStyle={{ fontSize: 14 }} />
+                <Statistic title={t('monitor.gc_time')} value={gc?.gcTimeSeconds?.toFixed(2) || '0'} suffix="s" styles={{ content: { fontSize: 14 } }} />
               </Col>
             </Row>
             <Divider style={{ margin: '8px 0' }} />
@@ -146,7 +146,9 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
               title={t('monitor.gc_overhead')}
               value={gc?.gcOverheadPercent?.toFixed(2) || '0'}
               suffix="%"
-              valueStyle={{ fontSize: 14, color: (gc?.gcOverheadPercent || 0) > 10 ? palette.error : palette.success }}
+              styles={{
+                content: { fontSize: 14, color: (gc?.gcOverheadPercent || 0) > 10 ? palette.error : palette.success }
+              }}
             />
             {gc?.gcByType && (
               <>
@@ -221,7 +223,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                   title={t('monitor.allocation_rate')}
                   value={gc.allocationRateMBPerSec.toFixed(2)}
                   suffix="MB/s"
-                  valueStyle={{ fontSize: 14 }}
+                  styles={{ content: { fontSize: 14 } }}
                 />
               </>
             )}
@@ -234,7 +236,9 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                       title={t('monitor.promotion_rate')}
                       value={gc.promotionRateMBPerSec.toFixed(2)}
                       suffix="MB/s"
-                      valueStyle={{ fontSize: 14, color: gc.promotionRateMBPerSec > 10 ? palette.warning : palette.success }}
+                      styles={{
+                        content: { fontSize: 14, color: gc.promotionRateMBPerSec > 10 ? palette.warning : palette.success }
+                      }}
                     />
                   </Col>
                   <Col span={12}>
@@ -242,7 +246,9 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                       title={t('monitor.promotion_ratio')}
                       value={gc.promotionRatio?.toFixed(1) || '0'}
                       suffix="%"
-                      valueStyle={{ fontSize: 14, color: (gc.promotionRatio || 0) > 30 ? palette.warning : palette.success }}
+                      styles={{
+                        content: { fontSize: 14, color: (gc.promotionRatio || 0) > 30 ? palette.warning : palette.success }
+                      }}
                     />
                   </Col>
                 </Row>
@@ -257,19 +263,21 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
               title={t('monitor.requests_per_second')}
               value={Number(metrics?.httpRequests?.requestsPerSecond || 0).toFixed(2)}
               suffix={t('monitor.per_second')}
-              valueStyle={{ color: palette.primary, fontSize: 20 }}
+              styles={{ content: { color: palette.primary, fontSize: 20 } }}
             />
             <Divider style={{ margin: '8px 0' }} />
             <Row gutter={8}>
               <Col span={12}>
-                <Statistic title={t('monitor.avg_response_time')} value={metrics?.httpRequests?.avgResponseTimeMs || 0} suffix="ms" valueStyle={{ fontSize: 14 }} />
+                <Statistic title={t('monitor.avg_response_time')} value={metrics?.httpRequests?.avgResponseTimeMs || 0} suffix="ms" styles={{ content: { fontSize: 14 } }} />
               </Col>
               <Col span={12}>
                 <Statistic
                   title={t('monitor.error_rate')}
                   value={metrics?.httpRequests?.errorRate?.toFixed(2) || '0.00'}
                   suffix="%"
-                  valueStyle={{ fontSize: 14, color: (metrics?.httpRequests?.errorRate || 0) > 1 ? palette.error : palette.success }}
+                  styles={{
+                    content: { fontSize: 14, color: (metrics?.httpRequests?.errorRate || 0) > 1 ? palette.error : palette.success }
+                  }}
                 />
               </Col>
             </Row>
@@ -291,7 +299,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                 {metrics?.cpu?.systemLoadAverage || 0}
               </Text>
             </div>
-            <Statistic title={t('monitor.available_processors')} value={metrics?.cpu?.availableProcessors || 0} valueStyle={{ fontSize: 14 }} />
+            <Statistic title={t('monitor.available_processors')} value={metrics?.cpu?.availableProcessors || 0} styles={{ content: { fontSize: 14 } }} />
           </Card>
         </Col>
       </Row>
@@ -302,15 +310,15 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
             <Statistic
               title={t('monitor.live_threads')}
               value={metrics?.threads?.liveThreads || 0}
-              valueStyle={{ fontSize: 16, color: palette.primary }}
+              styles={{ content: { fontSize: 16, color: palette.primary } }}
             />
             <Divider style={{ margin: '8px 0' }} />
             <Row gutter={8}>
               <Col span={12}>
-                <Statistic title={t('monitor.daemon_threads')} value={metrics?.threads?.daemonThreads || 0} valueStyle={{ fontSize: 14 }} />
+                <Statistic title={t('monitor.daemon_threads')} value={metrics?.threads?.daemonThreads || 0} styles={{ content: { fontSize: 14 } }} />
               </Col>
               <Col span={12}>
-                <Statistic title={t('monitor.peak_threads')} value={metrics?.threads?.peakThreads || 0} valueStyle={{ fontSize: 14 }} />
+                <Statistic title={t('monitor.peak_threads')} value={metrics?.threads?.peakThreads || 0} styles={{ content: { fontSize: 14 } }} />
               </Col>
             </Row>
             {metrics?.threads && (
@@ -329,14 +337,14 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
             <Statistic
               title={t('monitor.uptime')}
               value={metrics?.process?.uptimeFormatted || '0h 0m 0s'}
-              valueStyle={{ fontSize: 16 }}
+              styles={{ content: { fontSize: 16 } }}
             />
             <Divider style={{ margin: '8px 0' }} />
             <Statistic
               title={t('monitor.uptime_seconds')}
               value={metrics?.process?.uptimeSeconds || 0}
               suffix="s"
-              valueStyle={{ fontSize: 14 }}
+              styles={{ content: { fontSize: 14 } }}
             />
           </Card>
         </Col>
@@ -348,7 +356,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
               value={formatBytes(metrics?.jvmMemory?.nonHeapUsed || 0).value}
               suffix={formatBytes(metrics?.jvmMemory?.nonHeapUsed || 0).unit}
               precision={2}
-              valueStyle={{ fontSize: 16 }}
+              styles={{ content: { fontSize: 16 } }}
             />
             <Divider style={{ margin: '8px 0' }} />
             <Text type="secondary" style={{ fontSize: 12 }}>
@@ -362,7 +370,9 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
             <Statistic
               title={t('monitor.error_count')}
               value={metrics?.logEvents?.errorCount || 0}
-              valueStyle={{ fontSize: 16, color: (metrics?.logEvents?.errorCount || 0) > 100 ? palette.error : palette.success }}
+              styles={{
+                content: { fontSize: 16, color: (metrics?.logEvents?.errorCount || 0) > 100 ? palette.error : palette.success }
+              }}
             />
             <Divider style={{ margin: '8px 0' }} />
             <Row gutter={8}>
@@ -370,14 +380,16 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
                 <Statistic
                   title={t('monitor.warn_count')}
                   value={metrics?.logEvents?.warnCount || 0}
-                  valueStyle={{ fontSize: 14, color: (metrics?.logEvents?.warnCount || 0) > 50 ? palette.warning : 'inherit' }}
+                  styles={{
+                    content: { fontSize: 14, color: (metrics?.logEvents?.warnCount || 0) > 50 ? palette.warning : 'inherit' }
+                  }}
                 />
               </Col>
               <Col span={8}>
-                <Statistic title={t('monitor.info_count')} value={metrics?.logEvents?.infoCount || 0} valueStyle={{ fontSize: 14 }} />
+                <Statistic title={t('monitor.info_count')} value={metrics?.logEvents?.infoCount || 0} styles={{ content: { fontSize: 14 } }} />
               </Col>
               <Col span={8}>
-                <Statistic title={t('monitor.uptime')} value={metrics?.process?.uptimeFormatted || '0h 0m'} valueStyle={{ fontSize: 14 }} />
+                <Statistic title={t('monitor.uptime')} value={metrics?.process?.uptimeFormatted || '0h 0m'} styles={{ content: { fontSize: 14 } }} />
               </Col>
             </Row>
           </Card>

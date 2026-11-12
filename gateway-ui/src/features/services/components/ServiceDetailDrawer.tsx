@@ -54,9 +54,8 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
       closable={false}
       onClose={onClose}
       className="service-detail-drawer"
-      mask
-      maskClosable
-      destroyOnClose
+      mask={{ enabled: true, closable: true }}
+      destroyOnHidden
       style={{ zIndex: 999 }}
     >
       <div className="drawer-content">

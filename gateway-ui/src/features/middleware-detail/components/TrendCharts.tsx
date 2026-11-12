@@ -27,7 +27,7 @@ const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, t
         <Alert
           type="info"
           showIcon
-          message="RocketMQ Console API 不支持历史趋势数据"
+          title="RocketMQ Console API 不支持历史趋势数据"
           description="Console API 仅提供实时数据，无法获取历史时间序列。下方显示当前各消费组的实时堆积情况。"
           style={{ marginBottom: 16 }}
         />

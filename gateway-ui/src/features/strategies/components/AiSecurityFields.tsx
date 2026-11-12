@@ -22,7 +22,7 @@ function KeyValueFields({ name, label }: { name: string; label: string }) {
 
 export function AiSecurityFields() {
   return <>
-    <Alert type="info" showIcon style={{ marginBottom: 16 }} message="未配置外部服务时使用本地词表、正则和个人信息规则。内置检测不具备语义理解能力，不提供默认违禁词库。仅审核文本，不识别图片、音视频或文件内容。" />
+    <Alert type="info" showIcon style={{ marginBottom: 16 }} title="未配置外部服务时使用本地词表、正则和个人信息规则。内置检测不具备语义理解能力，不提供默认违禁词库。仅审核文本，不识别图片、音视频或文件内容。" />
     <Row gutter={16}>
       <Col span={12}><Form.Item name="scanRequest" label="审核请求" valuePropName="checked" initialValue={true}><Switch /></Form.Item></Col>
       <Col span={12}><Form.Item name="scanResponse" label="审核响应" valuePropName="checked" initialValue={true}><Switch /></Form.Item></Col>
@@ -49,7 +49,7 @@ export function AiSecurityFields() {
       <Col span={12}><Form.Item name="responseTimeoutMs" label="完整响应等待上限（ms）" initialValue={60000}><InputNumber min={1000} max={300000} style={{ width: '100%' }} /></Form.Item></Col>
     </Row>
     <Typography.Title level={5}>外部审核（可选）</Typography.Title>
-    <Alert type="info" showIcon style={{ marginBottom: 16 }} message="适配器由开发人员实现并随网关部署，负责请求构造、签名和响应判定。此处无需编写转换脚本。HTTP_JSON 仅支持约定协议，并非蚂蚁天鉴等服务的专用适配器。地址留空仅使用内置检测。" />
+    <Alert type="info" showIcon style={{ marginBottom: 16 }} title="适配器由开发人员实现并随网关部署，负责请求构造、签名和响应判定。此处无需编写转换脚本。HTTP_JSON 仅支持约定协议，并非蚂蚁天鉴等服务的专用适配器。地址留空仅使用内置检测。" />
     <Form.Item name="externalUrl" label="审核服务地址"><Input placeholder="https://moderation.example/check，留空关闭外部调用" /></Form.Item>
     <Form.Item name="externalAdapter" label="已部署的 Java 适配器标识" initialValue="HTTP_JSON" rules={[{ pattern: /^[A-Za-z0-9_]{1,64}$/, message: '只支持字母、数字和下划线' }]}><Input /></Form.Item>
     <KeyValueFields name="externalHeaderRows" label="请求头（凭证建议填写网关环境变量引用）" />

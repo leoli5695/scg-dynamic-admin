@@ -296,7 +296,7 @@ const StressTestPage: React.FC = () => {
             style={{ width: '100%' }}
             className="dark-select"
             defaultValue={24}
-            popupClassName="dark-select-dropdown"
+            classNames={{ popup: { root: "dark-select-dropdown" } }}
             options={[
               { value: 1, label: t('stress_test.expires_1h') },
               { value: 24, label: t('stress_test.expires_24h') },

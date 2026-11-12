@@ -217,7 +217,7 @@ const CertificatePage: React.FC = () => {
             <Statistic
               title={t('cert.valid')}
               value={stats?.valid ?? 0}
-              valueStyle={{ color: '#3f8600' }}
+              styles={{ content: { color: '#3f8600' } }}
             />
           </Card>
         </Col>
@@ -226,7 +226,7 @@ const CertificatePage: React.FC = () => {
             <Statistic
               title={t('cert.expiring_soon')}
               value={stats?.expiringSoon ?? 0}
-              valueStyle={{ color: palette.warning }}
+              styles={{ content: { color: palette.warning } }}
             />
           </Card>
         </Col>
@@ -235,7 +235,7 @@ const CertificatePage: React.FC = () => {
             <Statistic
               title={t('cert.expired')}
               value={stats?.expired ?? 0}
-              valueStyle={{ color: palette.error }}
+              styles={{ content: { color: palette.error } }}
             />
           </Card>
         </Col>

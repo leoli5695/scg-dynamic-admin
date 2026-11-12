@@ -302,7 +302,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
           type="info"
           showIcon
           style={{ marginBottom: 16, borderLeft: `4px solid ${palette.primary}` }}
-          message={<Space><CloudServerOutlined />{t('access_log.k8s_viewer_title')}</Space>}
+          title={<Space><CloudServerOutlined />{t('access_log.k8s_viewer_title')}</Space>}
           description={
             <div>
               <div style={{ marginBottom: 8 }}>
@@ -367,7 +367,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message={t('access_log.local_viewer_title')}
+          title={t('access_log.local_viewer_title')}
           description={t('access_log.local_viewer_desc')}
         />
       )}

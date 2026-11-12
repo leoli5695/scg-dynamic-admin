@@ -82,7 +82,7 @@ const BindingFormModal: React.FC<BindingFormModalProps> = ({
     if (!schema.fields || schema.fields.length === 0) {
       return (
         <Alert
-          message={t('plugin_bindings.no_config_info')}
+          title={t('plugin_bindings.no_config_info')}
           description={t('plugin_bindings.no_config_desc')}
           type="info"
         />
@@ -165,7 +165,7 @@ const BindingFormModal: React.FC<BindingFormModalProps> = ({
               <Alert
                 type="info"
                 showIcon
-                message={
+                title={
                   isEdit
                     ? binding?.routeId === GLOBAL_BINDING_ROUTE_ID
                       ? t('plugin_bindings.global')

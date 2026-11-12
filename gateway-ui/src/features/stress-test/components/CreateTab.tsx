@@ -307,7 +307,7 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
   ];
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
       <Collapse
         className="console-template-picker"
         items={[
@@ -347,7 +347,7 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
                         }}
                         style={{ background: 'rgba(255,255,255,0.08)', borderColor: palette.primary }}
                       >
-                        <Space direction="vertical" style={{ width: '100%' }} size="small">
+                        <Space orientation="vertical" style={{ width: '100%' }} size="small">
                           <Space>
                             {template.icon}
                             <Text strong style={{ color: '#fff' }}>
@@ -423,7 +423,7 @@ const CreateTab: React.FC<Props> = ({ creating, onStart }) => {
                   type="info"
                   showIcon
                   style={{ marginBottom: 16 }}
-                  message={t('stress_test.mode_hint_title')}
+                  title={t('stress_test.mode_hint_title')}
                   description={t('stress_test.mode_hint_desc')}
                 />
 

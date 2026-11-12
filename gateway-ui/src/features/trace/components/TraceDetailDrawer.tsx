@@ -174,8 +174,8 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
       )}
       placement="right"
       styles={{ wrapper: { width: 900 }, body: { padding: 16 } }}
-      destroyOnClose
-      maskClosable
+      destroyOnHidden
+      mask={{ closable: true }}
       onClose={onClose}
       open={open}
       extra={(
@@ -213,7 +213,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
                 <Statistic title={t('trace.latency')} value={selectedTrace.latencyMs} suffix="ms" />
               </Col>
               <Col span={4}>
-                <Statistic title={t('trace.client_ip')} valueStyle={{ fontSize: 12 }} value={selectedTrace.clientIp || '-'} />
+                <Statistic title={t('trace.client_ip')} styles={{ content: { fontSize: 12 } }} value={selectedTrace.clientIp || '-'} />
               </Col>
               <Col span={8}>
                 <Statistic title={t('trace.trace_id')} />
@@ -266,7 +266,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
             <Alert
               type={selectedTrace.statusCode >= 500 ? 'error' : 'warning'}
               className="mb-4"
-              message={(
+              title={(
                 <Space>
                   {selectedTrace.errorType && <Tag color="error">{selectedTrace.errorType}</Tag>}
                   <Text>{selectedTrace.errorMessage || t('trace.error_unknown')}</Text>
@@ -392,27 +392,29 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
                   <Statistic
                     title={t('trace.filter_success')}
                     value={selectedTrace.filterChain.successCount}
-                    valueStyle={{ color: palette.success }}
+                    styles={{ content: { color: palette.success } }}
                   />
                 </Col>
                 <Col span={4}>
                   <Statistic
                     title={t('trace.filter_failure')}
                     value={selectedTrace.filterChain.failureCount}
-                    valueStyle={{ color: (selectedTrace.filterChain.failureCount ?? 0) > 0 ? palette.error : palette.success }}
+                    styles={{
+                      content: { color: (selectedTrace.filterChain.failureCount ?? 0) > 0 ? palette.error : palette.success }
+                    }}
                   />
                 </Col>
                 <Col span={8}>
                   <Statistic
                     title={t('trace.filter_slowest')}
                     value={selectedTrace.filterChain.slowestFilter || '-'}
-                    valueStyle={{ fontSize: 14 }}
+                    styles={{ content: { fontSize: 14 } }}
                   />
                 </Col>
               </Row>
 
               {(selectedTrace.filterChain.failureCount ?? 0) > 0 && (
-                <Alert type="warning" message={t('trace.filter_warning')} style={{ marginBottom: 12 }} />
+                <Alert type="warning" title={t('trace.filter_warning')} style={{ marginBottom: 12 }} />
               )}
 
               <Tabs

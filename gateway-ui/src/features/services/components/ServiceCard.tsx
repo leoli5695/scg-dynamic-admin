@@ -66,7 +66,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
           type="warning"
           showIcon
           icon={<ExclamationCircleOutlined />}
-          message={warningMessage}
+          title={warningMessage}
           className="service-warning-alert"
           style={{ marginBottom: 16, background: 'rgba(232, 180, 100, 0.08)', border: `1px solid rgba(232, 180, 100, 0.2)` }}
         />
@@ -148,7 +148,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
               <Tag
                 key={idx}
                 className={`instance-tag ${inst.healthy !== false && inst.enabled !== false ? 'instance-tag-healthy' : 'instance-tag-unhealthy'}`}
-                bordered={false}
+                variant="filled"
               >
                 <span
                   className="instance-dot"

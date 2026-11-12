@@ -109,11 +109,11 @@ const TokenRevocationPage: React.FC = () => {
 
       <Paragraph type="secondary">{t('jwt_revocation.description')}</Paragraph>
 
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
           type="info"
           showIcon
-          message={t('jwt_revocation.scope_note')}
+          title={t('jwt_revocation.scope_note')}
           description={t('jwt_revocation.redis_note')}
         />
 
@@ -121,7 +121,7 @@ const TokenRevocationPage: React.FC = () => {
           <Alert
             type="warning"
             showIcon
-            message={t('jwt_revocation.switch_off')}
+            title={t('jwt_revocation.switch_off')}
             description={t('jwt_revocation.switch_desc')}
           />
         )}
@@ -258,7 +258,7 @@ const TokenRevocationPage: React.FC = () => {
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label={t('jwt_revocation.result_ids')}>
-                <Space direction="vertical" size={4}>
+                <Space orientation="vertical" size={4}>
                   {lastOperation.data.ids.map((id) => (
                     <Text key={id} code copyable style={{ fontSize: 12 }}>{id}</Text>
                   ))}

@@ -113,7 +113,7 @@ const RouteMetricsTable: React.FC<RouteMetricsTableProps> = ({ data, loading }) 
   if (data.length === 0) {
     return (
       <Alert
-        message={t('monitor.routes_no_data')}
+        title={t('monitor.routes_no_data')}
         description={t('monitor.routes_no_data_desc')}
         type="info"
         showIcon

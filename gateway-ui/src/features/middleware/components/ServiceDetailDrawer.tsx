@@ -41,7 +41,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({ service, onCl
   return (
     <Drawer rootClassName="console-drawer"
       placement="right"
-      width={600}
+      size={600}
       open
       closable={false}
       onClose={onClose}
@@ -78,7 +78,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({ service, onCl
                   title={t('middleware.health_score')}
                   value={health.score}
                   suffix="%"
-                  valueStyle={{ color: healthColor }}
+                  styles={{ content: { color: healthColor } }}
                 />
               </Col>
               <Col span={8}>
@@ -171,7 +171,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({ service, onCl
               type="warning"
               showIcon
               icon={<ExclamationCircleOutlined />}
-              message={t('middleware.hint_no_middleware')}
+              title={t('middleware.hint_no_middleware')}
               description={
                 <span>
                   {t('middleware.no_data_description')}
@@ -191,7 +191,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({ service, onCl
               type="info"
               showIcon
               icon={<InfoCircleOutlined />}
-              message={t('middleware.integration_hint')}
+              title={t('middleware.integration_hint')}
               description={
                 <span>
                   {t('middleware.integration_description')}

@@ -118,7 +118,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
           <Alert
             type="info"
             showIcon
-            message={t('diagnostic.no_gateway_metrics_title')}
+            title={t('diagnostic.no_gateway_metrics_title')}
             description={
               <div>
                 <p>{t('diagnostic.no_gateway_metrics_desc')}</p>
@@ -239,7 +239,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
                 title={t('diagnostic.previous_score')}
                 value={comparison.previousScore}
                 suffix={comparison.previousScore >= 80 ? '(健康)' : comparison.previousScore >= 50 ? '(警告)' : '(危险)'}
-                valueStyle={{ color: getScoreColor(comparison.previousScore) }}
+                styles={{ content: { color: getScoreColor(comparison.previousScore) } }}
               />
             </Col>
             <Col span={6}>
@@ -247,13 +247,15 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
                 title={t('diagnostic.score_change')}
                 value={comparison.scoreChange || 0}
                 prefix={(comparison.scoreChange ?? 0) > 0 ? '+' : ''}
-                valueStyle={{ color: (comparison.scoreChange ?? 0) > 0 ? palette.success : (comparison.scoreChange ?? 0) < 0 ? palette.error : palette.textMuted }}
+                styles={{
+                  content: { color: (comparison.scoreChange ?? 0) > 0 ? palette.success : (comparison.scoreChange ?? 0) < 0 ? palette.error : palette.textMuted }
+                }}
               />
             </Col>
             <Col span={12}>
               <Alert
                 type={(comparison.scoreChange ?? 0) > 0 ? 'success' : (comparison.scoreChange ?? 0) < -5 ? 'warning' : 'info'}
-                message={'系统健康度保持稳定'}
+                title={'系统健康度保持稳定'}
                 showIcon
               />
             </Col>

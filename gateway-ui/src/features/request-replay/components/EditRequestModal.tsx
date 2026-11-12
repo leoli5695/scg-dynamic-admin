@@ -119,8 +119,10 @@ const EditRequestModal: React.FC<EditRequestModalProps> = ({
                   <Statistic
                     title={t('replay.original_status')}
                     value={request.originalStatusCode}
-                    valueStyle={{
+                    styles={{
+                      content: {
                       color: request.originalStatusCode >= 400 ? palette.error : palette.success,
+                    }
                     }}
                   />
                 </Col>

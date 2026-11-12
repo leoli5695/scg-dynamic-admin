@@ -46,7 +46,7 @@ const DevGuideCard: React.FC = () => {
   return (
     <>
       <Alert
-        message={t('plugins.development_guide')}
+        title={t('plugins.development_guide')}
         description={t('plugins.development_guide_desc')}
         type="info"
         showIcon

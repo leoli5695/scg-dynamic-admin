@@ -83,7 +83,7 @@ const HealthPanel: React.FC<HealthPanelProps> = ({
               type={overall === 'critical' ? 'error' : 'warning'}
               showIcon
               style={{ marginTop: 16 }}
-              message="发现以下问题"
+              title="发现以下问题"
               description={
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
                   {issues.map((issue, idx) => <li key={idx}>{issue}</li>)}

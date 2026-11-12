@@ -302,7 +302,7 @@ const InstancesListPage: React.FC = () => {
           className="instances-heartbeat-alert"
           type="warning"
           showIcon
-          message={t('instance.stale_notice', { count: staleCount })}
+          title={t('instance.stale_notice', { count: staleCount })}
         />
       )}
 

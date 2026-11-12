@@ -48,7 +48,7 @@ const LoadBalancerSelect: React.FC<SelectProps> = (props) => {
     <Select
       size="large"
       className="select-with-icon"
-      dropdownClassName="loadBalancer-dropdown"
+      classNames={{ popup: { root: "loadBalancer-dropdown" } }}
       optionLabelProp="label"
       listHeight={280}
       {...props}

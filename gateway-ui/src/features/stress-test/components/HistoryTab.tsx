@@ -123,7 +123,7 @@ const HistoryTab: React.FC<Props> = ({
                   title={t('stress_test.requests_sent')}
                   value={runningStatus.actualRequests || 0}
                   prefix={<ThunderboltOutlined />}
-                  valueStyle={{ color: palette.primary }}
+                  styles={{ content: { color: palette.primary } }}
                 />
               </Col>
 
@@ -133,7 +133,7 @@ const HistoryTab: React.FC<Props> = ({
                   value={runningStatus.liveRps?.toFixed(2) || '0'}
                   suffix="req/s"
                   prefix={<DashboardOutlined />}
-                  valueStyle={{ color: palette.success }}
+                  styles={{ content: { color: palette.success } }}
                 />
               </Col>
 
@@ -143,7 +143,7 @@ const HistoryTab: React.FC<Props> = ({
                   value={runningStatus.avgResponseTimeMs?.toFixed(2) || '0'}
                   suffix="ms"
                   prefix={<ClockCircleOutlined />}
-                  valueStyle={{ color: '#fff' }}
+                  styles={{ content: { color: '#fff' } }}
                 />
               </Col>
 
@@ -153,7 +153,9 @@ const HistoryTab: React.FC<Props> = ({
                   value={runningStatus.errorRate?.toFixed(2) || '0'}
                   suffix="%"
                   prefix={<CloseCircleOutlined />}
-                  valueStyle={{ color: runningStatus.errorRate > 5 ? palette.error : palette.success }}
+                  styles={{
+                    content: { color: runningStatus.errorRate > 5 ? palette.error : palette.success }
+                  }}
                 />
               </Col>
             </Row>
@@ -209,7 +211,7 @@ const HistoryTab: React.FC<Props> = ({
             title={t('stress_test.total_requests')}
             value={test.actualRequests}
             suffix={test.totalRequests ? `/ ${test.totalRequests}` : ''}
-            valueStyle={{ color: '#fff' }}
+            styles={{ content: { color: '#fff' } }}
           />
           <Space style={{ marginTop: '8px' }}>
             <Tag color="green">{test.successfulRequests} {t('stress_test.success')}</Tag>
@@ -222,7 +224,7 @@ const HistoryTab: React.FC<Props> = ({
             title={t('stress_test.req_per_sec')}
             value={test.requestsPerSecond?.toFixed(2) || '0'}
             suffix="req/s"
-            valueStyle={{ color: palette.success }}
+            styles={{ content: { color: palette.success } }}
           />
         </Col>
 
@@ -231,7 +233,7 @@ const HistoryTab: React.FC<Props> = ({
             title={t('stress_test.error_rate')}
             value={test.errorRate?.toFixed(2) || '0'}
             suffix="%"
-            valueStyle={{ color: test.errorRate > 5 ? palette.error : palette.success }}
+            styles={{ content: { color: test.errorRate > 5 ? palette.error : palette.success } }}
           />
         </Col>
 
@@ -240,7 +242,7 @@ const HistoryTab: React.FC<Props> = ({
             title={t('stress_test.avg_response_time')}
             value={test.avgResponseTimeMs?.toFixed(2) || '0'}
             suffix="ms"
-            valueStyle={{ color: '#fff' }}
+            styles={{ content: { color: '#fff' } }}
           />
         </Col>
 
@@ -294,7 +296,7 @@ const HistoryTab: React.FC<Props> = ({
         {tests.length === 0 ? (
           <Alert
             type="info"
-            message={t('stress_test.no_tests')}
+            title={t('stress_test.no_tests')}
             description={t('stress_test.no_tests_desc')}
             showIcon
           />

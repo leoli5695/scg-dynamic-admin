@@ -55,9 +55,8 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
       closable={false}
       onClose={onClose}
       className="route-detail-drawer"
-      mask
-      maskClosable
-      destroyOnClose
+      mask={{ enabled: true, closable: true }}
+      destroyOnHidden
       style={{ zIndex: 999 }}
     >
       <div className="drawer-content">

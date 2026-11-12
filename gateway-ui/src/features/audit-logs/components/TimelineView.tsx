@@ -85,7 +85,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
           <Text type="secondary" style={{ fontSize: 12 }}>{event.timestamp}</Text>
         </div>
         <div style={{ marginTop: 8 }}>
-          <Space split={<Text type="secondary">|</Text>}>
+          <Space separator={<Text type="secondary">|</Text>}>
             <Space><UserOutlined /><Text>{event.operator}</Text></Space>
             <Text type="secondary">{event.ipAddress}</Text>
           </Space>
@@ -144,7 +144,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
           type="error"
           showIcon
           style={{ marginBottom: 16 }}
-          message={t('audit.load_failed')}
+          title={t('audit.load_failed')}
           description={timelineRequest.error instanceof ApiError ? timelineRequest.error.message : undefined}
         />
       )}
@@ -157,7 +157,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
               <Statistic
                 title={t('audit.total_changes')}
                 value={timeline.totalChanges}
-                valueStyle={{ fontSize: 20 }}
+                styles={{ content: { fontSize: 20 } }}
                 prefix={<HistoryOutlined />}
               />
             </Card>
@@ -167,7 +167,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
               <Statistic
                 title={t('audit.days_shown')}
                 value={timeline.days?.length || 0}
-                valueStyle={{ fontSize: 20 }}
+                styles={{ content: { fontSize: 20 } }}
               />
             </Card>
           </Col>
@@ -176,7 +176,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
               <Statistic
                 title={t('audit.contributors')}
                 value={Object.keys(timeline.changesByOperator || {}).length}
-                valueStyle={{ fontSize: 20 }}
+                styles={{ content: { fontSize: 20 } }}
                 prefix={<UserOutlined />}
               />
             </Card>
@@ -186,7 +186,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ instanceId }) => {
               <Statistic
                 title={t('audit.change_types')}
                 value={Object.keys(timeline.changesByType || {}).length}
-                valueStyle={{ fontSize: 20 }}
+                styles={{ content: { fontSize: 20 } }}
               />
             </Card>
           </Col>

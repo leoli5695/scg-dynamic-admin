@@ -157,7 +157,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                       type="warning"
                       showIcon
                       style={{ marginTop: 8, padding: '8px 12px' }}
-                      message={<Text style={{ fontSize: 12 }}>{t('access_log.file_both_disabled')}</Text>}
+                      title={<Text style={{ fontSize: 12 }}>{t('access_log.file_both_disabled')}</Text>}
                     />
                   )}
                 </div>
@@ -170,7 +170,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                   showIcon
                   icon={<CheckCircleOutlined />}
                   style={{ marginBottom: 16, borderLeft: `4px solid ${palette.success}` }}
-                  message={<Text strong>{t('access_log.k8s_stdout_hint')}</Text>}
+                  title={<Text strong>{t('access_log.k8s_stdout_hint')}</Text>}
                   description={
                     <div>
                       <p style={{ marginBottom: 8 }}>
@@ -189,7 +189,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                   type="info"
                   showIcon
                   style={{ marginBottom: 16, borderLeft: `4px solid ${palette.primary}` }}
-                  message={<Text strong>{t('access_log.docker_hint')}</Text>}
+                  title={<Text strong>{t('access_log.docker_hint')}</Text>}
                   description={
                     <div>
                       <p>{t('access_log.docker_desc_line1')}<code style={{ background: palette.bgElevated, padding: '2px 6px', borderRadius: 4 }}>both</code>{t('access_log.docker_desc_line2')}</p>
@@ -206,7 +206,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                   type="info"
                   showIcon
                   style={{ marginBottom: 16 }}
-                  message={t('access_log.local_hint_msg')}
+                  title={t('access_log.local_hint_msg')}
                   description={t('access_log.local_hint_desc')}
                 />
               )}
@@ -216,7 +216,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
                   type="warning"
                   showIcon
                   style={{ marginBottom: 16 }}
-                  message={t('access_log.custom_hint_msg')}
+                  title={t('access_log.custom_hint_msg')}
                   description={t('access_log.custom_hint_desc')}
                 />
               )}
@@ -377,7 +377,7 @@ const ConfigTab: React.FC<ConfigTabProps> = ({
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            message={t('access_log.storage_hint_msg')}
+            title={t('access_log.storage_hint_msg')}
             description={t('access_log.storage_hint_desc')}
           />
           <CollectionGuide activeDeployMode={watchedDeployMode || config?.deployMode || 'LOCAL'} />

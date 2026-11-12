@@ -140,7 +140,7 @@ const DiagnosticPage: React.FC = () => {
 
       {error && (
         <Alert
-          message={t('common.error')}
+          title={t('common.error')}
           description={error}
           type="error"
           showIcon
@@ -176,9 +176,11 @@ const DiagnosticPage: React.FC = () => {
                   <Statistic
                     title={t('diagnostic.status')}
                     value={report.status}
-                    valueStyle={{
+                    styles={{
+                      content: {
                       color: getScoreColor(report.overallScore),
                       fontSize: 18,
+                    }
                     }}
                     prefix={getStatusIcon(report.status)}
                   />

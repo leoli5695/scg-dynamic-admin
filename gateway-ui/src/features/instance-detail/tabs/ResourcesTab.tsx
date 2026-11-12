@@ -50,7 +50,7 @@ const ResourcesTab: React.FC = () => {
           <Alert
             type="info"
             showIcon
-            message={t('resources.local_mode')}
+            title={t('resources.local_mode')}
             description={t('resources.local_mode_desc')}
           />
         </div>
@@ -61,8 +61,8 @@ const ResourcesTab: React.FC = () => {
             <Row gutter={[16, 16]}>
               {metrics.nodes?.list?.map((node, idx) => (
                 <Col key={idx} xs={24} sm={12} md={8} lg={6}>
-                  <Card size="small" bordered={false} style={{ background: palette.bgElevated }}>
-                    <Space direction="vertical" size="small">
+                  <Card size="small" variant="borderless" style={{ background: palette.bgElevated }}>
+                    <Space orientation="vertical" size="small">
                       <Text strong>{node.name}</Text>
                       <Badge status={node.ready ? 'success' : 'error'} text={node.ready ? 'Ready' : 'Not Ready'} />
                       {node.allocatable && (
@@ -99,8 +99,8 @@ const ResourcesTab: React.FC = () => {
             <Row gutter={[16, 16]}>
               {metrics.pods?.list?.map((pod, idx) => (
                 <Col key={idx} xs={24} sm={12} md={8} lg={6}>
-                  <Card size="small" bordered={false} style={{ background: pod.phase === 'Running' ? palette.successSoft : palette.warningSoft }}>
-                    <Space direction="vertical" size="small">
+                  <Card size="small" variant="borderless" style={{ background: pod.phase === 'Running' ? palette.successSoft : palette.warningSoft }}>
+                    <Space orientation="vertical" size="small">
                       <Text strong style={{ fontSize: 12 }}>{pod.name}</Text>
                       <Tag color={pod.phase === 'Running' ? 'success' : 'warning'}>{pod.phase}</Tag>
                       {pod.podIP && (

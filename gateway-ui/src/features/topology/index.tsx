@@ -339,7 +339,7 @@ const TrafficTopologyPage: React.FC = () => {
 
       {error && (
         <Alert
-          message={t('common.error')}
+          title={t('common.error')}
           description={error}
           type="error"
           showIcon
@@ -357,7 +357,7 @@ const TrafficTopologyPage: React.FC = () => {
               <Statistic
                 title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.total_requests')}</span>}
                 value={topology.metrics.totalRequests}
-                valueStyle={{ color: palette.primary, fontSize: 16 }}
+                styles={{ content: { color: palette.primary, fontSize: 16 } }}
               />
             </Card>
           </Col>
@@ -366,7 +366,7 @@ const TrafficTopologyPage: React.FC = () => {
               <Statistic
                 title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.rps')}</span>}
                 value={topology.metrics.requestsPerSecond.toFixed(2)}
-                valueStyle={{ color: palette.info, fontSize: 16 }}
+                styles={{ content: { color: palette.info, fontSize: 16 } }}
               />
             </Card>
           </Col>
@@ -376,7 +376,7 @@ const TrafficTopologyPage: React.FC = () => {
                 title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.avg_latency')}</span>}
                 value={topology.metrics.avgLatency.toFixed(2)}
                 suffix="ms"
-                valueStyle={{ fontSize: 16 }}
+                styles={{ content: { fontSize: 16 } }}
               />
             </Card>
           </Col>
@@ -386,9 +386,11 @@ const TrafficTopologyPage: React.FC = () => {
                 title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.error_rate')}</span>}
                 value={topology.metrics.errorRate.toFixed(2)}
                 suffix="%"
-                valueStyle={{
+                styles={{
+                  content: {
                   color: topology.metrics.errorRate > 5 ? palette.error : palette.success,
                   fontSize: 16,
+                }
                 }}
               />
             </Card>
@@ -398,7 +400,7 @@ const TrafficTopologyPage: React.FC = () => {
               <Statistic
                 title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.clients')}</span>}
                 value={topology.metrics.uniqueClients}
-                valueStyle={{ fontSize: 16 }}
+                styles={{ content: { fontSize: 16 } }}
                 prefix={<GlobalOutlined />}
               />
             </Card>
@@ -408,7 +410,7 @@ const TrafficTopologyPage: React.FC = () => {
               <Statistic
                 title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.routes_status')}</span>}
                 value={`${topology.metrics.enabledRoutes ?? 0}${t('topology.enabled')}/${topology.metrics.configuredRoutes ?? 0}${t('topology.total')}`}
-                valueStyle={{ fontSize: 16 }}
+                styles={{ content: { fontSize: 16 } }}
                 prefix={<ApiOutlined />}
               />
             </Card>
@@ -427,7 +429,7 @@ const TrafficTopologyPage: React.FC = () => {
               <Statistic
                 title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.routes_with_traffic')}</span>}
                 value={topology.metrics.uniqueRoutes}
-                valueStyle={{ color: palette.info, fontSize: 16 }}
+                styles={{ content: { color: palette.info, fontSize: 16 } }}
                 prefix={<ApiOutlined />}
               />
               {showOnlyActiveRoutes && (

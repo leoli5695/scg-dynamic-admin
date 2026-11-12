@@ -255,7 +255,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
 
   return (
     <div style={{ padding: '16px' }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+      <Space orientation="vertical" size="large" style={{ width: '100%' }}>
         {/* Route Generator */}
         <Card
           title={
@@ -379,14 +379,14 @@ const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
                     <Alert
                       type="success"
                       showIcon
-                      message={t('copilot.validation_passed')}
+                      title={t('copilot.validation_passed')}
                       style={{ marginBottom: '12px' }}
                     />
                   ) : (
                     <Alert
                       type="error"
                       showIcon
-                      message={t('copilot.validation_failed')}
+                      title={t('copilot.validation_failed')}
                       description={
                         validationResult.errors?.map((err, idx) => (
                           <div key={idx}>• {translateValidationError(err, i18n.language)}</div>

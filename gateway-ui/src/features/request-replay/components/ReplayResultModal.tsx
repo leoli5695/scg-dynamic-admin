@@ -87,8 +87,10 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
               <Statistic
                 title={t('replay.status_code')}
                 value={result.statusCode}
-                valueStyle={{
+                styles={{
+                  content: {
                   color: result.statusCode >= 400 ? palette.error : palette.success,
+                }
                 }}
                 prefix={result.success ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
               />
@@ -106,8 +108,10 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
                   title={t('replay.latency_diff')}
                   value={result.comparison.latencyDiffMs || 0}
                   suffix="ms"
-                  valueStyle={{
+                  styles={{
+                    content: {
                     color: (result.comparison.latencyDiffMs || 0) > 100 ? palette.error : palette.success,
+                  }
                   }}
                 />
               )}
@@ -117,8 +121,10 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
                 <Statistic
                   title={t('replay.status_match')}
                   value={result.comparison.statusMatch ? 'Yes' : 'No'}
-                  valueStyle={{
+                  styles={{
+                    content: {
                     color: result.comparison.statusMatch ? palette.success : palette.error,
+                  }
                   }}
                 />
               )}
@@ -135,13 +141,13 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
                     <Statistic
                       title={t('replay.status')}
                       value={result.comparison.originalStatus}
-                      valueStyle={{ fontSize: 16 }}
+                      styles={{ content: { fontSize: 16 } }}
                     />
                     <Statistic
                       title={t('replay.latency')}
                       value={result.comparison.originalLatencyMs}
                       suffix="ms"
-                      valueStyle={{ fontSize: 16 }}
+                      styles={{ content: { fontSize: 16 } }}
                     />
                   </Card>
                 </Col>
@@ -150,13 +156,13 @@ const ReplayResultModal: React.FC<ReplayResultModalProps> = ({ open, result, onC
                     <Statistic
                       title={t('replay.status')}
                       value={result.comparison.replayedStatus}
-                      valueStyle={{ fontSize: 16 }}
+                      styles={{ content: { fontSize: 16 } }}
                     />
                     <Statistic
                       title={t('replay.latency')}
                       value={result.comparison.replayedLatencyMs}
                       suffix="ms"
-                      valueStyle={{ fontSize: 16 }}
+                      styles={{ content: { fontSize: 16 } }}
                     />
                   </Card>
                 </Col>

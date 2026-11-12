@@ -210,7 +210,7 @@ const InstanceCreatePage: React.FC = () => {
                 </Form.Item>
                 {isExternal && (
                   <Alert
-                    message={t('instance.external_hint')}
+                    title={t('instance.external_hint')}
                     type="warning"
                     showIcon
                     style={{ marginBottom: 16 }}
@@ -285,7 +285,7 @@ const InstanceCreatePage: React.FC = () => {
               </div>
               <div className="form-section-content">
                 <Alert
-                  message={t('instance.config_hint')}
+                  title={t('instance.config_hint')}
                   type="info"
                   showIcon
                   style={{ marginBottom: 16 }}
@@ -449,9 +449,9 @@ const InstanceCreatePage: React.FC = () => {
                     >
                       {selectedImagePullPolicy === 'Never' ? (
                         loadingImages ? (
-                          <Spin tip="Loading images..." />
+                          <Spin description="Loading images..." />
                         ) : localImages.length > 0 ? (
-                          <Space direction="vertical" style={{ width: '100%' }} size="small">
+                          <Space orientation="vertical" style={{ width: '100%' }} size="small">
                             <Select
                               value={selectedImageNamespace || 'all'}
                               onChange={setSelectedImageNamespace}

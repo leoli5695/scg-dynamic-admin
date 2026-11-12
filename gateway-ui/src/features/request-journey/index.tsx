@@ -133,24 +133,24 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
       </Space>
     </Space>
     <Typography.Text type="secondary">{t('journey.subtitle')}</Typography.Text>
-    {replayError && !pendingReplay && <Alert type="error" showIcon message={replayError} />}
+    {replayError && !pendingReplay && <Alert type="error" showIcon title={replayError} />}
     <Card>
-      <Space direction="vertical" style={{ width: '100%' }} size="large">
+      <Space orientation="vertical" style={{ width: '100%' }} size="large">
         <Typography.Text copyable code>Trace ID: {traceId}</Typography.Text>
         <Steps size="small" items={[
           { title: t('journey.configuration'), status: stepStatus(!!route.data) },
           { title: t('journey.call'), status: stepStatus(!!evidence || !!usage.length) },
-          { title: t('journey.trace'), status: stepStatus(!!trace), description: !trace && accessLog ? t('journey.traceNotCollected') : undefined },
-          { title: t('journey.metering'), status: stepStatus(!ai || !!usage.length), description: !ai && route.data ? t('journey.notAi') : undefined },
+          { title: t('journey.trace'), status: stepStatus(!!trace), content: !trace && accessLog ? t('journey.traceNotCollected') : undefined },
+          { title: t('journey.metering'), status: stepStatus(!ai || !!usage.length), content: !ai && route.data ? t('journey.notAi') : undefined },
           { title: t('journey.diagnosis'), status: stepStatus(diagnosis !== 'pending') },
         ]} />
-        {request.error ? <Alert type="error" showIcon message={request.error.message} /> :
+        {request.error ? <Alert type="error" showIcon title={request.error.message} /> :
           <Alert showIcon type={diagnosis === 'ok' ? 'success' : ['pending', 'traceMissing', 'usageMissing', 'logOnly'].includes(diagnosis) ? 'info' : 'warning'}
-            message={t(`journey.result.${diagnosis}`)} description={t(`journey.advice.${diagnosis}`)} />}
+            title={t(`journey.result.${diagnosis}`)} description={t(`journey.advice.${diagnosis}`)} />}
         {evidence && evidence.statusCode >= 400 && <Typography.Text type="secondary">{t('journey.httpClue')}</Typography.Text>}
         {actualRoute && expectedRoute && actualRoute !== expectedRoute &&
-          <Alert type="warning" showIcon message={t('journey.routeMismatch')} description={`${expectedRoute} → ${actualRoute}`} />}
-        {route.error && <Alert type="warning" showIcon message={t('journey.routeUnavailable')} />}
+          <Alert type="warning" showIcon title={t('journey.routeMismatch')} description={`${expectedRoute} → ${actualRoute}`} />}
+        {route.error && <Alert type="warning" showIcon title={t('journey.routeUnavailable')} />}
         <Space wrap>
           <Tooltip title={!canReplay ? t('journey.replayUnavailable') : t('journey.replayPrepareHint')}>
             <span><Button type="primary" icon={<EditOutlined />} disabled={!canReplay || request.loading || !!request.error || replaying || !!prepared}
@@ -169,7 +169,7 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
       </Space>
     </Card>
     <Card title={t(trace || !accessLog ? 'journey.trace' : 'journey.accessLog')} loading={request.loading && !request.data}>
-      {!trace && accessLog && <Alert type="info" showIcon message={t('journey.result.logOnly')}
+      {!trace && accessLog && <Alert type="info" showIcon title={t('journey.result.logOnly')}
         description={t('journey.advice.logOnly')} style={{ marginBottom: 16 }} />}
       {evidence ? <Descriptions column={{ xs: 1, sm: 2 }} items={[
         { key: 'route', label: t('tokenUsage.table.route'), children: evidence.routeId || '—' },
@@ -203,8 +203,8 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
       okButtonProps={{ disabled: !canReplay }} cancelButtonProps={{ disabled: replaying }}
       closable={!replaying} keyboard={!replaying} mask={{ closable: !replaying }}
       onCancel={() => { if (!replayOperation.current) { setPendingReplay(null); setReplayError(''); } }}>
-      <Alert type="warning" showIcon message={t('journey.resendWarning')} description={t('journey.resendWarningDetail')} />
-      {replayError && <Alert type="error" showIcon message={replayError} style={{ marginTop: 12 }} />}
+      <Alert type="warning" showIcon title={t('journey.resendWarning')} description={t('journey.resendWarningDetail')} />
+      {replayError && <Alert type="error" showIcon title={replayError} style={{ marginTop: 12 }} />}
     </Modal>
     <ReplayResultModal open={!!replayResult} result={replayResult} onClose={() => setReplayResult(null)} />
     <TraceDetailDrawer open={traceOpen} trace={trace ?? null} onClose={() => setTraceOpen(false)}

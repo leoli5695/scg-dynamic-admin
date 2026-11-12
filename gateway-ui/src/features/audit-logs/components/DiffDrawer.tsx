@@ -172,7 +172,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
               type="warning"
               showIcon
               style={{ marginBottom: 16 }}
-              message={diff.parseError}
+              title={diff.parseError}
             />
           )}
 
@@ -193,13 +193,13 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
           <Card size="small" title={t('audit.value_comparison')}>
             <Row gutter={16}>
               <Col span={12}>
-                <Alert type="error" message={t('audit.old_value')} style={{ marginBottom: 8 }} />
+                <Alert type="error" title={t('audit.old_value')} style={{ marginBottom: 8 }} />
                 <div style={{ background: 'rgba(242, 113, 127, 0.08)', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
                   <JsonValue value={diff.oldValue} maxHeight={280} noneLabel={t('common.none')} />
                 </div>
               </Col>
               <Col span={12}>
-                <Alert type="success" message={t('audit.new_value')} style={{ marginBottom: 8 }} />
+                <Alert type="success" title={t('audit.new_value')} style={{ marginBottom: 8 }} />
                 <div style={{ background: 'rgba(61, 220, 151, 0.08)', padding: 8, borderRadius: 4, maxHeight: 300, overflow: 'auto' }}>
                   <JsonValue value={diff.newValue} maxHeight={280} noneLabel={t('common.none')} />
                 </div>

@@ -66,7 +66,7 @@ const EventsTab: React.FC = () => {
               key={idx}
               size="small"
               style={{ marginBottom: 8 }}
-              bordered={false}
+              variant="borderless"
               className={event.type === 'Warning' ? 'event-card-warning' : 'event-card-normal'}
             >
               <Row gutter={16}>
@@ -82,7 +82,7 @@ const EventsTab: React.FC = () => {
                   <Text>{event.message}</Text>
                 </Col>
                 <Col span={5}>
-                  <Space direction="vertical" size="small">
+                  <Space orientation="vertical" size="small">
                     <Text type="secondary" style={{ fontSize: 12 }}>
                       <ClockCircleOutlined />
                       {' '}

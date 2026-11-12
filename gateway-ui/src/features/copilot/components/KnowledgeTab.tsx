@@ -230,7 +230,7 @@ const KnowledgeTab: React.FC = () => {
       <Alert
         type="info"
         showIcon
-        message={t('copilot.kb_title')}
+        title={t('copilot.kb_title')}
         description={t('copilot.kb_desc')}
         style={{ marginBottom: '16px' }}
       />
@@ -299,7 +299,7 @@ const KnowledgeTab: React.FC = () => {
       {/* 添加知识 */}
       <Card size="small" title={t('copilot.kb_add')}
         style={{ background: 'rgba(255,255,255,0.05)', marginBottom: '16px' }}>
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+        <Space orientation="vertical" style={{ width: '100%' }} size="middle">
           <Space wrap>
             <Select
               value={formType}

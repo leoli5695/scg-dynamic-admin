@@ -60,7 +60,7 @@ const UploadPluginModal: React.FC<UploadPluginModalProps> = ({
       destroyOnHidden
     >
       <Alert
-        message={t('plugins.upload_requirements')}
+        title={t('plugins.upload_requirements')}
         description={
           <ul style={{ margin: 0, paddingLeft: 20 }}>
             <li>{t('plugins.upload_requirement_1')}</li>

@@ -185,7 +185,7 @@ const ServiceMiddlewarePage: React.FC = () => {
         <Alert
           type="info"
           showIcon
-          message={t('middleware.no_data_hint')}
+          title={t('middleware.no_data_hint')}
           description={t('middleware.no_data_description')}
           style={{ marginBottom: 16 }}
         />

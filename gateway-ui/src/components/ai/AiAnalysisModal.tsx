@@ -193,7 +193,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
       onCancel={onClose}
       footer={null}
       width={800}
-      destroyOnClose
+      destroyOnHidden
     >
       {!result && !analyzing ? (
         <>
@@ -233,7 +233,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
                   onChange={e => setSelectedModel(e.target.value)}
                   style={{ width: '100%' }}
                 >
-                  <Space direction="vertical" style={{ width: '100%' }}>
+                  <Space orientation="vertical" style={{ width: '100%' }}>
                     {models.map(m => (
                       <Radio key={m} value={m} style={{ color: palette.textPrimary }}>
                         {m}
@@ -289,7 +289,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
                 <label style={{ display: 'block', marginBottom: 8 }}>
                   {t('ai.select_time_range')}
                 </label>
-                <Space direction="vertical" style={{ width: '100%' }} size="small">
+                <Space orientation="vertical" style={{ width: '100%' }} size="small">
                   <Space wrap>
                     <Button size="small" onClick={() => setTimeRange([dayjs().subtract(10, 'minute'), dayjs()])}>
                       {t('ai.last_10min')}
@@ -347,7 +347,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
             </Space>
           </div>
 
-          <Alert type="info" showIcon message={t('ai.evidence_hint')} style={{ marginBottom: 12 }} />
+          <Alert type="info" showIcon title={t('ai.evidence_hint')} style={{ marginBottom: 12 }} />
           {evidence && (
             <Collapse
               size="small"

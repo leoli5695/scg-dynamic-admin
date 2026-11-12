@@ -122,7 +122,7 @@ const HealthScorePopover: React.FC = () => {
                   size="small"
                   showInfo={false}
                   strokeColor={palette.success}
-                  trailColor={withAlpha(palette.success, 0.16)}
+                  railColor={withAlpha(palette.success, 0.16)}
                 />
               </div>
             </Col>
@@ -157,7 +157,7 @@ const HealthScorePopover: React.FC = () => {
                   size="small"
                   showInfo={false}
                   strokeColor={podScore >= 80 ? palette.success : palette.warning}
-                  trailColor={withAlpha(podScore >= 80 ? palette.success : palette.warning, 0.16)}
+                  railColor={withAlpha(podScore >= 80 ? palette.success : palette.warning, 0.16)}
                 />
               </div>
             </Col>
@@ -328,7 +328,7 @@ const HealthScorePopover: React.FC = () => {
       title={null}
       placement="bottom"
       trigger="hover"
-      overlayStyle={{ maxWidth: 380 }}
+      styles={{ root: { maxWidth: 380 } }}
     >
       <span className="instance-summary-health">
         <Progress
@@ -382,7 +382,7 @@ const OverviewTab: React.FC = () => {
           type={isRunning ? 'success' : 'info'}
           showIcon
           style={{ marginBottom: 16 }}
-          message={t('instance.external_tag')}
+          title={t('instance.external_tag')}
           description={(
             <div>
               <div>{t('instance.external_lifecycle_hint')}</div>
@@ -471,7 +471,7 @@ const OverviewTab: React.FC = () => {
             {!accessUrl ? (
               <Text type="secondary">-</Text>
             ) : (
-              <Space direction="vertical" size={0}>
+              <Space orientation="vertical" size={0}>
                 <Tooltip title={t('instance.click_to_open')}>
                   <a
                     href={accessUrl}

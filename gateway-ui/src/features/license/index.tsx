@@ -211,7 +211,7 @@ const LicensePage: React.FC = () => {
         {!licenseInfo && (
           <Alert
             type="warning"
-            message="未检测到有效 License"
+            title="未检测到有效 License"
             description="请激活 License 以使用高级功能。基础版功能可免费使用。"
             showIcon
             style={{ marginBottom: 16 }}
@@ -221,7 +221,7 @@ const LicensePage: React.FC = () => {
         {licenseInfo && licenseInfo.expired && (
           <Alert
             type="error"
-            message="License 已过期"
+            title="License 已过期"
             description={`您的 License 于 ${licenseInfo.expiresAt ? new Date(licenseInfo.expiresAt).toLocaleDateString() : '-'} 过期，部分功能已受限。请联系管理员续期。`}
             showIcon
             style={{ marginBottom: 16 }}

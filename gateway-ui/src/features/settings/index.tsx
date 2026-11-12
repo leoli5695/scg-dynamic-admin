@@ -43,12 +43,12 @@ const SystemSettingsPage: React.FC = () => {
   return <div className="console-workspace-page" style={{ display: 'grid', gap: 16 }}>
     <Typography.Title level={3} style={{ margin: 0 }}>{t('settings.title')}</Typography.Title>
     <Typography.Text type="secondary">{t('settings.subtitle')}</Typography.Text>
-    {!canWrite && <Alert type="info" showIcon message={t('settings.readonly')} />}
+    {!canWrite && <Alert type="info" showIcon title={t('settings.readonly')} />}
     {settings?.kubernetesEnabled && !hasClusterDeployment && (
-      <Alert type="warning" showIcon message={t('settings.kubernetes_no_cluster')} />
+      <Alert type="warning" showIcon title={t('settings.kubernetes_no_cluster')} />
     )}
     <Card>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+      <Space orientation="vertical" size="large" style={{ width: '100%' }}>
         {FIELDS.map((field) => <div key={field.key}>
           <Space align="start">
             <Switch

@@ -18,7 +18,7 @@ const PluginDetailDrawer: React.FC<PluginDetailDrawerProps> = ({ plugin, onClose
   const status = getPluginStatus(plugin);
 
   return (
-    <Drawer title={t('plugins.detail_title')} width={600} open onClose={onClose} destroyOnHidden>
+    <Drawer title={t('plugins.detail_title')} size={600} open onClose={onClose} destroyOnHidden>
       <Descriptions column={2} bordered>
         <Descriptions.Item label={t('plugins.plugin_id')} span={2}>
           {plugin.pluginId}

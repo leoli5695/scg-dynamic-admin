@@ -205,7 +205,7 @@ const KubernetesPage: React.FC = () => {
         <Alert
           type="error"
           showIcon
-          message={t('k8s.load_failed')}
+          title={t('k8s.load_failed')}
           action={
             <Button size="small" onClick={loadClusters}>
               {t('common.refresh')}

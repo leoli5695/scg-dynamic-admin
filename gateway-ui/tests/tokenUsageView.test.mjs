@@ -388,7 +388,7 @@ test('a committed correction with a lost response refreshes parent and quota onc
   assert.equal(h.calls.runs, 2, 'readback plus quota refresh');
   assert.equal(nodes(tree, 'Descriptions')[0].props.items.find(item => item.key === 'tokens').children, '10 + 20 = 30');
   assert.equal(nodes(tree, 'Descriptions')[1].props.items[0].children, '40 / 1000');
-  assert.equal(nodes(tree, 'Alert').some(node => node.props.message === 'Response lost'), false);
+  assert.equal(nodes(tree, 'Alert').some(node => node.props.title === 'Response lost'), false);
   h.render(props);
   assert.equal(applied, 1, 'rerenders do not repeat synchronization');
 });
@@ -411,7 +411,7 @@ test('failed quota refresh hides the stale snapshot and offers a working retry',
   await button(initial, 'tokenUsage.reconcile.submit').props.onClick();
   await h.calls.confirmations[0].onOk();
   const failed = h.render(props);
-  const warning = nodes(failed, 'Alert').find(node => node.props.message === 'tokenUsage.reconcile.quotaError');
+  const warning = nodes(failed, 'Alert').find(node => node.props.title === 'tokenUsage.reconcile.quotaError');
   assert.ok(warning);
   assert.equal(nodes(failed, 'Descriptions').some(node => node.props.title === 'tokenUsage.reconcile.quotaTitle'), false);
   h.api.getTokenQuotaStatus = () => ({ monthlyQuota: 1000, monthlyUsed: 13 });

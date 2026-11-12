@@ -284,12 +284,12 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
         </Col>
         <Col span={4}>
           <Card size="small">
-            <Statistic title={t('audit.today_ops')} value={stats?.today ?? 0} prefix={<ClockCircleOutlined />} valueStyle={{ color: palette.primary }} />
+            <Statistic title={t('audit.today_ops')} value={stats?.today ?? 0} prefix={<ClockCircleOutlined />} styles={{ content: { color: palette.primary } }} />
           </Card>
         </Col>
         <Col span={4}>
           <Card size="small">
-            <Statistic title={t('audit.create_ops')} value={stats?.creates ?? 0} prefix={<PlusOutlined />} valueStyle={{ color: palette.success }} />
+            <Statistic title={t('audit.create_ops')} value={stats?.creates ?? 0} prefix={<PlusOutlined />} styles={{ content: { color: palette.success } }} />
           </Card>
         </Col>
         <Col span={12}>

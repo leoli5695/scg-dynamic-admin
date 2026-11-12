@@ -264,7 +264,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
         <Alert
           type="warning"
           showIcon
-          message={t('tokenUsage.pendingWarning', {
+          title={t('tokenUsage.pendingWarning', {
             unknown: overview?.unknownUsageRequests ?? 0,
             failed: overview?.failedSettlementRequests ?? 0,
           })}
@@ -342,7 +342,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
           }
         />
       </div>
-      <Alert type="info" showIcon message={t('tokenUsage.recordedTokensNote')} />
+      <Alert type="info" showIcon title={t('tokenUsage.recordedTokensNote')} />
 
       <Card
         className="token-filter-card"
@@ -471,7 +471,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
         <Alert
           showIcon
           type="error"
-          message={t('tokenUsage.load_failed')}
+          title={t('tokenUsage.load_failed')}
           description={requestError.message}
         />
       )}

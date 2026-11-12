@@ -34,7 +34,7 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
     if (loading) return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>;
     return (
       <Alert
-        message={t('monitor.history_unavailable')}
+        title={t('monitor.history_unavailable')}
         description={t('monitor.history_unavailable_desc')}
         type="info"
         showIcon

@@ -69,7 +69,7 @@ const LearnTab: React.FC<LearnTabProps> = ({ instanceId, provider, model }) => {
       <Alert
         type="info"
         showIcon
-        message={t('copilot.learn_title')}
+        title={t('copilot.learn_title')}
         description={t('copilot.learn_desc')}
         style={{ marginBottom: '24px' }}
       />

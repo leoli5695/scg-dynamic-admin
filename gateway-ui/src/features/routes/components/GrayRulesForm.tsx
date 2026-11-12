@@ -110,7 +110,7 @@ const GrayRulesForm: React.FC<GrayRulesFormProps> = ({
                             showSearch
                             size="small"
                             suffixIcon={<span style={{ color: palette.textTertiary, fontSize: '12px' }}>▼</span>}
-                            popupClassName="gray-rule-select-dropdown"
+                            classNames={{ popup: { root: "gray-rule-select-dropdown" } }}
                             labelRender={(option: DefaultOptionType) => {
                               const value = option?.value;
                               if (!value) return option?.label || '';

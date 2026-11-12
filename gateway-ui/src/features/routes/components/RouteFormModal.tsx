@@ -205,7 +205,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
       mask={{ closable: false }}
       closable={!submitting}
       keyboard={!submitting}
-      focusTriggerAfterClose
+      focusable={{ focusTriggerAfterClose: true }}
     >
       <Form
         form={form}
@@ -333,7 +333,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
             <Alert
               type="info"
               showIcon
-              message={t('routes.plugins_guide_title')}
+              title={t('routes.plugins_guide_title')}
               description={t('routes.plugins_guide_desc')}
               style={{ marginBottom: 16 }}
             />

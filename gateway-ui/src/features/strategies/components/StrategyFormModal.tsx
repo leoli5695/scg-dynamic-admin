@@ -187,7 +187,7 @@ function renderConfigFields(
             if (!hasLowTimeout) return null;
             return (
               <Alert
-                message={t('strategy.timeout_low_warning', {
+                title={t('strategy.timeout_low_warning', {
                   defaultValue:
                     '超时时间设置小于100ms可能导致正常请求被误拦截，请确认是否用于测试目的',
                 })}

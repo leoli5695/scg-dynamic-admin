@@ -73,7 +73,7 @@ const ComponentCard: React.FC<ComponentCardProps> = ({ title, icon, diagnostic }
           <Alert
             type="warning"
             showIcon
-            message={t('diagnostic.warnings')}
+            title={t('diagnostic.warnings')}
             description={
               <ul style={{ margin: 0, paddingLeft: 20 }}>
                 {diagnostic.warnings.map((w, i) => (
@@ -90,7 +90,7 @@ const ComponentCard: React.FC<ComponentCardProps> = ({ title, icon, diagnostic }
           <Alert
             type="error"
             showIcon
-            message={t('diagnostic.errors')}
+            title={t('diagnostic.errors')}
             description={
               <ul style={{ margin: 0, paddingLeft: 20 }}>
                 {diagnostic.errors.map((e, i) => (

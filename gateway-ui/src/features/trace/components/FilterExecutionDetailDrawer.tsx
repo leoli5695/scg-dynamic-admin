@@ -122,7 +122,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
       placement="right"
       styles={{ wrapper: { width: 500 }, body: { padding: 16 } }}
       destroyOnHidden
-      maskClosable
+      mask={{ closable: true }}
       onClose={onClose}
       open={visible}
     >
@@ -141,7 +141,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
               title={t('filter_detail.self_time')}
               value={execution.selfTimeMs.toFixed(2)}
               suffix="ms"
-              valueStyle={{ color: getHealthColor(healthStatus) }}
+              styles={{ content: { color: getHealthColor(healthStatus) } }}
             />
           </Col>
           <Col span={6}>
@@ -154,7 +154,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
           <Col span={6}>
             <Statistic
               title={t('filter_detail.status')}
-              valueStyle={{ color: getHealthColor(healthStatus) }}
+              styles={{ content: { color: getHealthColor(healthStatus) } }}
               prefix={execution.success ? <CheckCircleOutlined /> : <WarningOutlined />}
               value={execution.success ? t('filter_detail.success') : t('filter_detail.failed')}
             />
@@ -204,7 +204,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
           type="error"
           showIcon
           style={{ marginBottom: 16 }}
-          message={t('filter_detail.error_info')}
+          title={t('filter_detail.error_info')}
           description={execution.errorMessage}
         />
       )}
@@ -224,7 +224,9 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
                   title={t('filter_detail.success_rate')}
                   value={filterStats.successRate}
                   suffix="%"
-                  valueStyle={{ color: filterStats.successRate >= 95 ? palette.success : palette.warning }}
+                  styles={{
+                    content: { color: filterStats.successRate >= 95 ? palette.success : palette.warning }
+                  }}
                 />
               </Col>
               <Col span={8}>
@@ -262,7 +264,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
               type={filterStats.selfP95Ms > 50 ? 'warning' : 'info'}
               showIcon
               style={{ marginTop: 16 }}
-              message={t('filter_detail.performance_analysis')}
+              title={t('filter_detail.performance_analysis')}
               description={
                 filterStats.selfP95Ms > 50
                   ? t('filter_detail.p95_high_warning', { filter: execution.filterName, p95: filterStats.selfP95Ms.toFixed(2) })
