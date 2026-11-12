@@ -158,4 +158,37 @@ class StrategyRefresherTest {
         verify(strategyManager, never()).putStrategy(any(), any());
         verify(strategyManager).removeStrategy("s1");
     }
+
+    private void indexEvent(String content) {
+        org.springframework.test.util.ReflectionTestUtils.invokeMethod(refresher, "onIndexChange", content);
+    }
+
+    @Test
+    @DisplayName("a blank index push keeps live strategies - the listener path must read it like the periodic path")
+    void blankIndexPushDoesNotWipe() {
+        stubIndex("s1");
+        stubStrategy("s1", 100);
+        refresher.periodicSyncStrategies();
+
+        indexEvent(null);
+        indexEvent("");
+        indexEvent("   ");
+
+        verify(strategyManager, never()).clear();
+        verify(strategyManager, never()).removeStrategy(any());
+        verify(configService, never()).removeListener(eq(STRATEGY_PREFIX + "s1"), eq(GROUP), any());
+    }
+
+    @Test
+    @DisplayName("an explicitly empty index push still removes every strategy")
+    void emptyArrayIndexPushRemovesAll() {
+        stubIndex("s1");
+        stubStrategy("s1", 100);
+        refresher.periodicSyncStrategies();
+
+        indexEvent("[]");
+
+        verify(strategyManager).removeStrategy("s1");
+        verify(configService).removeListener(eq(STRATEGY_PREFIX + "s1"), eq(GROUP), any());
+    }
 }

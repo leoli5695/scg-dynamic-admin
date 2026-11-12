@@ -263,6 +263,23 @@ class RouteRefresherTest {
         verify(routeManager, never()).removeRoute(any());
     }
 
+    @Test
+    @DisplayName("a blank index push keeps the live routing table - the listener path must read it like the periodic path")
+    void blankIndexPushDoesNotWipeRoutes() throws Exception {
+        stubIndex("r1");
+        stubRoute("r1", 1111);
+        indexEvent("[\"r1\"]");
+        awaitAsyncRouteLoads();
+        Mockito.clearInvocations(routeManager, configService);
+
+        indexEvent(null);
+        indexEvent("");
+        indexEvent("   ");
+
+        verify(routeManager, never()).removeRoute(any());
+        verify(configService, never()).removeListener(eq(ROUTE_PREFIX + "r1"), eq(GROUP), any());
+    }
+
     private void indexEvent(String json) {
         ReflectionTestUtils.invokeMethod(refresher, "onRoutesIndexChanged", ROUTES_INDEX, GROUP, json);
     }

@@ -214,17 +214,11 @@ public class StrategyRefresher {
     private void onIndexChange(String content) {
         try {
             if (content == null || content.isBlank()) {
-                // All strategies removed
-                strategyManager.clear();
-                // FIX: also unregister every per-strategy listener from the
-                // config center - previously the map was cleared without
-                // removal, leaking listeners until restart.
-                for (Map.Entry<String, ConfigCenterService.ConfigListener> entry : activeListeners.entrySet()) {
-                    configService.removeListener(STRATEGY_PREFIX + entry.getKey(), GROUP, entry.getValue());
-                }
-                activeListeners.clear();
-                appliedContent.clear();
-                log.info("All strategies cleared");
+                // Ambiguous between "all strategies deleted" and "the config center could not
+                // answer" - the same reading periodicSyncStrategies already applies. Wiping live
+                // strategies on a transient failure would open every route. Publish [] to delete
+                // them explicitly; that still takes the removal path below.
+                log.warn("Strategies index is blank; keeping {} live strategies unchanged", activeListeners.size());
                 return;
             }
 

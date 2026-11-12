@@ -138,6 +138,7 @@ public class StrategyManager {
         // validate its actual binding, so the new index cannot expose the old policy.
         addToIndexes(strategy, strategyId);
         strategyCache.put(strategyId, strategy);
+        evictTypedConfigs(old);
         boolean sameIndex = old != null && ((StrategyDefinition.SCOPE_ROUTE.equals(old.getScope())
                 && StrategyDefinition.SCOPE_ROUTE.equals(strategy.getScope())
                 && old.getBoundRouteIds().equals(strategy.getBoundRouteIds()))
@@ -201,9 +202,21 @@ public class StrategyManager {
         }
 
         removeFromIndexes(strategy, strategyId);
+        evictTypedConfigs(strategy);
 
         log.debug("Strategy removed: {}", strategyId);
         notifyRemoved(strategy);
+    }
+
+    /**
+     * Typed configs are keyed by route/type/class and validated by definition identity, so an
+     * update or a removal orphans every entry built from the previous definition. Evicting here
+     * is what keeps the map bounded - clear() is the only other eviction point.
+     */
+    private void evictTypedConfigs(StrategyDefinition source) {
+        if (source != null) {
+            typedConfigCache.values().removeIf(entry -> entry.source() == source);
+        }
     }
 
     /**

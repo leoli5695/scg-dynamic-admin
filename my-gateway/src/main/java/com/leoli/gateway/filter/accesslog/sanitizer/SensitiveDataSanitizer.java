@@ -4,13 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leoli.gateway.filter.accesslog.config.AccessLogConfig;
+import com.leoli.gateway.util.SensitiveHeaders;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Sensitive data sanitizer for access log privacy protection.
@@ -30,20 +29,6 @@ public class SensitiveDataSanitizer {
     private static final String MASK_VALUE = "***MASKED***";
     
     private final ObjectMapper objectMapper;
-
-    /**
-     * Default sensitive headers to mask.
-     */
-    private static final Set<String> SENSITIVE_HEADERS = new HashSet<>(List.of(
-            "authorization",
-            "cookie",
-            "set-cookie",
-            "x-api-key",
-            "x-auth-token",
-            "x-access-key",
-            "x-secret",
-            "proxy-authorization"
-    ));
 
     public SensitiveDataSanitizer(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
@@ -80,10 +65,7 @@ public class SensitiveDataSanitizer {
      * @return true if sensitive
      */
     public boolean isSensitiveHeader(String headerName) {
-        if (headerName == null) {
-            return false;
-        }
-        return SENSITIVE_HEADERS.contains(headerName.toLowerCase());
+        return SensitiveHeaders.isSensitive(headerName);
     }
 
     /**

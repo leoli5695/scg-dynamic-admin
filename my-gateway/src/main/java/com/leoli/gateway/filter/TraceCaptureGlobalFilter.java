@@ -6,6 +6,7 @@ import com.leoli.gateway.constants.InternalApiConstants;
 import com.leoli.gateway.monitor.FilterChainTracker;
 import com.leoli.gateway.util.ClientIpResolver;
 import com.leoli.gateway.util.RouteUtils;
+import com.leoli.gateway.util.SensitiveHeaders;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -458,7 +459,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             // Capture request headers (filter sensitive ones)
             Map<String, String> requestHeaders = new HashMap<>();
             request.getHeaders().forEach((key, values) -> {
-                if (!isSensitiveHeader(key)) {
+                if (!SensitiveHeaders.isSensitive(key)) {
                     requestHeaders.put(key, String.join(", ", values));
                 }
             });
@@ -472,7 +473,7 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
             // Capture response headers (filter sensitive ones) - use actualResponse for correct headers
             Map<String, String> responseHeaders = new HashMap<>();
             actualResponse.getHeaders().forEach((key, values) -> {
-                if (!isSensitiveHeader(key)) {
+                if (!SensitiveHeaders.isSensitive(key)) {
                     responseHeaders.put(key, String.join(", ", values));
                 }
             });
@@ -692,17 +693,6 @@ public class TraceCaptureGlobalFilter implements GlobalFilter, Ordered {
      */
     private void sendTraceToAdmin(Map<String, Object> trace) {
         reportDispatcher.submit(trace);
-    }
-
-    /**
-     * Check if header is sensitive and should not be captured.
-     */
-    private boolean isSensitiveHeader(String header) {
-        String lower = header.toLowerCase();
-        return lower.contains("authorization") ||
-                lower.contains("cookie") ||
-                lower.contains("set-cookie") ||
-                lower.contains("proxy-authorization");
     }
 
     /**

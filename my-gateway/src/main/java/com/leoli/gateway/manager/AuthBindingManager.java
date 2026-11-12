@@ -181,22 +181,22 @@ public class AuthBindingManager {
                 break;
             case "BASIC":
                 if (config.getBasicUsername() != null) {
-                    basicAuthIndex.remove(config.getBasicUsername());
+                    basicAuthIndex.remove(config.getBasicUsername(), policyId);
                 }
                 break;
             case "HMAC":
                 if (config.getAccessKey() != null) {
-                    accessKeyIndex.remove(config.getAccessKey());
+                    accessKeyIndex.remove(config.getAccessKey(), policyId);
                 }
                 if (config.getAccessKeySecrets() != null) {
                     for (String key : config.getAccessKeySecrets().keySet()) {
-                        accessKeyIndex.remove(key);
+                        accessKeyIndex.remove(key, policyId);
                     }
                 }
                 break;
             case "OAUTH2":
                 if (config.getClientId() != null) {
-                    clientIdIndex.remove(config.getClientId());
+                    clientIdIndex.remove(config.getClientId(), policyId);
                 }
                 break;
         }

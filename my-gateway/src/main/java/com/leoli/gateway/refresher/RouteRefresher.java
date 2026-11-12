@@ -141,6 +141,14 @@ public class RouteRefresher {
         log.info("📋 Routes index changed detected");
 
         try {
+            if (newIndexContent == null || newIndexContent.isBlank()) {
+                // Ambiguous between "all routes deleted" and "the config center could not answer"
+                // - the same reading periodicSyncRoutes already applies. Tearing down the live
+                // routing table on a transient failure is not undone by a later push. Publish []
+                // to delete routes explicitly; that still takes the removal path below.
+                log.warn("Routes index is blank; keeping {} existing routes unchanged", listeningRouteIds.size());
+                return;
+            }
             List<String> newRouteIds = parseRouteIds(newIndexContent);
             indexRevision++;
             Set<String> oldRouteIds = new HashSet<>(listeningRouteIds);
@@ -396,7 +404,9 @@ public class RouteRefresher {
     /**
      * Parse route IDs from index JSON.
      * <p>
-     * A null/blank index means the key was intentionally deleted -> empty list (routes cleared).
+     * A null/blank index means no routes are configured yet -> empty list. Only startup reaches
+     * that case: both change paths guard blank content first, because a blank push is ambiguous
+     * between "deleted" and "the config center could not answer".
      * A malformed (non-blank) index is a CORRUPT payload, NOT an empty one: throwing here makes
      * the caller abort the refresh and keep the previously-loaded routes, instead of silently
      * treating every existing route as "removed" and wiping the whole routing table.

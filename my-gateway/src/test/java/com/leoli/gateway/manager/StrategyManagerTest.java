@@ -1,6 +1,7 @@
 package com.leoli.gateway.manager;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leoli.gateway.model.RateLimiterConfig;
 import com.leoli.gateway.model.StrategyDefinition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -495,6 +496,68 @@ class StrategyManagerTest {
             // When & Then
             assertTrue(manager.isStrategyEnabled("route-1", StrategyDefinition.TYPE_RATE_LIMITER));
             assertFalse(manager.isStrategyEnabled("route-1", StrategyDefinition.TYPE_IP_FILTER));
+        }
+    }
+
+    @Nested
+    @DisplayName("Typed config cache eviction")
+    class TypedConfigCacheEviction {
+
+        @BeforeEach
+        void alignMapperWithProduction() {
+            // convertStrategyConfig injects strategyId/scope into the map, so it only works with
+            // the lenient mapper ObjectMapperConfig installs; a bare ObjectMapper rejects them.
+            objectMapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            manager = new StrategyManager(objectMapper);
+        }
+
+        private StrategyDefinition configured(String id, String routeId, int qps) {
+            StrategyDefinition strategy = createRouteStrategy(id, StrategyDefinition.TYPE_RATE_LIMITER, routeId);
+            strategy.setConfig(new HashMap<>(Map.of("qps", qps)));
+            return strategy;
+        }
+
+        @SuppressWarnings("unchecked")
+        private Map<String, ?> cache() {
+            return (Map<String, ?>) org.springframework.test.util.ReflectionTestUtils
+                    .getField(manager, "typedConfigCache");
+        }
+
+        private RateLimiterConfig convert(String routeId, StrategyDefinition strategy) {
+            return manager.convertStrategyConfig(routeId, StrategyDefinition.TYPE_RATE_LIMITER,
+                    strategy, RateLimiterConfig.class);
+        }
+
+        @Test
+        @DisplayName("Editing a strategy replaces its typed config instead of accumulating one per edit")
+        void updateEvictsOrphanedEntries() {
+            StrategyDefinition first = configured("s1", "route-1", 100);
+            manager.putStrategy("s1", first);
+            assertEquals(100, convert("route-1", first).getQps());
+            assertEquals(1, cache().size());
+
+            for (int i = 1; i <= 5; i++) {
+                StrategyDefinition next = configured("s1", "route-1", 100 + i);
+                manager.putStrategy("s1", next);
+                assertEquals(100 + i, convert("route-1", next).getQps());
+            }
+
+            assertEquals(1, cache().size(), "identity-missed entries must be evicted, not retained forever");
+        }
+
+        @Test
+        @DisplayName("Removing a strategy evicts every typed config converted from it, across all routes")
+        void removeEvictsAllEntriesForTheDefinition() {
+            StrategyDefinition strategy = configured("s1", "route-1", 100);
+            manager.putStrategy("s1", strategy);
+            for (String routeId : List.of("route-1", "route-2", "route-3")) {
+                assertNotNull(convert(routeId, strategy));
+            }
+            assertEquals(3, cache().size());
+
+            manager.removeStrategy("s1");
+
+            assertTrue(cache().isEmpty());
         }
     }
 

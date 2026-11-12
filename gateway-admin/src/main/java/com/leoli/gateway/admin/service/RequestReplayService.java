@@ -6,6 +6,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.leoli.gateway.admin.model.RequestTrace;
 import com.leoli.gateway.admin.repository.RequestTraceRepository;
 import com.leoli.gateway.admin.service.GatewayInstanceService;
+import com.leoli.gateway.admin.util.SensitiveHeaders;
 import com.leoli.gateway.admin.util.UrlSecurityValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -64,6 +65,7 @@ public class RequestReplayService {
 
     // Maximum body size for storage
     private static final int MAX_BODY_SIZE = 65536;
+    private static final String MASKED_VALUE = "***MASKED***";
 
     /**
      * Prepare a trace for replay - returns editable version.
@@ -114,10 +116,12 @@ public class RequestReplayService {
             try {
                 @SuppressWarnings("unchecked")
                 Map<String, String> headers = objectMapper.readValue(trace.getRequestHeaders(), Map.class);
-                request.setOriginalHeaders(new LinkedHashMap<>(headers));
+                Map<String, String> originals = new LinkedHashMap<>(headers);
+                originals.replaceAll((name, value) -> SensitiveHeaders.isSensitive(name) ? MASKED_VALUE : value);
+                request.setOriginalHeaders(originals);
                 request.setHeaders(new LinkedHashMap<>(headers));
                 // Remove sensitive headers from editable version
-                request.getHeaders().keySet().removeIf(this::isSensitiveHeader);
+                request.getHeaders().keySet().removeIf(SensitiveHeaders::isSensitive);
             } catch (Exception e) {
                 log.error("Failed to parse headers for trace: {}", traceId, e);
             }
@@ -566,17 +570,6 @@ public class RequestReplayService {
             return body.substring(0, MAX_BODY_SIZE) + "...[TRUNCATED]";
         }
         return body;
-    }
-
-    /**
-     * Check if header is sensitive.
-     */
-    private boolean isSensitiveHeader(String header) {
-        String lower = header.toLowerCase();
-        return lower.contains("authorization") ||
-                lower.contains("cookie") ||
-                lower.contains("set-cookie") ||
-                lower.contains("proxy-authorization");
     }
 
     // ============== Data Classes ==============
