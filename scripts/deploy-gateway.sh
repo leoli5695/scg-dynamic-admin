@@ -18,6 +18,9 @@ set -eu
 
 LOCK=/var/lock/deploy-gateway.lock
 WAIT_S=120
+# Both apps drain in-flight requests for up to 30s on SIGTERM (server.shutdown=graceful).
+# Docker's default 10s stop timeout would SIGKILL mid-drain and cut responses anyway.
+STOP_GRACE_S=45
 
 health_url() {
   case $1 in
@@ -117,7 +120,7 @@ deploy_jar() {
   install -o "$uid" -g "$gid" -m 644 "$src" "$jar"
 
   log "[$mod] restart container $ctr"
-  docker restart "$ctr" >/dev/null
+  docker restart -t "$STOP_GRACE_S" "$ctr" >/dev/null
 
   local jar_epoch started_epoch status i code
   jar_epoch=$(stat -c %Y "$jar")
@@ -150,7 +153,7 @@ rollback_jar() {
   log "[$mod] ROLLBACK to $bak"
   read -r uid gid <<<"$(container_ids "$mod")"
   install -o "$uid" -g "$gid" -m 644 "$bak" "$dir/app.jar"
-  docker restart "$ctr" >/dev/null || true
+  docker restart -t "$STOP_GRACE_S" "$ctr" >/dev/null || true
   # Poll rather than sleep a fixed 10s: a cold start takes ~20s here, so the old
   # version printed health=000 after a rollback that had actually worked and sent
   # the operator chasing a second outage that did not exist.

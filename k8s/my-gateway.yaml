@@ -18,10 +18,19 @@ spec:
         app: my-gateway
         gateway_instance_id: "gateway-k8s"
     spec:
+      # The app drains in-flight requests for up to 30s on SIGTERM (server.shutdown=graceful).
+      # Kubernetes' default 30s would race that drain, so allow the drain plus the preStop hold.
+      terminationGracePeriodSeconds: 45
       containers:
       - name: my-gateway
         image: my-gateway:1.0.0
         imagePullPolicy: Never
+        # Endpoint removal is asynchronous: without this hold the pod can receive traffic
+        # after it has already started shutting down, which surfaces as 502s on every rollout.
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sh", "-c", "sleep 5"]
         ports:
         - containerPort: 8080
           name: http
@@ -40,6 +49,12 @@ spec:
         env:
         - name: SERVER_PORT
           value: "8080"
+        # Without this the pod runs the development defaults: every trace captured,
+        # 100% sampling, and /actuator/metrics exposed. application-prod.yml turns
+        # capture-all off, samples 10%, and narrows actuator to health,info,prometheus
+        # (the probes and Prometheus scrape below all still resolve).
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod"
         - name: NACOS_SERVER_ADDR
           value: "nacos:8848"
         - name: NACOS_NAMESPACE

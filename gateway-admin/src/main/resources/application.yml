@@ -12,8 +12,13 @@ server:
     enabled: true
     mime-types: application/json,application/xml,text/html,text/xml,text/plain,text/css,application/javascript
     min-response-size: 1024
+  # Finish in-flight requests on SIGTERM instead of cutting them; every deploy restarts
+  # this container. Keep the drain window below docker restart -t / terminationGracePeriodSeconds.
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   threads:
     virtual:
       enabled: true  # JDK 21 虚拟线程：Tomcat 请求线程 + @Async + @Scheduled 全部使用虚拟线程，缓解异构负载线程池竞争

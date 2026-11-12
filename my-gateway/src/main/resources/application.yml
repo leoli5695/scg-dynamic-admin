@@ -6,8 +6,14 @@ server:
   # Additional HTTPS port
   http2:
     enabled: true
+  # Every deploy swaps the jar and restarts this container. Without graceful shutdown
+  # SIGTERM cut in-flight responses mid-stream; the drain window must stay below the
+  # orchestrator's kill deadline (docker restart -t / terminationGracePeriodSeconds).
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   main:
     web-application-type: reactive
   web:
