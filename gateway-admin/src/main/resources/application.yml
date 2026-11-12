@@ -36,7 +36,9 @@ spring:
   # ============================================================================
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/gateway_admin?useUnicode=true&characterEncoding=utf8&useSSL=${MYSQL_USE_SSL:false}&requireSSL=${MYSQL_REQUIRE_SSL:false}&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=${MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL:true}&rewriteBatchedStatements=true
+    # socketTimeout is what unwedges the pool after a DB restart: without it a dead socket blocks
+    # the read forever, and Hikari cannot retire a connection that is still checked out.
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/gateway_admin?useUnicode=true&characterEncoding=utf8&useSSL=${MYSQL_USE_SSL:false}&requireSSL=${MYSQL_REQUIRE_SSL:false}&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=${MYSQL_ALLOW_PUBLIC_KEY_RETRIEVAL:true}&rewriteBatchedStatements=true&connectTimeout=${DB_CONNECT_TIMEOUT:10000}&socketTimeout=${DB_SOCKET_TIMEOUT:60000}
     username: ${MYSQL_USERNAME}
     password: ${MYSQL_PASSWORD}
     # HikariCP 连接池配置
@@ -47,6 +49,8 @@ spring:
       idle-timeout: ${DB_IDLE_TIMEOUT:600000}
       max-lifetime: ${DB_MAX_LIFETIME:1800000}
       leak-detection-threshold: ${DB_LEAK_DETECTION_THRESHOLD:60000}
+      # Hikari's own keepalive default is 120s; 30s evicts a dead idle connection sooner.
+      keepalive-time: ${DB_KEEPALIVE_TIME:30000}
   jpa:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:update}  # Auto-create tables if not exist; set to 'validate' in production

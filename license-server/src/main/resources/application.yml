@@ -12,9 +12,14 @@ spring:
   # ============================================================================
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${LICENSE_DB_HOST:127.0.0.1}:${LICENSE_DB_PORT:3306}/license_server?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    # socketTimeout is what unwedges the pool after a DB restart: without it a dead socket blocks
+    # the read forever, and Hikari cannot retire a connection that is still checked out.
+    url: jdbc:mysql://${LICENSE_DB_HOST:127.0.0.1}:${LICENSE_DB_PORT:3306}/license_server?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&connectTimeout=${LICENSE_DB_CONNECT_TIMEOUT:10000}&socketTimeout=${LICENSE_DB_SOCKET_TIMEOUT:60000}
     username: ${LICENSE_DB_USERNAME:root}
     password: ${LICENSE_DB_PASSWORD:123456}
+    hikari:
+      # Hikari's own keepalive default is 120s; 30s evicts a dead idle connection sooner.
+      keepalive-time: ${LICENSE_DB_KEEPALIVE_TIME:30000}
   jpa:
     hibernate:
       ddl-auto: update  # Auto-create tables if not exist
