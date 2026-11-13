@@ -211,7 +211,7 @@ const RouteCard: React.FC<RouteCardProps> = ({
         </Text>
         {route.description && (
           <Tooltip title={route.description}>
-            <Text type="secondary" ellipsis className="route-desc">{route.description}</Text>
+            <Text type="secondary" className="route-desc">{route.description}</Text>
           </Tooltip>
         )}
       </div>
