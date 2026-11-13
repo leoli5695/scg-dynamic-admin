@@ -16,6 +16,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  max-width: 100%;
   padding: 3px 9px 3px 8px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -24,7 +25,13 @@
   line-height: 18px;
 }
 .plugin-name-chip .anticon {
+  flex-shrink: 0;
   font-size: 12px;
+}
+.plugin-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .plugin-version {
   font-family: var(--font-mono);

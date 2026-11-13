@@ -107,6 +107,7 @@ const PluginsPage: React.FC = () => {
         title: t('plugins.plugin_name'),
         dataIndex: 'pluginName',
         key: 'pluginName',
+        width: 230,
         render: (name: string, record: Plugin) => {
           const color = record.color
             ? statusTone[toneForLegacyColor(record.color)].color
@@ -114,6 +115,7 @@ const PluginsPage: React.FC = () => {
           return (
             <span
               className="plugin-name-chip"
+              title={name}
               style={{
                 color,
                 background: withAlpha(color, 0.12),
@@ -121,7 +123,7 @@ const PluginsPage: React.FC = () => {
               }}
             >
               {getCategoryIcon(record.category)}
-              <span>{name}</span>
+              <span className="plugin-name-text">{name}</span>
             </span>
           );
         },
