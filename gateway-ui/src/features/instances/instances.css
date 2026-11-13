@@ -524,6 +524,11 @@
 .instances-page .instance-action-btn-start {
   color: var(--success-color) !important;
 }
+.instances-pagination {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+}
 .instances-empty {
   padding: 48px 24px;
   border: 1px dashed #829ac333;

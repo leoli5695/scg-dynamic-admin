@@ -4,7 +4,9 @@
  * heartbeat freshness (10s cycle) and instance ID. Spec/replicas are Kubernetes-only
  * and stay hidden for externally managed instances, where they are just defaults.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  createContext, useCallback, useContext, useDeferredValue, useEffect, useMemo, useState,
+} from 'react';
 import {
   Alert,
   Button,
@@ -12,6 +14,7 @@ import {
   Col,
   Empty,
   Input,
+  Pagination,
   Popconfirm,
   Row,
   Space,
@@ -104,6 +107,256 @@ const heartbeatView = (instance: GatewayInstance, now: number, t: TFunc): Heartb
   };
 };
 
+const DEFAULT_PAGE_SIZE = 24;
+const HeartbeatNowContext = createContext(Date.now());
+
+const HeartbeatText: React.FC<{ instance: GatewayInstance }> = ({ instance }) => {
+  const now = useContext(HeartbeatNowContext);
+  const { t } = useTranslation();
+  const heartbeat = heartbeatView(instance, now, t);
+  return (
+    <span className={`instance-cell-value hb-${heartbeat.tone}`}>
+      <i className={`heartbeat-dot heartbeat-${heartbeat.tone}`} />
+      {heartbeat.text}
+    </span>
+  );
+};
+
+type RunInstanceAction = (
+  action: () => Promise<unknown>,
+  successKey?: string,
+  failKey?: string,
+) => Promise<void>;
+
+interface InstanceCardProps {
+  instance: GatewayInstance;
+  onOpen: (instanceId: string) => void;
+  onAction: RunInstanceAction;
+  onCopy: (value: string, successKey: string) => void;
+}
+
+const InstanceCard: React.FC<InstanceCardProps> = ({
+  instance, onOpen, onAction, onCopy,
+}) => {
+  const { t } = useTranslation();
+  const hasCluster = instance.clusterId != null;
+  const accessUrl = getEffectiveAccessUrl(instance);
+
+  return (
+    <Col xs={24} lg={12} xxl={8}>
+      <Card
+        className="instance-card"
+        hoverable
+        onClick={() => onOpen(instance.instanceId)}
+      >
+        <div className="instance-card-header">
+          <div className="instance-card-icon">
+            <CloudServerOutlined />
+          </div>
+          <div className="instance-card-info">
+            <div className="instance-card-name">
+              <Text strong ellipsis={{ tooltip: instance.instanceName }}>
+                {instance.instanceName}
+              </Text>
+              <Tag
+                className={`instance-type-tag ${hasCluster ? 'type-cluster' : 'type-external'}`}
+              >
+                {hasCluster ? instance.clusterName : t('instance.external_tag')}
+              </Tag>
+            </div>
+            <div className="instance-card-meta">
+              <span className="instance-namespace">
+                <InboxOutlined style={{ marginRight: 4, fontSize: 12 }} />
+                {instance.namespace}
+              </span>
+            </div>
+          </div>
+          <div className="instance-card-status">
+            <span className={`instance-status-dot status-dot-${instance.statusCode}`} />
+            <Tag
+              className="instance-status-tag"
+              color={getStatusColor(instance.statusCode ?? -1)}
+            >
+              {getStatusText(instance.statusCode ?? -1, instance.status ?? '', t)}
+            </Tag>
+          </div>
+        </div>
+
+        <div className="instance-access-row">
+          <span className="instance-access-label">{t('instance.access_url')}</span>
+          {accessUrl ? (
+            <>
+              <Tooltip title={t('instance.click_to_open')}>
+                <a
+                  className="instance-access-url"
+                  href={accessUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <LinkOutlined />
+                  {accessUrl}
+                </a>
+              </Tooltip>
+              <Tooltip title={t('common.copy')}>
+                <Button
+                  className="instance-mini-btn"
+                  type="text"
+                  aria-label={t('common.copy')}
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCopy(accessUrl, 'instance.url_copied');
+                  }}
+                />
+              </Tooltip>
+            </>
+          ) : (
+            <Text type="secondary" className="instance-access-empty">
+              {t('instance.no_access_url')}
+            </Text>
+          )}
+        </div>
+
+        <div className="instance-cells">
+          <div className="instance-cell">
+            <span className="instance-cell-label">{t('instance.last_heartbeat')}</span>
+            <HeartbeatText instance={instance} />
+          </div>
+          <div className="instance-cell">
+            <span className="instance-cell-label">{t('instance.instance_id')}</span>
+            <span className="instance-cell-value">
+              <Tooltip title={instance.instanceId}>
+                <span className="instance-id-text">{instance.instanceId}</span>
+              </Tooltip>
+              <Tooltip title={t('common.copy')}>
+                <Button
+                  className="instance-mini-btn"
+                  type="text"
+                  aria-label={t('common.copy')}
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCopy(instance.instanceId, 'instance.copied');
+                  }}
+                />
+              </Tooltip>
+            </span>
+          </div>
+          {hasCluster && (
+            <>
+              <div className="instance-cell">
+                <span className="instance-cell-label">{t('instance.spec')}</span>
+                <span className="instance-cell-value">{getSpecText(instance, t)}</span>
+              </div>
+              <div className="instance-cell">
+                <span className="instance-cell-label">{t('instance.replicas')}</span>
+                <span className="instance-cell-value">{instance.replicas}</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {instance.statusMessage && (
+          <div className={`instance-status-message status-message-${instance.statusCode ?? 'unknown'}`}>
+            <Tooltip title={instance.statusMessage} placement="topLeft">
+              <Text className="instance-status-text">{instance.statusMessage}</Text>
+            </Tooltip>
+          </div>
+        )}
+
+        <div className="instance-card-actions" onClick={(e) => e.stopPropagation()}>
+          <Button
+            className="instance-open-button"
+            type="link"
+            onClick={() => onOpen(instance.instanceId)}
+          >
+            {t('instance.open_console')}
+            <ArrowRightOutlined />
+          </Button>
+          {hasCluster && instance.statusCode === INSTANCE_STATUS.RUNNING && (
+            <Tooltip title={t('instance.stop')}>
+              <Button
+                className="instance-action-btn"
+                type="text"
+                aria-label={t('instance.stop')}
+                icon={<PauseCircleOutlined />}
+                onClick={() =>
+                  onAction(
+                    () => stopInstance(instance.id),
+                    'instance.stop_success',
+                    'instance.stop_failed',
+                  )
+                }
+              />
+            </Tooltip>
+          )}
+          {hasCluster &&
+            (instance.statusCode === INSTANCE_STATUS.STOPPED ||
+              instance.statusCode === INSTANCE_STATUS.ERROR) && (
+              <Tooltip title={t('instance.start')}>
+                <Button
+                  className="instance-action-btn instance-action-btn-start"
+                  type="text"
+                  aria-label={t('instance.start')}
+                  icon={<PlayCircleOutlined />}
+                  onClick={() =>
+                    onAction(
+                      () => startInstance(instance.id),
+                      'instance.start_success',
+                      'instance.start_failed',
+                    )
+                  }
+                />
+              </Tooltip>
+            )}
+          <Tooltip title={t('common.refresh')}>
+            <Button
+              className="instance-action-btn"
+              type="text"
+              aria-label={t('common.refresh')}
+              icon={<ReloadOutlined />}
+              onClick={() =>
+                onAction(
+                  () => refreshInstanceStatus(instance.id),
+                  undefined,
+                  'common.refresh_failed',
+                )
+              }
+            />
+          </Tooltip>
+          <Popconfirm
+            title={t('instance.delete_confirm')}
+            onConfirm={() =>
+              onAction(
+                () => deleteInstance(instance.id),
+                'instance.delete_success',
+                'instance.delete_failed',
+              )
+            }
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
+          >
+            <Tooltip title={t('common.delete')}>
+              <Button
+                className="instance-action-btn instance-action-btn-danger"
+                type="text"
+                danger
+                aria-label={t('common.delete')}
+                icon={<DeleteOutlined />}
+              />
+            </Tooltip>
+          </Popconfirm>
+        </div>
+      </Card>
+    </Col>
+  );
+};
+
+const MemoizedInstanceCard = React.memo(InstanceCard);
+
 const InstancesListPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -111,6 +364,9 @@ const InstancesListPage: React.FC = () => {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const deferredSearch = useDeferredValue(search);
 
   // Ticks the "x seconds ago" heartbeat labels without refetching.
   useEffect(() => {
@@ -125,6 +381,7 @@ const InstancesListPage: React.FC = () => {
   });
 
   const list = useMemo(() => instances.data ?? [], [instances.data]);
+  const refreshInstances = instances.run;
   const clusterCount = clusters.data?.length ?? 0;
   const loading = instances.loading || clusters.loading;
 
@@ -139,7 +396,7 @@ const InstancesListPage: React.FC = () => {
   );
 
   const visibleList = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = deferredSearch.trim().toLowerCase();
     return list.filter(
       (instance) =>
         (statusFilter === null || instance.statusCode === statusFilter) &&
@@ -151,11 +408,19 @@ const InstancesListPage: React.FC = () => {
             getEffectiveAccessUrl(instance),
           ].some((value) => value?.toLowerCase().includes(query))),
     );
-  }, [list, search, statusFilter]);
-  const staleCount = list.filter((instance) => {
+  }, [list, deferredSearch, statusFilter]);
+  const staleCount = useMemo(() => list.filter((instance) => {
     const heartbeat = heartbeatView(instance, now, t);
     return heartbeat.tone === 'warn' || heartbeat.tone === 'bad';
-  }).length;
+  }).length, [list, now, t]);
+  const effectivePage = Math.min(
+    currentPage,
+    Math.max(1, Math.ceil(visibleList.length / pageSize)),
+  );
+  const paginatedList = useMemo(
+    () => visibleList.slice((effectivePage - 1) * pageSize, effectivePage * pageSize),
+    [visibleList, effectivePage, pageSize],
+  );
 
   const statItems = [
     {
@@ -192,8 +457,12 @@ const InstancesListPage: React.FC = () => {
     },
   ];
 
+  const openInstance = useCallback((instanceId: string) => {
+    navigate(`/instances/${instanceId}`);
+  }, [navigate]);
+
   /** Run a mutating action then refresh the list. */
-  const runAction = async (
+  const runAction = useCallback(async (
     action: () => Promise<unknown>,
     successKey?: string,
     failKey?: string,
@@ -201,7 +470,7 @@ const InstancesListPage: React.FC = () => {
     try {
       await action();
       if (successKey) message.success(t(successKey));
-      instances.run();
+      refreshInstances();
     } catch (error) {
       const msg =
         error instanceof ApiError && error.message
@@ -209,12 +478,12 @@ const InstancesListPage: React.FC = () => {
           : t(failKey || 'common.operation_failed');
       message.error(msg);
     }
-  };
+  }, [refreshInstances, t]);
 
-  const copyText = (value: string, successKey: string) => {
+  const copyText = useCallback((value: string, successKey: string) => {
     copy(value);
     message.success(t(successKey));
-  };
+  }, [t]);
 
   return (
     <div className="instances-page">
@@ -253,7 +522,10 @@ const InstancesListPage: React.FC = () => {
             type="button"
             className={`instances-stat stat-${item.key} ${statusFilter === item.status ? 'is-selected' : ''}`}
             aria-pressed={statusFilter === item.status}
-            onClick={() => setStatusFilter(statusFilter === item.status ? null : item.status)}
+            onClick={() => {
+              setStatusFilter(statusFilter === item.status ? null : item.status);
+              setCurrentPage(1);
+            }}
           >
             <span className="instances-stat-top">
               <span>{t(item.label)}</span>
@@ -282,7 +554,10 @@ const InstancesListPage: React.FC = () => {
           prefix={<SearchOutlined />}
           allowClear
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setCurrentPage(1);
+          }}
           placeholder={t('instance.search_placeholder')}
           aria-label={t('instance.search_placeholder')}
         />
@@ -292,7 +567,14 @@ const InstancesListPage: React.FC = () => {
           <span>
             {t('instance.filtered_status', { status: getStatusText(statusFilter, '', t) })}
           </span>
-          <Button type="link" size="small" onClick={() => setStatusFilter(null)}>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => {
+              setStatusFilter(null);
+              setCurrentPage(1);
+            }}
+          >
             {t('instance.clear_filter')}
           </Button>
         </div>
@@ -307,229 +589,33 @@ const InstancesListPage: React.FC = () => {
       )}
 
       <Spin spinning={loading && !instances.data}>
-        <Row gutter={[16, 16]} className="instances-grid">
-          {visibleList.map((instance) => {
-            // An externally managed instance has no Deployment, so the console cannot start or
-            // stop it - offering the buttons would only produce a 400.
-            const hasCluster = instance.clusterId != null;
-            const accessUrl = getEffectiveAccessUrl(instance);
-            const heartbeat = heartbeatView(instance, now, t);
-            return (
-              <Col xs={24} lg={12} xxl={8} key={instance.id}>
-                <Card
-                  className="instance-card"
-                  hoverable
-                  onClick={() => navigate(`/instances/${instance.instanceId}`)}
-                >
-                  <div className="instance-card-header">
-                    <div className="instance-card-icon">
-                      <CloudServerOutlined />
-                    </div>
-                    <div className="instance-card-info">
-                      <div className="instance-card-name">
-                        <Text strong ellipsis={{ tooltip: instance.instanceName }}>
-                          {instance.instanceName}
-                        </Text>
-                        <Tag
-                          className={`instance-type-tag ${hasCluster ? 'type-cluster' : 'type-external'}`}
-                        >
-                          {hasCluster ? instance.clusterName : t('instance.external_tag')}
-                        </Tag>
-                      </div>
-                      <div className="instance-card-meta">
-                        <span className="instance-namespace">
-                          <InboxOutlined style={{ marginRight: 4, fontSize: 12 }} />
-                          {instance.namespace}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="instance-card-status">
-                      <span className={`instance-status-dot status-dot-${instance.statusCode}`} />
-                      <Tag
-                        className="instance-status-tag"
-                        color={getStatusColor(instance.statusCode ?? -1)}
-                      >
-                        {getStatusText(instance.statusCode ?? -1, instance.status ?? '', t)}
-                      </Tag>
-                    </div>
-                  </div>
-
-                  <div className="instance-access-row">
-                    <span className="instance-access-label">{t('instance.access_url')}</span>
-                    {accessUrl ? (
-                      <>
-                        <Tooltip title={t('instance.click_to_open')}>
-                          <a
-                            className="instance-access-url"
-                            href={accessUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <LinkOutlined />
-                            {accessUrl}
-                          </a>
-                        </Tooltip>
-                        <Tooltip title={t('common.copy')}>
-                          <Button
-                            className="instance-mini-btn"
-                            type="text"
-                            aria-label={t('common.copy')}
-                            size="small"
-                            icon={<CopyOutlined />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              copyText(accessUrl, 'instance.url_copied');
-                            }}
-                          />
-                        </Tooltip>
-                      </>
-                    ) : (
-                      <Text type="secondary" className="instance-access-empty">
-                        {t('instance.no_access_url')}
-                      </Text>
-                    )}
-                  </div>
-
-                  <div className="instance-cells">
-                    <div className="instance-cell">
-                      <span className="instance-cell-label">{t('instance.last_heartbeat')}</span>
-                      <span className={`instance-cell-value hb-${heartbeat.tone}`}>
-                        <i className={`heartbeat-dot heartbeat-${heartbeat.tone}`} />
-                        {heartbeat.text}
-                      </span>
-                    </div>
-                    <div className="instance-cell">
-                      <span className="instance-cell-label">{t('instance.instance_id')}</span>
-                      <span className="instance-cell-value">
-                        <Tooltip title={instance.instanceId}>
-                          <span className="instance-id-text">{instance.instanceId}</span>
-                        </Tooltip>
-                        <Tooltip title={t('common.copy')}>
-                          <Button
-                            className="instance-mini-btn"
-                            type="text"
-                            aria-label={t('common.copy')}
-                            size="small"
-                            icon={<CopyOutlined />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              copyText(instance.instanceId, 'instance.copied');
-                            }}
-                          />
-                        </Tooltip>
-                      </span>
-                    </div>
-                    {hasCluster && (
-                      <>
-                        <div className="instance-cell">
-                          <span className="instance-cell-label">{t('instance.spec')}</span>
-                          <span className="instance-cell-value">{getSpecText(instance, t)}</span>
-                        </div>
-                        <div className="instance-cell">
-                          <span className="instance-cell-label">{t('instance.replicas')}</span>
-                          <span className="instance-cell-value">{instance.replicas}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {instance.statusMessage && (
-                    <div className={`instance-status-message status-message-${instance.statusCode ?? 'unknown'}`}>
-                      <Tooltip title={instance.statusMessage} placement="topLeft">
-                        <Text className="instance-status-text">{instance.statusMessage}</Text>
-                      </Tooltip>
-                    </div>
-                  )}
-
-                  <div className="instance-card-actions" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      className="instance-open-button"
-                      type="link"
-                      onClick={() => navigate(`/instances/${instance.instanceId}`)}
-                    >
-                      {t('instance.open_console')}
-                      <ArrowRightOutlined />
-                    </Button>
-                    {hasCluster && instance.statusCode === INSTANCE_STATUS.RUNNING && (
-                      <Tooltip title={t('instance.stop')}>
-                        <Button
-                          className="instance-action-btn"
-                          type="text"
-                          aria-label={t('instance.stop')}
-                          icon={<PauseCircleOutlined />}
-                          onClick={() =>
-                            runAction(
-                              () => stopInstance(instance.id),
-                              'instance.stop_success',
-                              'instance.stop_failed',
-                            )
-                          }
-                        />
-                      </Tooltip>
-                    )}
-                    {hasCluster &&
-                      (instance.statusCode === INSTANCE_STATUS.STOPPED ||
-                        instance.statusCode === INSTANCE_STATUS.ERROR) && (
-                        <Tooltip title={t('instance.start')}>
-                          <Button
-                            className="instance-action-btn instance-action-btn-start"
-                            type="text"
-                            aria-label={t('instance.start')}
-                            icon={<PlayCircleOutlined />}
-                            onClick={() =>
-                              runAction(
-                                () => startInstance(instance.id),
-                                'instance.start_success',
-                                'instance.start_failed',
-                              )
-                            }
-                          />
-                        </Tooltip>
-                      )}
-                    <Tooltip title={t('common.refresh')}>
-                      <Button
-                        className="instance-action-btn"
-                        type="text"
-                        aria-label={t('common.refresh')}
-                        icon={<ReloadOutlined />}
-                        onClick={() =>
-                          runAction(
-                            () => refreshInstanceStatus(instance.id),
-                            undefined,
-                            'common.refresh_failed',
-                          )
-                        }
-                      />
-                    </Tooltip>
-                    <Popconfirm
-                      title={t('instance.delete_confirm')}
-                      onConfirm={() =>
-                        runAction(
-                          () => deleteInstance(instance.id),
-                          'instance.delete_success',
-                          'instance.delete_failed',
-                        )
-                      }
-                      okText={t('common.confirm')}
-                      cancelText={t('common.cancel')}
-                    >
-                      <Tooltip title={t('common.delete')}>
-                        <Button
-                          className="instance-action-btn instance-action-btn-danger"
-                          type="text"
-                          danger
-                          aria-label={t('common.delete')}
-                          icon={<DeleteOutlined />}
-                        />
-                      </Tooltip>
-                    </Popconfirm>
-                  </div>
-                </Card>
-              </Col>
-            );
-          })}
-        </Row>
+        <HeartbeatNowContext.Provider value={now}>
+          <Row gutter={[16, 16]} className="instances-grid">
+            {paginatedList.map((instance) => (
+              <MemoizedInstanceCard
+                key={instance.id}
+                instance={instance}
+                onOpen={openInstance}
+                onAction={runAction}
+                onCopy={copyText}
+              />
+            ))}
+          </Row>
+        </HeartbeatNowContext.Provider>
+        {visibleList.length > 0 && (visibleList.length > DEFAULT_PAGE_SIZE || pageSize !== DEFAULT_PAGE_SIZE) && (
+          <Pagination
+            className="instances-pagination"
+            current={effectivePage}
+            pageSize={pageSize}
+            total={visibleList.length}
+            showSizeChanger
+            pageSizeOptions={[12, 24, 48, 96]}
+            onChange={(page, size) => {
+              setCurrentPage(page);
+              setPageSize(size);
+            }}
+          />
+        )}
         {list.length > 0 && visibleList.length === 0 && (
           <div className="instances-empty">
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('instance.no_matches')}>
@@ -537,6 +623,7 @@ const InstancesListPage: React.FC = () => {
                 onClick={() => {
                   setSearch('');
                   setStatusFilter(null);
+                  setCurrentPage(1);
                 }}
               >
                 {t('instance.reset_search')}
