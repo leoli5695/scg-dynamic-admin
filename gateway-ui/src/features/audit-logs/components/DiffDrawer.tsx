@@ -3,7 +3,7 @@
  * old/new value comparison. Backend diff changes use the `path` key; the
  * legacy UI read `field` only, so both are accepted here.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Alert, Button, Card, Col, Collapse, Descriptions, Drawer, Popconfirm,
   Row, Space, Spin, Table, Tag, Tooltip, Typography
@@ -35,7 +35,7 @@ const JsonValue: React.FC<{ value: unknown; maxHeight?: number; noneLabel: strin
   value, maxHeight = 200, noneLabel,
 }) => {
   const { t } = useTranslation();
-  const jsonStr = value ? JSON.stringify(value, null, 2) : null;
+  const jsonStr = useMemo(() => (value ? JSON.stringify(value, null, 2) : null), [value]);
   if (!jsonStr) return <Text type="secondary">{noneLabel}</Text>;
   const isLarge = jsonStr.length > 500;
   return (
@@ -62,7 +62,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
   );
   const diff = diffRequest.data;
 
-  const changeColumns: ColumnsType<AuditDiffChange> = [
+  const changeColumns = useMemo<ColumnsType<AuditDiffChange>>(() => [
     {
       title: t('audit.type'),
       dataIndex: 'type',
@@ -89,7 +89,7 @@ const DiffDrawer: React.FC<DiffDrawerProps> = ({ instanceId, logId, open, onClos
       dataIndex: 'newValue',
       render: (v: unknown) => (v ? <Text type="success" style={{ fontSize: 11 }}>{JSON.stringify(v)}</Text> : <Text type="secondary">-</Text>),
     },
-  ];
+  ], [t]);
 
   const targetLink = diff ? getTargetLink(diff.targetType, diff.targetId, diff.instanceId || instanceId) : null;
 

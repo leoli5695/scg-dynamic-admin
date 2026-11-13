@@ -49,18 +49,18 @@ export const getTargetTypeTag = (t: TFunction, type: string) => {
   return <Tag color={config.color}>{t(config.labelKey) || type}</Tag>;
 };
 
-/** Subtle row background by operation type (table view). */
-export const getRowStyle = (operationType: string): CSSProperties => {
-  switch (operationType) {
-    case 'DELETE': return { backgroundColor: 'rgba(242, 113, 127, 0.08)' };
-    case 'CREATE': return { backgroundColor: 'rgba(61, 220, 151, 0.08)' };
-    case 'ROLLBACK': return { backgroundColor: 'rgba(232, 180, 100, 0.08)' };
-    case 'UPDATE': return { backgroundColor: 'rgba(76, 128, 236, 0.08)' };
-    case 'ENABLE': return { backgroundColor: 'rgba(61, 220, 151, 0.08)' };
-    case 'DISABLE': return { backgroundColor: 'rgba(242, 113, 127, 0.08)' };
-    default: return {};
-  }
+/** Subtle row background by operation type (table view). Shared styles: no per-row allocation. */
+const EMPTY_ROW_STYLE: CSSProperties = {};
+const ROW_STYLES: Record<string, CSSProperties> = {
+  DELETE: { backgroundColor: 'rgba(242, 113, 127, 0.08)' },
+  CREATE: { backgroundColor: 'rgba(61, 220, 151, 0.08)' },
+  ROLLBACK: { backgroundColor: 'rgba(232, 180, 100, 0.08)' },
+  UPDATE: { backgroundColor: 'rgba(76, 128, 236, 0.08)' },
+  ENABLE: { backgroundColor: 'rgba(61, 220, 151, 0.08)' },
+  DISABLE: { backgroundColor: 'rgba(242, 113, 127, 0.08)' },
 };
+export const getRowStyle = (operationType: string): CSSProperties =>
+  ROW_STYLES[operationType] ?? EMPTY_ROW_STYLE;
 
 /** Normalize loopback IPv6 to a readable form. */
 export const formatIpAddress = (ip: string) => {

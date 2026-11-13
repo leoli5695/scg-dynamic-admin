@@ -25,7 +25,7 @@ import {
 } from '../../../api/accessLog';
 import { getClusters } from '../../../api/kubernetes';
 import type {
-  AccessLogEntry, AccessLogStats, DeployMode,
+  AccessLogEntriesPage, AccessLogEntry, AccessLogStats, DeployMode,
 } from '../../../types/accessLog';
 import { HISTORY_RANGE_OPTIONS, rangeToSeconds, type HistoryRange } from '../constants';
 import { getDurationColor, getMethodColor, getStatusBadge } from '../utils';
@@ -60,6 +60,8 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
   /** Local realtime mode reads one day's file; backend defaults to today. */
   const [viewDate, setViewDate] = useState<dayjs.Dayjs | null>(null);
   const [filters, setFilters] = useState<LogFilters>(EMPTY_FILTERS);
+  const [pathDraft, setPathDraft] = useState('');
+  const [traceIdDraft, setTraceIdDraft] = useState('');
   const [logPage, setLogPage] = useState(0);
   const [logPageSize, setLogPageSize] = useState(20);
   const [bodyViewMode, setBodyViewMode] = useState<'raw' | 'formatted'>('formatted');
@@ -130,12 +132,14 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
     setClusterId(value);
     setSelectedNamespace('');
     setSelectedPod(null);
+    setLogPage(0);
   };
 
   // Pods are namespace-specific — drop the stale selection with the change.
   const handleNamespaceChange = (value: string | undefined) => {
     setSelectedNamespace(value ?? '');
     setSelectedPod(null);
+    setLogPage(0);
   };
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
@@ -145,66 +149,114 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
     onTotalChange?.(logTotal);
   }, [logTotal, onTotalChange]);
 
-  // Entries + stats follow the mode/cluster/filters/paging state.
+  /**
+   * Commit filter changes as one page-resetting update; an emptied field removes
+   * its filter instead of pinning the previous value. Bumping the page is part of
+   * the same update so the next request can never land past the last page.
+   */
+  const commitFilters = useCallback((patch: Partial<LogFilters>) => {
+    setFilters((prev) => {
+      const next = { ...prev, ...patch };
+      (Object.keys(next) as Array<keyof LogFilters>).forEach((key) => {
+        if (next[key] === undefined || next[key] === '') delete next[key];
+      });
+      return next;
+    });
+    setLogPage(0);
+  }, []);
+
+  /**
+   * One window per range/reload snapshot. Recomputing `now` on every page turn
+   * silently shifted the range between pages, so totals and rows disagreed.
+   */
+  const historyWindow = useMemo(() => {
+    if (logViewMode !== 'history') return null;
+    const endTime = new Date();
+    return {
+      startTime: new Date(endTime.getTime() - rangeToSeconds(historyTimeRange) * 1000).toISOString(),
+      endTime: endTime.toISOString(),
+    };
+  // Refresh must move the window forward; paging and filtering must not.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logViewMode, historyTimeRange, reloadKey]);
+
+  // Rows change with filters/paging; stats ignore both, so they are fetched separately.
   useEffect(() => {
     if (isK8s && !selectedPod) return undefined;
     const controller = new AbortController();
     (async () => {
       setLogLoading(true);
       try {
+        let page: AccessLogEntriesPage;
         if (isK8s && clusterId !== null && selectedPod) {
-          const k8sBase = {
+          page = await getK8sEntries({
             clusterId,
             namespace: selectedPodNamespace || selectedNamespace || undefined,
             podName: selectedPod,
             ...(logViewMode === 'history'
               ? { sinceSeconds: rangeToSeconds(historyTimeRange) }
               : { tailLines: 500 }),
-          };
-          const [page, stats] = await Promise.all([
-            getK8sEntries({ ...k8sBase, page: logPage, size: logPageSize, ...filters }, { signal: controller.signal }),
-            getK8sStats(k8sBase, { signal: controller.signal }),
-          ]);
-          if (controller.signal.aborted) return;
-          setLogEntries(page.entries ?? []);
-          setLogTotal(page.total ?? 0);
-          setLogStats(stats ?? null);
-        } else if (logViewMode === 'history') {
-          const endTime = new Date();
-          const startTime = new Date(endTime.getTime() - rangeToSeconds(historyTimeRange) * 1000);
-          const historyBase = {
+            page: logPage,
+            size: logPageSize,
+            ...filters,
+          }, { signal: controller.signal });
+        } else if (logViewMode === 'history' && historyWindow) {
+          page = await getHistoryEntries({
             instanceId,
-            startTime: startTime.toISOString(),
-            endTime: endTime.toISOString(),
-          };
-          const [page, stats] = await Promise.all([
-            getHistoryEntries({ ...historyBase, page: logPage, size: logPageSize, ...filters }, { signal: controller.signal }),
-            getHistoryStats(historyBase, { signal: controller.signal }),
-          ]);
-          if (controller.signal.aborted) return;
-          setLogEntries(page.entries ?? []);
-          setLogTotal(page.total ?? 0);
-          setLogStats(stats ?? null);
+            ...historyWindow,
+            page: logPage,
+            size: logPageSize,
+            ...filters,
+          }, { signal: controller.signal });
         } else {
           const date = viewDate ? viewDate.format('YYYY-MM-DD') : undefined;
-          const [page, stats] = await Promise.all([
-            getLogEntries({ date, page: logPage, size: logPageSize, ...filters }, { signal: controller.signal }),
-            getLogStats({ date }, { signal: controller.signal }),
-          ]);
-          if (controller.signal.aborted) return;
-          setLogEntries(page.entries ?? []);
-          setLogTotal(page.total ?? 0);
-          setLogStats(stats ?? null);
+          page = await getLogEntries({ date, page: logPage, size: logPageSize, ...filters }, { signal: controller.signal });
         }
+        if (controller.signal.aborted) return;
+        setLogEntries(page.entries ?? []);
+        setLogTotal(page.total ?? 0);
       } catch {
         if (controller.signal.aborted) return;
-        message.error(t('access_log.load_failed'));
+        message.error({ content: t('access_log.load_failed'), key: 'access-log-load' });
       } finally {
         if (!controller.signal.aborted) setLogLoading(false);
       }
     })();
     return () => controller.abort();
-  }, [isK8s, clusterId, selectedPod, selectedPodNamespace, selectedNamespace, logViewMode, historyTimeRange, viewDate, filters, logPage, logPageSize, instanceId, reloadKey, t]);
+  }, [isK8s, clusterId, selectedPod, selectedPodNamespace, selectedNamespace, logViewMode, historyTimeRange, historyWindow, viewDate, filters, logPage, logPageSize, instanceId, reloadKey, t]);
+
+  // Aggregate stats cover the whole source window — filters and paging must not refetch them.
+  useEffect(() => {
+    if (isK8s && !selectedPod) return undefined;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        let stats: AccessLogStats | null;
+        if (isK8s && clusterId !== null && selectedPod) {
+          stats = await getK8sStats({
+            clusterId,
+            namespace: selectedPodNamespace || selectedNamespace || undefined,
+            podName: selectedPod,
+            ...(logViewMode === 'history'
+              ? { sinceSeconds: rangeToSeconds(historyTimeRange) }
+              : { tailLines: 500 }),
+          }, { signal: controller.signal });
+        } else if (logViewMode === 'history' && historyWindow) {
+          stats = await getHistoryStats({ instanceId, ...historyWindow }, { signal: controller.signal });
+        } else {
+          const date = viewDate ? viewDate.format('YYYY-MM-DD') : undefined;
+          stats = await getLogStats({ date }, { signal: controller.signal });
+        }
+        if (!controller.signal.aborted) setLogStats(stats ?? null);
+      } catch {
+        if (!controller.signal.aborted) {
+          // Keep the previous cards rather than blanking the page on one failed aggregate.
+          message.error({ content: t('access_log.load_failed'), key: 'access-log-load' });
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [isK8s, clusterId, selectedPod, selectedPodNamespace, selectedNamespace, logViewMode, historyTimeRange, historyWindow, viewDate, instanceId, reloadKey, t]);
 
   const columns = useMemo<ColumnsType<AccessLogEntry>>(() => [
     {
@@ -284,7 +336,10 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
           <Text strong>{t('access_log.view_mode')}:</Text>
           <Segmented
             value={logViewMode}
-            onChange={(value) => setLogViewMode(value as 'realtime' | 'history')}
+            onChange={(value) => {
+              setLogViewMode(value as 'realtime' | 'history');
+              setLogPage(0);
+            }}
             options={[
               { value: 'realtime', label: <Space><ClockCircleOutlined />{t('access_log.realtime_mode')}</Space> },
               { value: 'history', label: <Space><HistoryOutlined />{t('access_log.history_mode')}</Space> },
@@ -340,7 +395,10 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
                 <Select
                   placeholder={t('access_log.select_pod')}
                   value={selectedPod}
-                  onChange={setSelectedPod}
+                  onChange={(value) => {
+                    setSelectedPod(value);
+                    setLogPage(0);
+                  }}
                   style={{ width: 280 }}
                   loading={podsRequest.loading}
                   showSearch
@@ -416,7 +474,10 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
           {logViewMode === 'history' && (
             <Select
               value={historyTimeRange}
-              onChange={(value) => setHistoryTimeRange(value)}
+              onChange={(value) => {
+                setHistoryTimeRange(value);
+                setLogPage(0);
+              }}
               style={{ width: 120 }}
               getPopupContainer={() => document.body}
               popupMatchSelectWidth={false}
@@ -445,14 +506,20 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
             placeholder={t('access_log.path_contains')}
             prefix={<SearchOutlined />}
             style={{ width: 200 }}
-            onPressEnter={(e) => setFilters({ ...filters, path: (e.target as HTMLInputElement).value })}
+            value={pathDraft}
+            onChange={(e) => {
+              setPathDraft(e.target.value);
+              // Clearing the box must clear the applied filter, not leave it pinned.
+              if (!e.target.value && filters.path) commitFilters({ path: undefined });
+            }}
+            onPressEnter={() => commitFilters({ path: pathDraft.trim() || undefined })}
             allowClear
           />
           <Select
             placeholder={t('access_log.method')}
             style={{ width: 100 }}
             allowClear
-            onChange={(v) => setFilters({ ...filters, method: v || undefined })}
+            onChange={(v) => commitFilters({ method: v || undefined })}
             options={[
               { value: 'GET', label: 'GET' },
               { value: 'POST', label: 'POST' },
@@ -461,21 +528,23 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
             ]}
           />
           <Select
-            placeholder={t('access_log.status')}
-            style={{ width: 100 }}
+            placeholder={t('access_log.status_exact')}
+            style={{ width: 110 }}
             allowClear
-            onChange={(v) => setFilters({ ...filters, statusCode: v || undefined })}
-            options={[
-              { value: 200, label: '2xx' },
-              { value: 400, label: '4xx' },
-              { value: 500, label: '5xx' },
-            ]}
+            onChange={(v) => commitFilters({ statusCode: v || undefined })}
+            options={[200, 201, 204, 301, 302, 304, 400, 401, 403, 404, 429, 500, 502, 503, 504]
+              .map((code) => ({ value: code, label: String(code) }))}
           />
           <Input
             placeholder={t('access_log.trace_id')}
             prefix={<SearchOutlined />}
             style={{ width: 150 }}
-            onPressEnter={(e) => setFilters({ ...filters, traceId: (e.target as HTMLInputElement).value })}
+            value={traceIdDraft}
+            onChange={(e) => {
+              setTraceIdDraft(e.target.value);
+              if (!e.target.value && filters.traceId) commitFilters({ traceId: undefined });
+            }}
+            onPressEnter={() => commitFilters({ traceId: traceIdDraft.trim() || undefined })}
             allowClear
           />
           <Button icon={<ReloadOutlined />} onClick={reload}>
@@ -488,7 +557,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
       <Table
         dataSource={logEntries}
         columns={columns}
-        rowKey={(record) => record.requestId || record['@timestamp']}
+        rowKey={(record, index) => record.requestId || `${record['@timestamp']}-${index}`}
         loading={logLoading}
         size="small"
         pagination={{

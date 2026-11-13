@@ -273,6 +273,53 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
     },
   ], [t, onShowDiff, onRollback, handleDelete]);
 
+  /**
+   * The draft filter inputs live in this component. Keeping the table element
+   * referentially stable means typing `targetId` only re-renders the filter bar,
+   * not every row/cell of a 100-row page.
+   */
+  const tableContent = useMemo(() => (
+    <Table
+      columns={columns}
+      dataSource={logs}
+      rowKey="id"
+      loading={loading}
+      scroll={{ x: 1200 }}
+      onRow={(record: AuditLog) => ({
+        style: getRowStyle(record.operationType),
+      })}
+      locale={{
+        emptyText: (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <span>
+                {t('audit.no_logs')}
+                <br />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {t('audit.no_logs_hint')}
+                </Text>
+              </span>
+            }
+          />
+        ),
+      }}
+      pagination={{
+        current: page + 1,
+        pageSize,
+        total,
+        showSizeChanger: true,
+        pageSizeOptions: ['10', '20', '50', '100'],
+        showQuickJumper: true,
+        showTotal: (totalCount) => `${t('common.total')} ${totalCount} ${t('audit.records')}`,
+        onChange: (p, ps) => {
+          setPage(p - 1);
+          setPageSize(ps);
+        },
+      }}
+    />
+  ), [columns, logs, loading, page, pageSize, total, t]);
+
   return (
     <>
       {/* Stats */}
@@ -446,48 +493,7 @@ const TableView: React.FC<TableViewProps> = ({ instanceId, reloadKey, onShowDiff
       </Card>
 
       {/* Table */}
-      <Card>
-        <Table
-          columns={columns}
-          dataSource={logs}
-          rowKey="id"
-          loading={loading}
-          scroll={{ x: 1200 }}
-          onRow={(record: AuditLog) => ({
-            style: getRowStyle(record.operationType),
-          })}
-          locale={{
-            emptyText: (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  <span>
-                    {t('audit.no_logs')}
-                    <br />
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {t('audit.no_logs_hint')}
-                    </Text>
-                  </span>
-                }
-              />
-            ),
-          }}
-          pagination={{
-            current: page + 1,
-            pageSize,
-            total,
-            showSizeChanger: true,
-            pageSizeOptions: ['10', '20', '50', '100'],
-            defaultPageSize: 20,
-            showQuickJumper: true,
-            showTotal: (totalCount) => `${t('common.total')} ${totalCount} ${t('audit.records')}`,
-            onChange: (p, ps) => {
-              setPage(p - 1);
-              setPageSize(ps);
-            },
-          }}
-        />
-      </Card>
+      <Card>{tableContent}</Card>
     </>
   );
 };

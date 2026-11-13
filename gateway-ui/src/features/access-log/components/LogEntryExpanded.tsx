@@ -2,8 +2,8 @@
  * Expanded row content for one access log entry: basic info, IDs, auth /
  * routing info and the request/response bodies with a formatted/raw toggle.
  */
-import React from 'react';
-import { Alert, Badge, Descriptions, Radio, Tag, Tooltip, Typography } from 'antd';
+import React, { useState } from 'react';
+import { Alert, Badge, Button, Descriptions, Radio, Tag, Tooltip, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -25,6 +25,55 @@ const formatTime = (ts: string) => (
   ts ? dayjs(ts).local().format('YYYY-MM-DD HH:mm:ss.SSS') : '-'
 );
 
+/**
+ * JSON.parse + eight regex passes on a multi-megabyte body blocks the main thread
+ * for seconds. Above this size the body waits behind a click and is never highlighted.
+ */
+const LARGE_BODY_CHARS = 128 * 1024;
+
+const RAW_STYLE: React.CSSProperties = {
+  padding: 16, color: 'var(--text-primary)', fontSize: 13,
+  fontFamily: 'Consolas, Monaco, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+};
+const EMPTY_STYLE: React.CSSProperties = {
+  padding: 24, textAlign: 'center', color: 'var(--text-secondary)',
+};
+const LARGE_STYLE: React.CSSProperties = {
+  ...RAW_STYLE, margin: 0, maxHeight: 480, overflow: 'auto', background: 'var(--bg-primary)', borderRadius: 4,
+};
+
+const BodyContent: React.FC<{
+  body: string | undefined;
+  viewMode: 'raw' | 'formatted';
+  emptyLabel: string;
+}> = ({ body, viewMode, emptyLabel }) => {
+  const { t } = useTranslation();
+  const [revealed, setRevealed] = useState(false);
+  if (!body) return <div style={EMPTY_STYLE}>{emptyLabel}</div>;
+  if (body.length > LARGE_BODY_CHARS) {
+    return (
+      <div style={{ padding: 16 }}>
+        <Alert
+          type="info"
+          showIcon
+          title={t('access_log.body_too_large', { size: `${(body.length / 1024).toFixed(1)} KB` })}
+          action={revealed ? undefined : (
+            <Button size="small" onClick={() => setRevealed(true)}>
+              {t('access_log.show_body')}
+            </Button>
+          )}
+        />
+        {revealed && <pre style={LARGE_STYLE}>{body}</pre>}
+      </div>
+    );
+  }
+  return viewMode === 'formatted' ? (
+    <pre className="json-viewer" dangerouslySetInnerHTML={{ __html: renderFormattedJson(body) || '' }} />
+  ) : (
+    <div style={RAW_STYLE}>{renderRawJson(body)}</div>
+  );
+};
+
 const BodyPanel: React.FC<{
   title: string;
   body: string | undefined;
@@ -38,17 +87,7 @@ const BodyPanel: React.FC<{
       {body && <span className="json-size">{body.length} bytes</span>}
     </div>
     <div className="json-content">
-      {body ? (
-        viewMode === 'formatted' ? (
-          <pre className="json-viewer" dangerouslySetInnerHTML={{ __html: renderFormattedJson(body) || '' }} />
-        ) : (
-          <div style={{ padding: 16, color: 'var(--text-primary)', fontSize: 13, fontFamily: 'Consolas, Monaco, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {renderRawJson(body)}
-          </div>
-        )
-      ) : (
-        <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>{notRecordedLabel}</div>
-      )}
+      <BodyContent body={body} viewMode={viewMode} emptyLabel={notRecordedLabel} />
     </div>
   </div>
 );
@@ -180,15 +219,11 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
             </Radio.Group>
           </div>
           <div className="json-content">
-            {record.requestBody ? (
-              bodyViewMode === 'formatted' ? (
-                <pre className="json-viewer" dangerouslySetInnerHTML={{ __html: renderFormattedJson(record.requestBody) || '' }} />
-              ) : (
-                <div style={{ padding: 16, color: 'var(--text-primary)', fontSize: 13, fontFamily: 'Consolas, Monaco, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {renderRawJson(record.requestBody)}
-                </div>
-              )
-            ) : <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>{t('access_log.not_recorded')}</div>}
+            <BodyContent
+              body={record.requestBody}
+              viewMode={bodyViewMode}
+              emptyLabel={t('access_log.not_recorded')}
+            />
           </div>
         </div>
       </div>
@@ -217,4 +252,6 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
   );
 };
 
-export default LogEntryExpanded;
+// Filter typing and paging re-render the page shell; expanded bodies must not be
+// re-highlighted unless their own record or view mode actually changed.
+export default React.memo(LogEntryExpanded);

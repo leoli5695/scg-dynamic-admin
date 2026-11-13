@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Button, Card, DatePicker, Form, Input, InputNumber, Space, Table, Tabs, Tag, Typography } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -64,7 +65,7 @@ function RequestQuery({ instanceId }: { instanceId: string }) {
     });
     setParams(next);
   };
-  const openRequest = (row: RequestRow) => {
+  const openRequest = useCallback((row: RequestRow) => {
     if (!row.traceId) return;
     const target = requestJourneyUrl(instanceId, row.traceId, row.routeId);
     const context = new URLSearchParams(params);
@@ -72,7 +73,19 @@ function RequestQuery({ instanceId }: { instanceId: string }) {
     context.set('to', query.to);
     const returnTo = `${basePath}/requests?${context}`;
     navigate(`${target}${target.includes('?') ? '&' : '?'}${new URLSearchParams({ returnTo })}`);
-  };
+  }, [instanceId, navigate, params, query.from, query.to, basePath]);
+  const columns = useMemo<ColumnsType<RequestRow>>(() => [
+    { title: t('tokenUsage.table.time'), dataIndex: 'time', width: 180, render: value => value?.replace('T', ' ').slice(0, 19) || '—' },
+    { title: t('tokenUsage.table.route'), dataIndex: 'routeId', ellipsis: true, render: value => value
+      ? <Button type="link" size="small" onClick={() => navigate(routeConfigurationUrl(instanceId, value))}>{value}</Button> : '—' },
+    { title: t('trace.method'), dataIndex: 'method', width: 90 },
+    { title: t('trace.path'), dataIndex: 'path', ellipsis: true },
+    { title: 'HTTP', dataIndex: 'statusCode', width: 80, render: value => <Tag color={value >= 400 ? 'red' : 'green'}>{value}</Tag> },
+    { title: t('trace.latency'), dataIndex: 'durationMs', width: 100, render: value => `${value} ms` },
+    { title: t('access_log.trace_id'), dataIndex: 'traceId', ellipsis: true, render: value => value || '—' },
+    { title: t('common.actions'), key: 'actions', width: 110, fixed: 'right', render: (_, row) =>
+      <Button type="link" disabled={!row.traceId} onClick={() => openRequest(row)}>{t('journey.inspect')}</Button> },
+  ], [t, instanceId, navigate, openRequest]);
 
   return <div className="console-workspace-page" style={{ display: 'grid', gap: 16 }}>
     <Space wrap style={{ justifyContent: 'space-between' }}>
@@ -121,18 +134,7 @@ function RequestQuery({ instanceId }: { instanceId: string }) {
           locale={{ emptyText: t('requestSearch.empty') }} pagination={{
             current: query.page + 1, pageSize: 20, total: request.data?.total ?? 0, showSizeChanger: false,
             onChange: page => updateQuery({ page: page - 1 }),
-          }} columns={[
-            { title: t('tokenUsage.table.time'), dataIndex: 'time', width: 180, render: value => value?.replace('T', ' ').slice(0, 19) || '—' },
-            { title: t('tokenUsage.table.route'), dataIndex: 'routeId', ellipsis: true, render: value => value
-              ? <Button type="link" size="small" onClick={() => navigate(routeConfigurationUrl(instanceId, value))}>{value}</Button> : '—' },
-            { title: t('trace.method'), dataIndex: 'method', width: 90 },
-            { title: t('trace.path'), dataIndex: 'path', ellipsis: true },
-            { title: 'HTTP', dataIndex: 'statusCode', width: 80, render: value => <Tag color={value >= 400 ? 'red' : 'green'}>{value}</Tag> },
-            { title: t('trace.latency'), dataIndex: 'durationMs', width: 100, render: value => `${value} ms` },
-            { title: t('access_log.trace_id'), dataIndex: 'traceId', ellipsis: true, render: value => value || '—' },
-            { title: t('common.actions'), key: 'actions', width: 110, fixed: 'right', render: (_, row) =>
-              <Button type="link" disabled={!row.traceId} onClick={() => openRequest(row)}>{t('journey.inspect')}</Button> },
-          ]} />}
+          }} columns={columns} />}
       <Space wrap style={{ marginTop: 16 }}>
         <Button onClick={() => navigate(`${basePath}/access_log`)}>{t('requestSearch.collection')}</Button>
         <Button onClick={() => navigate(`${basePath}/trace`)}>{t('requestSearch.advanced')}</Button>

@@ -18,6 +18,7 @@ import {
   Tabs,
   Tag,
 } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -252,6 +253,97 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
   const refreshing = requests.some((request) => request.loading);
   const requestError = requests.find((request) => request.error)?.error;
   const refresh = () => requests.forEach((request) => request.run());
+  // Rebuilding this array on every render made antd reconcile every cell on each page turn.
+  const columns = useMemo<ColumnsType<TokenUsageEvent>>(() => [
+    {
+      title: t('tokenUsage.table.time'),
+      dataIndex: 'requestTime',
+      width: 170,
+      render: (v: string) => (v ? v.replace('T', ' ').slice(0, 19) : '—'),
+    },
+    {
+      title: t('tokenUsage.table.tenant'),
+      dataIndex: 'tenantId',
+      ellipsis: true,
+      render: (v: string) =>
+        v === '__unassigned__' ? t('tokenUsage.unassignedTenant') : v,
+    },
+    {
+      title: t('tokenUsage.table.route'),
+      dataIndex: 'routeId',
+      ellipsis: true,
+      render: (v: string | null) => v ?? '—',
+    },
+    {
+      title: t('tokenUsage.table.model'),
+      dataIndex: 'model',
+      ellipsis: true,
+      render: (v: string | null) => v ?? '—',
+    },
+    {
+      title: t('tokenUsage.table.prompt'),
+      dataIndex: 'promptTokens',
+      render: (_: unknown, record: TokenUsageEvent) =>
+        usageTokenValue(record, 'promptTokens'),
+      width: 80,
+      align: 'right',
+    },
+    {
+      title: t('tokenUsage.table.completion'),
+      dataIndex: 'completionTokens',
+      render: (_: unknown, record: TokenUsageEvent) =>
+        usageTokenValue(record, 'completionTokens'),
+      width: 80,
+      align: 'right',
+    },
+    {
+      title: t('tokenUsage.table.total'),
+      dataIndex: 'totalTokens',
+      render: (_: unknown, record: TokenUsageEvent) =>
+        usageTokenValue(record, 'totalTokens'),
+      width: 80,
+      align: 'right',
+    },
+    {
+      title: t('tokenUsage.table.status'),
+      key: 'status',
+      width: 160,
+      render: (_: unknown, record: TokenUsageEvent) => (
+        <Space size={4} wrap>
+          <Tag color={isUsageUnresolved(record) ? 'gold' : undefined}>
+            {t(`tokenUsage.status.${record.usageStatus ?? 'LEGACY'}`, {
+              defaultValue: record.usageStatus ?? 'LEGACY',
+            })}
+          </Tag>
+          {['FAILED', 'PENDING'].includes(record.settlementStatus ?? '') && (
+            <Tag color="volcano">{t(`tokenUsage.status.${record.settlementStatus}`)}</Tag>
+          )}
+        </Space>
+      ),
+    },
+    ...(scopeInstanceId === undefined
+      ? [
+          {
+            title: t('tokenUsage.table.instance'),
+            dataIndex: 'instanceId',
+            width: 140,
+            ellipsis: true,
+            render: (v: string | null) => v ?? '—',
+          },
+        ]
+      : []),
+    {
+      title: t('tokenUsage.details.action'),
+      key: 'details',
+      width: 90,
+      fixed: 'right',
+      render: (_: unknown, record: TokenUsageEvent) => (
+        <Button type="link" onClick={() => setReconciling(record)}>
+          {t('tokenUsage.details.action')}
+        </Button>
+      ),
+    },
+  ], [t, scopeInstanceId]);
   const resetFilters = () => setQuery({
     ...defaultUsageRange(), instanceId: '', routeId: '', tenantId: '', model: '',
     unresolvedOnly: false, granularity: 'hour', page: 0, size: 20,
@@ -564,96 +656,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
           locale={{
             emptyText: t(unresolvedOnly ? 'tokenUsage.emptyUnresolved' : 'tokenUsage.empty_title'),
           }}
-          columns={[
-            {
-              title: t('tokenUsage.table.time'),
-              dataIndex: 'requestTime',
-              width: 170,
-              render: (v: string) => (v ? v.replace('T', ' ').slice(0, 19) : '—'),
-            },
-            {
-              title: t('tokenUsage.table.tenant'),
-              dataIndex: 'tenantId',
-              ellipsis: true,
-              render: (v: string) =>
-                v === '__unassigned__' ? t('tokenUsage.unassignedTenant') : v,
-            },
-            {
-              title: t('tokenUsage.table.route'),
-              dataIndex: 'routeId',
-              ellipsis: true,
-              render: (v: string | null) => v ?? '—',
-            },
-            {
-              title: t('tokenUsage.table.model'),
-              dataIndex: 'model',
-              ellipsis: true,
-              render: (v: string | null) => v ?? '—',
-            },
-            {
-              title: t('tokenUsage.table.prompt'),
-              dataIndex: 'promptTokens',
-              render: (_: unknown, record: TokenUsageEvent) =>
-                usageTokenValue(record, 'promptTokens'),
-              width: 80,
-              align: 'right',
-            },
-            {
-              title: t('tokenUsage.table.completion'),
-              dataIndex: 'completionTokens',
-              render: (_: unknown, record: TokenUsageEvent) =>
-                usageTokenValue(record, 'completionTokens'),
-              width: 80,
-              align: 'right',
-            },
-            {
-              title: t('tokenUsage.table.total'),
-              dataIndex: 'totalTokens',
-              render: (_: unknown, record: TokenUsageEvent) =>
-                usageTokenValue(record, 'totalTokens'),
-              width: 80,
-              align: 'right',
-            },
-            {
-              title: t('tokenUsage.table.status'),
-              key: 'status',
-              width: 160,
-              render: (_: unknown, record: TokenUsageEvent) => (
-                <Space size={4} wrap>
-                  <Tag color={isUsageUnresolved(record) ? 'gold' : undefined}>
-                    {t(`tokenUsage.status.${record.usageStatus ?? 'LEGACY'}`, {
-                      defaultValue: record.usageStatus ?? 'LEGACY',
-                    })}
-                  </Tag>
-                  {['FAILED', 'PENDING'].includes(record.settlementStatus ?? '') && (
-                    <Tag color="volcano">{t(`tokenUsage.status.${record.settlementStatus}`)}</Tag>
-                  )}
-                </Space>
-              ),
-            },
-            ...(scopeInstanceId === undefined
-              ? [
-                  {
-                    title: t('tokenUsage.table.instance'),
-                    dataIndex: 'instanceId',
-                    width: 140,
-                    ellipsis: true,
-                    render: (v: string | null) => v ?? '—',
-                  },
-                ]
-              : []),
-            {
-              title: t('tokenUsage.details.action'),
-              key: 'details',
-              width: 90,
-              fixed: 'right',
-              render: (_: unknown, record: TokenUsageEvent) => (
-                <Button type="link" onClick={() => setReconciling(record)}>
-                  {t('tokenUsage.details.action')}
-                </Button>
-              ),
-            },
-          ]}
+          columns={columns}
         />
       </Card>
       {reconciling && (

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -50,7 +50,7 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
   const command = request.data;
   // The applied command is the source of truth. The parent list drops reconciled rows, so
   // falling back to the stale snapshot would otherwise show "unknown" next to "applied".
-  const event = command?.status === 'APPLIED' ? {
+  const event = useMemo(() => (command?.status === 'APPLIED' ? {
     ...sourceEvent,
     usageStatus: 'RECONCILED' as const,
     settlementStatus: 'APPLIED',
@@ -58,7 +58,7 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
     completionTokens: Number(command.completion_tokens),
     totalTokens: Number(command.total_tokens),
     chargedTokens: Number(command.charged_tokens),
-  } : sourceEvent;
+  } : sourceEvent), [command, sourceEvent]);
   const quota = useRequest((signal) => getTokenQuotaStatus(event.tenantId, { signal }), {
     // Only events that used a quota bucket have a related quota to show.
     immediate: !!event.tenantId && event.tenantId !== '__unassigned__' && !!event.quotaPeriod,
@@ -84,14 +84,15 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
   const meteringOnly = event.settlementStatus === 'NOT_REQUIRED';
   const display = (value: unknown) =>
     value === null || value === undefined || value === '' ? '—' : String(value);
-  const originalSnapshot = (() => {
+  const originalSnapshot = useMemo(() => {
     if (!command?.original_usage?.trim()) return null;
     try {
       return JSON.stringify(JSON.parse(command.original_usage), null, 2);
     } catch {
       return command.original_usage;
     }
-  })();
+  }, [command]);
+  const eventSnapshot = useMemo(() => JSON.stringify(event, null, 2), [event]);
   const submit = async () => {
     if (!canWrite || !unresolved || ledgerPending || command || saving) return;
     let values: TokenUsageCorrection;
@@ -488,7 +489,7 @@ const TokenUsageReconciliationDrawer: React.FC<Props> = ({ event: sourceEvent, o
       <details style={{ marginTop: 20 }}>
         <summary>{t('tokenUsage.reconcile.currentData')}</summary>
         <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-          {JSON.stringify(event, null, 2)}
+          {eventSnapshot}
         </pre>
       </details>
     </Drawer>
