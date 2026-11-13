@@ -19,6 +19,7 @@ import {
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../../hooks/useRequest';
+import { useSystemSettings } from '../../settings/SystemSettingsContext';
 import {
   getHistoryEntries, getHistoryStats, getK8sEntries, getK8sNamespaces,
   getK8sPods, getK8sStats, getLogEntries, getLogStats,
@@ -53,7 +54,8 @@ const EMPTY_FILTERS: LogFilters = {};
 
 const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onTotalChange }) => {
   const { t } = useTranslation();
-  const isK8s = deployMode === 'K8S';
+  const { settings, ready: settingsReady } = useSystemSettings();
+  const isK8s = settingsReady && settings?.kubernetesEnabled === true && deployMode === 'K8S';
 
   const [logViewMode, setLogViewMode] = useState<'realtime' | 'history'>('realtime');
   const [historyTimeRange, setHistoryTimeRange] = useState<HistoryRange>('1h');
@@ -80,6 +82,8 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
   const clustersRequest = useRequest(
     (signal) => getClusters({ signal }),
     {
+      immediate: isK8s,
+      deps: [isK8s],
       onError: () => message.error(t('access_log.load_failed')),
       // Auto-select the first enabled cluster once the list arrives.
       onSuccess: (data) => {
@@ -88,7 +92,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
       },
     },
   );
-  const clusters = clustersRequest.data ?? [];
+  const clusters = isK8s ? (clustersRequest.data ?? []) : [];
 
   const namespacesRequest = useRequest(
     (signal) => getK8sNamespaces({ clusterId: clusterId as number }, { signal }),
@@ -182,7 +186,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
 
   // Rows change with filters/paging; stats ignore both, so they are fetched separately.
   useEffect(() => {
-    if (isK8s && !selectedPod) return undefined;
+    if (!settingsReady || (isK8s && !selectedPod)) return undefined;
     const controller = new AbortController();
     (async () => {
       setLogLoading(true);
@@ -223,11 +227,11 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
       }
     })();
     return () => controller.abort();
-  }, [isK8s, clusterId, selectedPod, selectedPodNamespace, selectedNamespace, logViewMode, historyTimeRange, historyWindow, viewDate, filters, logPage, logPageSize, instanceId, reloadKey, t]);
+  }, [settingsReady, isK8s, clusterId, selectedPod, selectedPodNamespace, selectedNamespace, logViewMode, historyTimeRange, historyWindow, viewDate, filters, logPage, logPageSize, instanceId, reloadKey, t]);
 
   // Aggregate stats cover the whole source window — filters and paging must not refetch them.
   useEffect(() => {
-    if (isK8s && !selectedPod) return undefined;
+    if (!settingsReady || (isK8s && !selectedPod)) return undefined;
     const controller = new AbortController();
     (async () => {
       try {
@@ -256,7 +260,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
       }
     })();
     return () => controller.abort();
-  }, [isK8s, clusterId, selectedPod, selectedPodNamespace, selectedNamespace, logViewMode, historyTimeRange, historyWindow, viewDate, instanceId, reloadKey, t]);
+  }, [settingsReady, isK8s, clusterId, selectedPod, selectedPodNamespace, selectedNamespace, logViewMode, historyTimeRange, historyWindow, viewDate, instanceId, reloadKey, t]);
 
   const columns = useMemo<ColumnsType<AccessLogEntry>>(() => [
     {
@@ -420,7 +424,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
       )}
 
       {/* Local file realtime notice */}
-      {logViewMode === 'realtime' && !isK8s && (
+      {settingsReady && logViewMode === 'realtime' && !isK8s && (
         <Alert
           type="info"
           showIcon
@@ -488,7 +492,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
             />
           )}
           {/* Local realtime reads one day's file — pick which day. */}
-          {logViewMode === 'realtime' && !isK8s && (
+          {settingsReady && logViewMode === 'realtime' && !isK8s && (
             <DatePicker
               value={viewDate}
               onChange={(date) => { setViewDate(date); setLogPage(0); }}

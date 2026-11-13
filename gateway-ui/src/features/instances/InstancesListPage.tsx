@@ -43,6 +43,7 @@ import copy from 'copy-to-clipboard';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { usePolling, useRequest } from '../../hooks/useRequest';
+import { useSystemSettings } from '../settings/SystemSettingsContext';
 import {
   deleteInstance,
   listInstances,
@@ -360,6 +361,8 @@ const MemoizedInstanceCard = React.memo(InstanceCard);
 const InstancesListPage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { settings } = useSystemSettings();
+  const kubernetesEnabled = settings?.kubernetesEnabled === true;
   const [now, setNow] = useState(() => Date.now());
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [search, setSearch] = useState('');
@@ -374,7 +377,10 @@ const InstancesListPage: React.FC = () => {
     return () => window.clearInterval(timer);
   }, []);
 
-  const clusters = useRequest((signal) => getClusters({ signal }));
+  const clusters = useRequest((signal) => getClusters({ signal }), {
+    immediate: kubernetesEnabled,
+    deps: [kubernetesEnabled],
+  });
   const instances = usePolling((signal) => listInstances({ signal }), {
     intervalMs: LIST_POLL_MS,
     onSuccess: () => setUpdatedAt(new Date()),
@@ -382,8 +388,8 @@ const InstancesListPage: React.FC = () => {
 
   const list = useMemo(() => instances.data ?? [], [instances.data]);
   const refreshInstances = instances.run;
-  const clusterCount = clusters.data?.length ?? 0;
-  const loading = instances.loading || clusters.loading;
+  const clusterCount = kubernetesEnabled ? (clusters.data?.length ?? 0) : 0;
+  const loading = instances.loading || (kubernetesEnabled && clusters.loading);
 
   const stats = useMemo(
     () => ({
@@ -645,12 +651,14 @@ const InstancesListPage: React.FC = () => {
           <div className="instances-empty">
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={<Text type="secondary">{t('instance.no_clusters_available')}</Text>}
+              description={<Text type="secondary">{t(kubernetesEnabled ? 'instance.no_clusters_available' : 'instance.no_instances')}</Text>}
             >
               <Space>
-                <Button onClick={() => navigate('/kubernetes')}>
-                  {t('instance.go_import_cluster')}
-                </Button>
+                {kubernetesEnabled && (
+                  <Button onClick={() => navigate('/kubernetes')}>
+                    {t('instance.go_import_cluster')}
+                  </Button>
+                )}
                 <Button type="primary" onClick={() => navigate('/instances/create')}>
                   {t('instance.register_external')}
                 </Button>

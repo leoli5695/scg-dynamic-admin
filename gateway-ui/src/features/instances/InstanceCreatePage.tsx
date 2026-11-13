@@ -15,6 +15,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
+import { useSystemSettings } from '../settings/SystemSettingsContext';
 import { createInstance, listInstanceSpecs } from '../../api/instances';
 import { getClusterImages, getClusters } from '../../api/kubernetes';
 import { ApiError } from '../../api/http';
@@ -67,6 +68,8 @@ const toExternalRequest = (values: InstanceCreateRequest): InstanceCreateRequest
 const InstanceCreatePage: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { settings } = useSystemSettings();
+  const kubernetesEnabled = settings?.kubernetesEnabled === true;
   const [form] = Form.useForm<InstanceCreateRequest>();
   const [submitting, setSubmitting] = useState(false);
   /**
@@ -75,9 +78,13 @@ const InstanceCreatePage: React.FC = () => {
    * carry any of the Kubernetes-only fields.
    */
   const [deployMode, setDeployMode] = useState<'kubernetes' | 'external'>('kubernetes');
-  const isExternal = deployMode === 'external';
+  const effectiveDeployMode = settings?.kubernetesEnabled === false ? 'external' : deployMode;
+  const isExternal = effectiveDeployMode === 'external';
 
-  const clusters = useRequest((signal) => getClusters({ signal }));
+  const clusters = useRequest((signal) => getClusters({ signal }), {
+    immediate: kubernetesEnabled,
+    deps: [kubernetesEnabled],
+  });
   const specs = useRequest((signal) => listInstanceSpecs({ signal }));
 
   const selectedSpecType = Form.useWatch('specType', form);
@@ -188,13 +195,13 @@ const InstanceCreatePage: React.FC = () => {
               <div className="form-section-content">
                 <Form.Item label={t('instance.deploy_mode')} style={{ marginBottom: 16 }}>
                   <Radio.Group
-                    value={deployMode}
+                    value={effectiveDeployMode}
                     onChange={(e) => setDeployMode(e.target.value)}
                     optionType="button"
                     buttonStyle="solid"
                     size="large"
                   >
-                    <Radio.Button value="kubernetes">
+                    <Radio.Button value="kubernetes" disabled={!kubernetesEnabled}>
                       <Space>
                         <ClusterOutlined />
                         {t('instance.deploy_mode_kubernetes')}
