@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as echarts from 'echarts';
-import { buildChartOption, filterTopology, getTopologyChartHeight } from '../src/features/topology/chartOption.ts';
+import { buildChartOption, filterTopology, getTopologyChartHeight, isSameTopologyContent } from '../src/features/topology/chartOption.ts';
 
 const filters = { showDisabledRoutes: true, showOnlyActiveRoutes: false, searchKeyword: '', selectedNodeId: null };
 function fixture(clients = 18) {
@@ -68,4 +68,24 @@ test('search with no matches produces an empty graph with no stale links', () =>
   const option = buildChartOption(fixture(), { ...filters, searchKeyword: 'missing-node' });
   assert.equal(option.series[0].data.length, 0);
   assert.equal(option.series[0].links.length, 0);
+});
+
+test('topology polling reuses content that only has a new generation timestamp', () => {
+  const data = fixture();
+  assert.equal(isSameTopologyContent(data, { ...data, generatedAt: 1234 }), true);
+  assert.equal(isSameTopologyContent(data, { ...data, generatedAt: 1234, timeRangeMinutes: 30 }), false);
+  assert.equal(isSameTopologyContent(data, { ...data, generatedAt: 1234, instanceId: 'other' }), false);
+});
+
+test('topology polling detects every rendered metrics, node and edge change', () => {
+  const data = fixture(2);
+  assert.equal(isSameTopologyContent(data, { ...data, metrics: { totalRequests: 1 } }), false);
+  assert.equal(isSameTopologyContent(data, {
+    ...data,
+    nodes: data.nodes.map((node, index) => index === 0 ? { ...node, metrics: { requestCount: 1 } } : node),
+  }), false);
+  assert.equal(isSameTopologyContent(data, {
+    ...data,
+    edges: data.edges.map((edge, index) => index === 0 ? { ...edge, metrics: { requestCount: 1 } } : edge),
+  }), false);
 });

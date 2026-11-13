@@ -106,7 +106,7 @@ const RouteMetricsTable: React.FC<RouteMetricsTableProps> = ({ data, loading }) 
     },
   ], [t]);
 
-  if (loading) {
+  if (loading && data.length === 0) {
     return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>;
   }
 
@@ -132,4 +132,4 @@ const RouteMetricsTable: React.FC<RouteMetricsTableProps> = ({ data, loading }) 
   );
 };
 
-export default RouteMetricsTable;
+export default React.memo(RouteMetricsTable);

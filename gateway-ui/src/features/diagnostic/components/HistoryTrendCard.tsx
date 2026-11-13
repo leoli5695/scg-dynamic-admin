@@ -3,7 +3,7 @@
  * compare-with-previous summary. Hidden when there is no trend data
  * (same behaviour as the legacy page).
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert, Card, Col, Divider, Row, Select, Space, Statistic, Tabs, Typography
 } from 'antd';
@@ -40,69 +40,118 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
     { deps: [reloadKey] },
   );
 
-  const history = historyRequest.data?.history ?? [];
-  const trend = historyRequest.data?.trend;
+  const historyData = historyRequest.data;
+  const history = useMemo(() => historyData?.history ?? [], [historyData]);
+  const trend = historyData?.trend;
   const comparison = comparisonRequest.data;
 
-  if (!trend || !trend.timestamps || trend.timestamps.length === 0) {
-    return null;
-  }
-
-  const scoreTrendOption = {
-    title: {
-      text: t('diagnostic.score_trend'),
-      left: 'center',
-      textStyle: chartTitle,
-    },
-    tooltip: {
-      trigger: 'axis',
-      ...chartTooltip,
-      formatter: (params: Array<{ value: [string, number] }>) => {
-        const date = parseServerTime(params[0].value[0] as string | number).toLocaleString();
-        const score = params[0].value[1];
-        return `${date}<br/>${t('diagnostic.score_label')}: ${score}`;
+  const scoreTrendOption = useMemo(() => {
+    if (!trend || !trend.timestamps || trend.timestamps.length === 0) return null;
+    return {
+      title: {
+        text: t('diagnostic.score_trend'),
+        left: 'center',
+        textStyle: chartTitle,
       },
+      tooltip: {
+        trigger: 'axis',
+        ...chartTooltip,
+        formatter: (params: Array<{ value: [string, number] }>) => {
+          const date = parseServerTime(params[0].value[0] as string | number).toLocaleString();
+          const score = params[0].value[1];
+          return `${date}<br/>${t('diagnostic.score_label')}: ${score}`;
+        },
+      },
+      xAxis: {
+        ...chartCategoryAxis,
+        type: 'time',
+        axisLabel: {
+          ...chartCategoryAxis.axisLabel,
+          formatter: (value: number) => new Date(value).toLocaleTimeString(),
+        },
+      },
+      yAxis: {
+        ...chartValueAxis,
+        type: 'value',
+        min: 0,
+        max: 100,
+      },
+      series: [{
+        type: 'line',
+        data: trend.timestamps.map((ts, i) => [ts, trend.scores[i]]),
+        smooth: true,
+        itemStyle: { color: palette.success },
+        lineStyle: { width: 2, color: palette.success },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: withAlpha(palette.success, 0.3) },
+              { offset: 1, color: withAlpha(palette.success, 0.05) },
+            ],
+          },
+        },
+        markLine: {
+          silent: true,
+          data: [
+            { yAxis: 80, lineStyle: { color: palette.success }, label: { formatter: t('diagnostic.health_line') } },
+            { yAxis: 50, lineStyle: { color: palette.warning }, label: { formatter: t('diagnostic.warning_line') } },
+          ],
+        },
+      }],
+      grid: { left: 50, right: 20, top: 40, bottom: 30 },
+    };
+  }, [trend, t]);
+
+  const gatewayMetricsOption = useMemo(() => ({
+    tooltip: { trigger: 'axis', ...chartTooltip },
+    color: chartColors,
+    legend: {
+      ...chartLegend,
+      data: ['QPS', t('diagnostic.error_rate_percent'), t('diagnostic.heap_memory_percent')],
+      bottom: 0,
     },
     xAxis: {
       ...chartCategoryAxis,
       type: 'time',
+      data: history.map((h) => parseServerTime(h.createdAt).getTime()),
       axisLabel: {
         ...chartCategoryAxis.axisLabel,
         formatter: (value: number) => new Date(value).toLocaleTimeString(),
       },
     },
-    yAxis: {
-      ...chartValueAxis,
-      type: 'value',
-      min: 0,
-      max: 100,
-    },
-    series: [{
-      type: 'line',
-      data: trend.timestamps.map((ts, i) => [ts, trend.scores[i]]),
-      smooth: true,
-      itemStyle: { color: palette.success },
-      lineStyle: { width: 2, color: palette.success },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: withAlpha(palette.success, 0.3) },
-            { offset: 1, color: withAlpha(palette.success, 0.05) },
-          ],
-        },
+    yAxis: { ...chartValueAxis, type: 'value' },
+    series: [
+      {
+        name: 'QPS',
+        type: 'line',
+        data: history.map((h) => h.gatewayQps || 0),
+        smooth: true,
+        itemStyle: { color: chartColors[0] },
+        lineStyle: { color: chartColors[0] },
       },
-      markLine: {
-        silent: true,
-        data: [
-          { yAxis: 80, lineStyle: { color: palette.success }, label: { formatter: t('diagnostic.health_line') } },
-          { yAxis: 50, lineStyle: { color: palette.warning }, label: { formatter: t('diagnostic.warning_line') } },
-        ],
+      {
+        name: t('diagnostic.error_rate_percent'),
+        type: 'line',
+        data: history.map((h) => h.gatewayErrorRate || 0),
+        smooth: true,
+        itemStyle: { color: palette.error },
+        lineStyle: { color: palette.error },
       },
-    }],
-    grid: { left: 50, right: 20, top: 40, bottom: 30 },
-  };
+      {
+        name: t('diagnostic.heap_memory_percent'),
+        type: 'line',
+        data: history.map((h) => h.gatewayHeapUsagePercent || 0),
+        smooth: true,
+        itemStyle: { color: palette.primary },
+        lineStyle: { color: palette.primary },
+      },
+    ],
+    grid: { left: 60, right: 20, top: 20, bottom: 50 },
+  }), [history, t]);
+
+  if (!scoreTrendOption) return null;
 
   const gatewayMetricsTab = () => {
     // Historical metric samples collected with previous diagnostics
@@ -134,52 +183,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
 
     return (
       <ReactECharts
-        option={{
-          tooltip: { trigger: 'axis', ...chartTooltip },
-          color: chartColors,
-          legend: {
-            ...chartLegend,
-            data: ['QPS', t('diagnostic.error_rate_percent'), t('diagnostic.heap_memory_percent')],
-            bottom: 0,
-          },
-          xAxis: {
-            ...chartCategoryAxis,
-            type: 'time',
-            data: history.map((h) => parseServerTime(h.createdAt).getTime()),
-            axisLabel: {
-              ...chartCategoryAxis.axisLabel,
-              formatter: (value: number) => new Date(value).toLocaleTimeString(),
-            },
-          },
-          yAxis: { ...chartValueAxis, type: 'value' },
-          series: [
-            {
-              name: 'QPS',
-              type: 'line',
-              data: history.map((h) => h.gatewayQps || 0),
-              smooth: true,
-              itemStyle: { color: chartColors[0] },
-              lineStyle: { color: chartColors[0] },
-            },
-            {
-              name: t('diagnostic.error_rate_percent'),
-              type: 'line',
-              data: history.map((h) => h.gatewayErrorRate || 0),
-              smooth: true,
-              itemStyle: { color: palette.error },
-              lineStyle: { color: palette.error },
-            },
-            {
-              name: t('diagnostic.heap_memory_percent'),
-              type: 'line',
-              data: history.map((h) => h.gatewayHeapUsagePercent || 0),
-              smooth: true,
-              itemStyle: { color: palette.primary },
-              lineStyle: { color: palette.primary },
-            },
-          ],
-          grid: { left: 60, right: 20, top: 20, bottom: 50 },
-        }}
+        option={gatewayMetricsOption}
         style={{ height: 300 }}
         notMerge
       />
@@ -266,4 +270,4 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
   );
 };
 
-export default HistoryTrendCard;
+export default React.memo(HistoryTrendCard);

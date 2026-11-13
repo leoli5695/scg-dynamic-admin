@@ -82,4 +82,4 @@ const PodSelector: React.FC<PodSelectorProps> = ({
   );
 };
 
-export default PodSelector;
+export default React.memo(PodSelector);

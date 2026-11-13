@@ -28,10 +28,11 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
   history, loading, onRefresh, routeMetrics, routeMetricsLoading,
 }) => {
   const { t } = useTranslation();
+  const initialLoading = loading && !history;
 
   // Shared fallback for empty/loading series inside each tab.
   const renderHistoryContent = () => {
-    if (loading) return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>;
+    if (initialLoading) return <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>;
     return (
       <Alert
         title={t('monitor.history_unavailable')}
@@ -46,7 +47,7 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
     {
       key: 'jvm',
       label: <Space><FundOutlined />{t('monitor.tab_jvm_gc')}</Space>,
-      children: loading || !history?.heapMemory?.length ? renderHistoryContent() : (
+      children: initialLoading || !history?.heapMemory?.length ? renderHistoryContent() : (
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
             <MetricChart title={t('monitor.heap_memory_history')} data={history.heapMemory} colorKey="blue" unit="MB" yAxisLabel="MB" valueTransform={toMB} />
@@ -84,7 +85,7 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
     {
       key: 'threads',
       label: <Space><DatabaseOutlined />{t('monitor.tab_threads')}</Space>,
-      children: loading || !history?.threadCount?.length ? renderHistoryContent() : (
+      children: initialLoading || !history?.threadCount?.length ? renderHistoryContent() : (
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
             <MetricChart title={t('monitor.thread_count_history')} data={history.threadCount} colorKey="blue" unit="" yAxisLabel="" />
@@ -98,7 +99,7 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
     {
       key: 'cpu',
       label: <Space><DashboardFilled />{t('monitor.tab_cpu')}</Space>,
-      children: loading || !history?.processCpuUsage?.length ? renderHistoryContent() : (
+      children: initialLoading || !history?.processCpuUsage?.length ? renderHistoryContent() : (
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={8}>
             <MetricChart title={t('monitor.process_cpu_history')} data={history.processCpuUsage} colorKey="green" unit="%" yAxisLabel="%" valueTransform={toPercent} />
@@ -115,7 +116,7 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
     {
       key: 'http',
       label: <Space><ApiOutlined />{t('monitor.tab_http')}</Space>,
-      children: loading || !history?.requestRate?.length ? renderHistoryContent() : (
+      children: initialLoading || !history?.requestRate?.length ? renderHistoryContent() : (
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
             <MetricChart title={t('monitor.request_rate_history')} data={history.requestRate} colorKey="purple" unit="/s" yAxisLabel="/s" />
@@ -148,4 +149,4 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
   );
 };
 
-export default HistoryTrends;
+export default React.memo(HistoryTrends);

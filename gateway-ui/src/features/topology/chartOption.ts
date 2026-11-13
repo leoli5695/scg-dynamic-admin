@@ -423,6 +423,15 @@ export function filterTopology(
   return { ...data, nodes: filteredNodes, edges: filteredEdges };
 }
 
+export function isSameTopologyContent(previous: TopologyGraph, next: TopologyGraph): boolean {
+  if (previous === next) return true;
+  return previous.instanceId === next.instanceId
+    && previous.timeRangeMinutes === next.timeRangeMinutes
+    && JSON.stringify(previous.metrics ?? null) === JSON.stringify(next.metrics ?? null)
+    && JSON.stringify(previous.nodes) === JSON.stringify(next.nodes)
+    && JSON.stringify(previous.edges) === JSON.stringify(next.edges);
+}
+
 export function getTopologyChartHeight(data: TopologyGraph): number {
   const counts = new Map<string, number>();
   data.nodes.forEach((node) => counts.set(node.type, (counts.get(node.type) || 0) + 1));

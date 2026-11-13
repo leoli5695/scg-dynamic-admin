@@ -97,6 +97,8 @@ const MonitorPage: React.FC = () => {
     deps: [instanceId, selectedPodInstance],
   });
 
+  const routeMetrics = useMemo(() => routesRequest.data?.routes ?? [], [routesRequest.data]);
+
   const instanceColumns = useMemo(() => [
     {
       title: t('monitor.instance'),
@@ -231,7 +233,7 @@ const MonitorPage: React.FC = () => {
         history={historyRequest.data?.history}
         loading={historyRequest.loading}
         onRefresh={historyRequest.run}
-        routeMetrics={routesRequest.data?.routes ?? []}
+        routeMetrics={routeMetrics}
         routeMetricsLoading={routesRequest.loading}
       />
 

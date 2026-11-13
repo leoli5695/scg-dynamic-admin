@@ -399,4 +399,4 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
   );
 };
 
-export default MetricCards;
+export default React.memo(MetricCards);

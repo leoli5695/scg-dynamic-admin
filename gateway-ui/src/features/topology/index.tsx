@@ -18,7 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { getTopology } from '../../api/topology';
 import type { TopologyGraph, TopologyNode } from '../../types/topology';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
-import { buildChartOption, filterTopology, getTopologyChartHeight } from './chartOption';
+import { buildChartOption, filterTopology, getTopologyChartHeight, isSameTopologyContent } from './chartOption';
 import './topology.css';
 import { palette, withAlpha } from '../../styles/palette';
 
@@ -85,7 +85,9 @@ const TrafficTopologyPage: React.FC = () => {
     setError(null);
     try {
       const data = await getTopology(instanceId, { minutes: timeRange });
-      setTopology(data);
+      setTopology((previous) => (
+        previous && isSameTopologyContent(previous, data) ? previous : data
+      ));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -448,7 +450,7 @@ const TrafficTopologyPage: React.FC = () => {
         <div className="topology-chart-hint">
           <Text type="secondary">{t('topology.canvas_hint')}</Text>
         </div>
-        {loading && (
+        {loading && !topology && (
           <div style={{
             position: 'absolute',
             top: 0,
@@ -533,7 +535,7 @@ const TrafficTopologyPage: React.FC = () => {
             onClick={() => setContextMenuNode(null)}
           />
         )}
-        {!loading && topology && (topology.nodes?.length || 0) === 0 && (
+        {topology && (topology.nodes?.length || 0) === 0 && (
           <div style={{
             position: 'absolute',
             top: 0,
