@@ -12,7 +12,7 @@ import {
 import { message } from '../../utils/antdStatic';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  ApiOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
+  FilterOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
   DownloadOutlined, PictureOutlined, ReloadOutlined, SearchOutlined,
   SettingOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
@@ -29,10 +29,11 @@ import type {
 import logger from '../../utils/logger';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
 import WaterfallChart from './components/WaterfallChart';
+import ConsolePageHeader from '../instance-detail/ConsolePageHeader';
 import './filter-chain.css';
 import { palette } from '../../styles/palette';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const FilterChainPage: React.FC = () => {
   const { instance } = useInstanceDetail();
@@ -580,62 +581,57 @@ const FilterChainPage: React.FC = () => {
 
   return (
     <div className="filter-chain-page console-workspace-page console-resource-page">
-      <div className="page-header console-page-header" style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-      }}
-      >
-        <Title level={4} style={{ margin: 0 }}>
-          <ApiOutlined style={{ marginRight: 8 }} />
-          {t('filterChain.title')}
-        </Title>
-        <Space>
-          <Tooltip title={t('filterChain.shortcut_a_hint')}>
-            <Space>
-              <Switch
-                checkedChildren={t('filterChain.auto')}
-                unCheckedChildren={t('filterChain.manual')}
-                checked={autoRefresh}
-                onChange={setAutoRefresh}
-              />
-              {autoRefresh && (
-                <Select value={refreshInterval} onChange={setRefreshInterval} style={{ width: 80 }}>
-                  <Select.Option value={3000}>{t('filterChain.refresh_3s')}</Select.Option>
-                  <Select.Option value={5000}>{t('filterChain.refresh_5s')}</Select.Option>
-                  <Select.Option value={10000}>{t('filterChain.refresh_10s')}</Select.Option>
-                  <Select.Option value={30000}>{t('filterChain.refresh_30s')}</Select.Option>
-                </Select>
-              )}
-            </Space>
-          </Tooltip>
-
-          <Tooltip title={t('filterChain.performance_threshold_config')}>
-            <Button icon={<SettingOutlined />} onClick={() => setShowThresholdModal(true)}>
-              {t('filterChain.threshold')}
+      <ConsolePageHeader
+        icon={<FilterOutlined />}
+        eyebrow={t('filterChain.eyebrow')}
+        title={t('filterChain.title')}
+        description={t('filterChain.subtitle')}
+        actions={(
+          <>
+            <Tooltip title={t('filterChain.performance_threshold_config')}>
+              <Button icon={<SettingOutlined />} onClick={() => setShowThresholdModal(true)}>
+                {t('filterChain.threshold')}
+              </Button>
+            </Tooltip>
+            <Button icon={<DownloadOutlined />} onClick={() => setShowExportModal(true)}>
+              {t('filterChain.export')}
             </Button>
-          </Tooltip>
+            <Tooltip title={t('filterChain.shortcut_r_hint')}>
+              <Button type="primary" icon={<ReloadOutlined />} onClick={loadData} loading={loading}>
+                {t('common.refresh')}
+              </Button>
+            </Tooltip>
+          </>
+        )}
+      />
 
-          <Button icon={<DownloadOutlined />} onClick={() => setShowExportModal(true)}>
-            {t('filterChain.export')}
-          </Button>
-
-          <Input
-            placeholder={t('filterChain.search_trace')}
-            value={searchTraceId}
-            onChange={(e) => setSearchTraceId(e.target.value)}
-            onPressEnter={searchTrace}
-            prefix={<SearchOutlined />}
-            style={{ width: 250 }}
-          />
-
-          <Tooltip title={t('filterChain.shortcut_r_hint')}>
-            <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>
-              {t('common.refresh')}
-            </Button>
-          </Tooltip>
-        </Space>
+      <div className="filter-chain-toolbar">
+        <Input
+          className="filter-chain-search"
+          placeholder={t('filterChain.search_trace')}
+          value={searchTraceId}
+          onChange={(e) => setSearchTraceId(e.target.value)}
+          onPressEnter={searchTrace}
+          prefix={<SearchOutlined />}
+        />
+        <Tooltip title={t('filterChain.shortcut_a_hint')}>
+          <Space className="filter-chain-auto-control">
+            <Switch
+              checkedChildren={t('filterChain.auto')}
+              unCheckedChildren={t('filterChain.manual')}
+              checked={autoRefresh}
+              onChange={setAutoRefresh}
+            />
+            {autoRefresh && (
+              <Select value={refreshInterval} onChange={setRefreshInterval} style={{ width: 90 }}>
+                <Select.Option value={3000}>{t('filterChain.refresh_3s')}</Select.Option>
+                <Select.Option value={5000}>{t('filterChain.refresh_5s')}</Select.Option>
+                <Select.Option value={10000}>{t('filterChain.refresh_10s')}</Select.Option>
+                <Select.Option value={30000}>{t('filterChain.refresh_30s')}</Select.Option>
+              </Select>
+            )}
+          </Space>
+        </Tooltip>
       </div>
 
       {error && (
@@ -652,6 +648,7 @@ const FilterChainPage: React.FC = () => {
 
       {/* Data source notice */}
       <Alert
+        className="filter-chain-source-alert"
         title={t('filterChain.data_source_title')}
         description={(
           <Space orientation="vertical" size={0}>
@@ -665,50 +662,28 @@ const FilterChainPage: React.FC = () => {
         style={{ marginBottom: 16, background: 'rgba(76, 128, 236, 0.1)' }}
       />
 
-      {/* Summary stats */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col xs={12} sm={6}>
-          <Card size="small" style={{ background: palette.bgCard }}>
-            <Statistic
-              title={<span style={{ color: palette.textTertiary }}>{t('filterChain.total_executions')}</span>}
-              value={totalExecutions}
-              styles={{ content: { fontSize: 20 } }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={6}>
-          <Card size="small" style={{ background: palette.bgCard }}>
-            <Statistic
-              title={<span style={{ color: palette.textTertiary }}>{t('filterChain.success_rate')}</span>}
-              value={overallSuccessRate}
-              suffix="%"
-              styles={{
-                content: { fontSize: 20, color: parseFloat(overallSuccessRate) >= 99 ? palette.success : palette.warning }
-              }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={6}>
-          <Card size="small" style={{ background: palette.bgCard }}>
-            <Statistic
-              title={<span style={{ color: palette.textTertiary }}>{t('filterChain.failures')}</span>}
-              value={totalFailures}
-              styles={{
-                content: { fontSize: 20, color: totalFailures > 0 ? palette.error : palette.success }
-              }}
-            />
-          </Card>
-        </Col>
-        <Col xs={12} sm={6}>
-          <Card size="small" style={{ background: palette.bgCard }}>
-            <Statistic
-              title={<span style={{ color: palette.textTertiary }}>{t('filterChain.filter_count')}</span>}
-              value={filterStats.length}
-              styles={{ content: { fontSize: 20 } }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <section className="filter-chain-kpi-grid" aria-label={t('filterChain.performance_analysis')}>
+        <div className="filter-chain-kpi tone-primary">
+          <span>{t('filterChain.total_executions')}</span>
+          <strong>{totalExecutions.toLocaleString()}</strong>
+          <small>{filterStats.length} {t('filterChain.filter_count')}</small>
+        </div>
+        <div className={`filter-chain-kpi ${parseFloat(overallSuccessRate) >= 99 ? 'tone-success' : 'tone-warning'}`}>
+          <span>{t('filterChain.success_rate')}</span>
+          <strong>{overallSuccessRate}<em>%</em></strong>
+          <small>{totalSuccess.toLocaleString()} {t('filterChain.success')}</small>
+        </div>
+        <div className={`filter-chain-kpi ${totalFailures > 0 ? 'tone-error' : 'tone-success'}`}>
+          <span>{t('filterChain.failures')}</span>
+          <strong>{totalFailures.toLocaleString()}</strong>
+          <small>{t('filterChain.performance_analysis')}</small>
+        </div>
+        <div className="filter-chain-kpi tone-accent">
+          <span>{t('filterChain.filter_count')}</span>
+          <strong>{filterStats.length}</strong>
+          <small>{t('filterChain.filter_stats')}</small>
+        </div>
+      </section>
 
       {/* Performance analysis cards */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
@@ -815,6 +790,7 @@ const FilterChainPage: React.FC = () => {
 
       {/* Filter statistics table */}
       <Card
+        className="filter-chain-table-card"
         title={t('filterChain.filter_stats')}
         style={{ marginBottom: 16 }}
         extra={(
@@ -834,11 +810,11 @@ const FilterChainPage: React.FC = () => {
       </Card>
 
       {/* Recent records */}
-      <Card title={t('filterChain.recent_records')}>
+      <Card className="filter-chain-records-card" title={t('filterChain.recent_records')}>
         <Table scroll={{ x: 'max-content' }}
           dataSource={records}
           columns={recordColumns}
-          rowKey="traceId"
+          rowKey={(record) => `${record.traceId}-${record.createdAt}`}
           pagination={{ pageSize: 10 }}
           size="small"
           loading={loading}
@@ -992,13 +968,7 @@ const FilterChainPage: React.FC = () => {
       </Modal>
 
       {/* Keyboard shortcuts hint */}
-      <div style={{
-        marginTop: 16,
-        padding: 12,
-        background: palette.bgCard,
-        borderRadius: 6,
-      }}
-      >
+      <div className="filter-chain-shortcuts">
         <Space>
           <ThunderboltOutlined />
           <Text type="secondary">{t('filterChain.shortcuts_label')}</Text>

@@ -1,5 +1,7 @@
 {
   "diagnostic.title": "系统诊断",
+  "diagnostic.eyebrow": "SYSTEM HEALTH",
+  "diagnostic.subtitle": "聚合关键组件健康度、性能趋势与处置建议，把复杂巡检压缩成清晰行动。",
   "diagnostic.full_check": "完整诊断",
   "diagnostic.quick_check": "快速诊断",
   "diagnostic.running": "正在运行诊断...",

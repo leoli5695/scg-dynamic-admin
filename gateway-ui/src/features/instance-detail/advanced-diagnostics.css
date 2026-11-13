@@ -1,0 +1,160 @@
+.diagnostics-surface {
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  padding: clamp(12px, 1.5vw, 22px);
+  border: 1px solid rgba(145, 169, 222, 0.08);
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse at 0% 0%, rgba(35, 75, 198, 0.13), transparent 42%),
+    radial-gradient(ellipse at 100% 38%, rgba(105, 83, 220, 0.09), transparent 42%),
+    linear-gradient(rgba(138, 168, 224, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(138, 168, 224, 0.025) 1px, transparent 1px),
+    #080d19;
+  background-size: auto, auto, 56px 56px, 56px 56px, auto;
+}
+.diagnostics-surface .diagnostics-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+  padding: 22px 24px;
+  overflow: hidden;
+  border: 1px solid rgba(145, 169, 222, 0.20);
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(104, 123, 206, 0.13), transparent 52%),
+    linear-gradient(135deg, rgba(25, 36, 58, 0.96), rgba(13, 21, 38, 0.96));
+  box-shadow: 0 20px 50px rgba(3, 7, 18, 0.30);
+}
+.diagnostics-hero-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.diagnostics-hero-icon {
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(135, 170, 255, 0.38);
+  border-radius: 14px;
+  color: #f4f7ff;
+  background: linear-gradient(145deg, rgba(71, 127, 236, 0.88), rgba(104, 102, 220, 0.82));
+  box-shadow: 0 10px 28px rgba(71, 127, 236, 0.22);
+  font-size: 21px;
+}
+.diagnostics-hero-copy {
+  min-width: 0;
+}
+.diagnostics-hero-eyebrow {
+  display: block;
+  color: #8ab0ff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2.1px;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.diagnostics-hero-copy h1 {
+  margin: 4px 0 5px;
+  color: #edf2ff;
+  font-size: clamp(21px, 2vw, 27px);
+  font-weight: 650;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+.diagnostics-hero-copy p {
+  margin: 0;
+  color: #95a3bc;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.diagnostics-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.diagnostics-surface .ant-card {
+  border-color: rgba(145, 169, 222, 0.16);
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgba(104, 123, 206, 0.07), transparent 52%),
+    linear-gradient(150deg, rgba(20, 29, 49, 0.97), rgba(13, 21, 38, 0.97));
+  box-shadow: 0 16px 38px rgba(3, 7, 18, 0.24);
+}
+.diagnostics-surface .ant-card-head {
+  min-height: 52px;
+  border-bottom-color: rgba(145, 169, 222, 0.12);
+}
+.diagnostics-surface .ant-card-head-title {
+  color: #edf2ff;
+  font-weight: 600;
+}
+.diagnostics-surface .ant-card-small > .ant-card-head {
+  min-height: 44px;
+}
+.diagnostics-surface .ant-statistic-title {
+  color: #95a3bc;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+}
+.diagnostics-surface .ant-statistic-content {
+  color: #edf2ff;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+}
+.diagnostics-surface .ant-btn-primary {
+  border-color: rgba(135, 170, 255, 0.38);
+  background: linear-gradient(105deg, #477fec, #6866dc);
+  box-shadow: 0 8px 20px rgba(71, 127, 236, 0.18);
+}
+.diagnostics-surface .ant-btn-primary:hover {
+  background: linear-gradient(100deg, #578ef9, #7977ed);
+}
+.diagnostics-surface .ant-alert,
+.diagnostics-surface .ant-table-thead > tr > th,
+.diagnostics-surface .ant-table-tbody > tr > td {
+  border-color: rgba(145, 169, 222, 0.12);
+}
+.diagnostics-surface .ant-table,
+.diagnostics-surface .ant-table-wrapper {
+  border-radius: 10px;
+}
+.diagnostics-surface .ant-input-affix-wrapper,
+.diagnostics-surface .ant-input,
+.diagnostics-surface .ant-select-selector {
+  border-color: rgba(145, 169, 222, 0.18) !important;
+  background-color: rgba(12, 20, 37, 0.88) !important;
+}
+@media (max-width: 960px) {
+  .diagnostics-surface .diagnostics-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .diagnostics-hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 640px) {
+  .diagnostics-surface {
+    padding: 10px;
+    border-radius: 14px;
+  }
+  .diagnostics-surface .diagnostics-hero {
+    padding: 18px;
+  }
+  .diagnostics-hero-icon {
+    flex-basis: 40px;
+    width: 40px;
+    height: 40px;
+  }
+}

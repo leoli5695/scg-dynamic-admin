@@ -63,5 +63,19 @@
   "topology.tooltip_instance_list": "Instance List",
   "topology.tooltip_weight": "(weight: {{weight}})",
   "topology.tooltip_traffic_metrics": "Traffic Metrics",
-  "topology.edge_title": "Traffic Connection"
+  "topology.edge_title": "Traffic Connection",
+  "topology.eyebrow": "TRAFFIC INTELLIGENCE",
+  "topology.subtitle": "Trace demand from clients to downstream services and isolate hot or failing paths at a glance.",
+  "topology.active_only": "Active routes",
+  "topology.active_only_tooltip": "Only show routes with requests in the selected time range",
+  "topology.smart_aggregate": "Smart overview",
+  "topology.smart_aggregate_tooltip": "Keep high-traffic clients and routes while grouping the long tail; disable to explore the full graph",
+  "topology.aggregate_badge": "Overview",
+  "topology.aggregate_clients": "{{count}} more clients",
+  "topology.aggregate_routes": "{{count}} more routes",
+  "topology.request_map": "REQUEST MAP",
+  "topology.live": "LIVE",
+  "topology.visible_nodes": "{{visible}} / {{total}} nodes",
+  "topology.top_routes": "Top routes",
+  "topology.top_routes_hint": "By request volume · click to focus"
 }

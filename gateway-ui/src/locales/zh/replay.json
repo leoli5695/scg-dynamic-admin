@@ -1,6 +1,8 @@
 {
   "replay.instanceMismatch": "该请求不属于当前实例，无法在此回放。",
   "replay.title": "请求回放调试器",
+  "replay.eyebrow": "SAFE REQUEST REPLAY",
+  "replay.subtitle": "基于真实请求重建、调整并对比响应，让问题复现更可控。",
   "replay.load_error": "加载追踪记录失败",
   "replay.prepare_error": "准备回放失败",
   "replay.execute_error": "执行回放失败",

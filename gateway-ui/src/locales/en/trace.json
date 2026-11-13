@@ -1,6 +1,8 @@
 {
   "trace.instanceMismatch": "This trace belongs to another instance and cannot be opened here.",
   "trace.title": "Request Tracing",
+  "trace.eyebrow": "REQUEST EVIDENCE",
+  "trace.subtitle": "Move from errors and slow requests to complete call evidence in one diagnostic workflow.",
   "trace.total": "Total Traces",
   "trace.errors_today": "Errors Today",
   "trace.errors_last_hour": "Errors Last Hour",

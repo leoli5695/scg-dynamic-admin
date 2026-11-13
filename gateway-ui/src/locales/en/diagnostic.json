@@ -1,5 +1,7 @@
 {
   "diagnostic.title": "System Diagnostic",
+  "diagnostic.eyebrow": "SYSTEM HEALTH",
+  "diagnostic.subtitle": "Bring component health, performance trends and recommended actions into one focused operations view.",
   "diagnostic.full_check": "Full Diagnostic",
   "diagnostic.quick_check": "Quick Diagnostic",
   "diagnostic.running": "Running diagnostic...",

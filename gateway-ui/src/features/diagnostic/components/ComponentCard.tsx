@@ -46,7 +46,7 @@ const ComponentCard: React.FC<ComponentCardProps> = ({ title, icon, diagnostic }
 
   return (
     <Card
-      className="diagnostic-card"
+      className={`diagnostic-card status-${diagnostic.status.toLowerCase()}`}
       title={
         <Space>
           {icon}

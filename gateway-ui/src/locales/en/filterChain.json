@@ -1,5 +1,7 @@
 {
   "filterChain.title": "Filter Chain",
+  "filterChain.eyebrow": "FILTER OBSERVABILITY",
+  "filterChain.subtitle": "Inspect latency, failures and performance inflection points across every filter execution.",
   "filterChain.select_instance": "Please select an instance",
   "filterChain.search_trace": "Search trace ID...",
   "filterChain.filter_name": "Filter",

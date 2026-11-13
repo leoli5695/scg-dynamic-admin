@@ -5,12 +5,13 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Button, Card, Col, Empty, Input, Row, Select, Space, Spin,
-  Statistic, Switch, Tooltip, Typography
+  Alert, Button, Card, Empty, Input, Select, Spin,
+  Switch, Tag, Tooltip, Typography
 } from 'antd';
 import {
-  AimOutlined, ApiOutlined, CloseOutlined, EyeOutlined, FullscreenOutlined,
-  GlobalOutlined, LinkOutlined, ReloadOutlined, SearchOutlined, TeamOutlined,
+  AimOutlined, ApiOutlined, ApartmentOutlined, CloseOutlined, ControlOutlined,
+  EyeOutlined, FullscreenOutlined, FundOutlined, GlobalOutlined, LinkOutlined,
+  ReloadOutlined, SearchOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import * as echarts from 'echarts';
 import { useTranslation } from 'react-i18next';
@@ -18,11 +19,12 @@ import { useNavigate } from 'react-router-dom';
 import { getTopology } from '../../api/topology';
 import type { TopologyGraph, TopologyNode } from '../../types/topology';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
-import { buildChartOption, filterTopology, getTopologyChartHeight, isSameTopologyContent } from './chartOption';
+import { buildChartOption, getTopologyChartHeight, getTopologyDisplayGraph, isSameTopologyContent } from './chartOption';
+import ConsolePageHeader from '../instance-detail/ConsolePageHeader';
 import './topology.css';
-import { palette, withAlpha } from '../../styles/palette';
+import { palette } from '../../styles/palette';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 /** Narrow shape of ECharts node click params. */
 interface NodeClickParams {
@@ -63,6 +65,7 @@ const TrafficTopologyPage: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [showDisabledRoutes, setShowDisabledRoutes] = useState(true);
   const [showOnlyActiveRoutes, setShowOnlyActiveRoutes] = useState(false);
+  const [smartAggregate, setSmartAggregate] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [contextMenuNode, setContextMenuNode] = useState<TopologyNode | null>(null);
@@ -76,9 +79,22 @@ const TrafficTopologyPage: React.FC = () => {
   const [chartWidth, setChartWidth] = useState(1100);
   const filters = useMemo(() => ({
     showDisabledRoutes, showOnlyActiveRoutes, searchKeyword, selectedNodeId,
-  }), [showDisabledRoutes, showOnlyActiveRoutes, searchKeyword, selectedNodeId]);
-  const chartHeight = useMemo(() => topology
-    ? getTopologyChartHeight(filterTopology(topology, filters)) : 500, [topology, filters]);
+    aggregate: smartAggregate,
+  }), [showDisabledRoutes, showOnlyActiveRoutes, searchKeyword, selectedNodeId, smartAggregate]);
+  const displayTopology = useMemo(
+    () => (topology ? getTopologyDisplayGraph(topology, filters, t) : null),
+    [topology, filters, t],
+  );
+  const chartHeight = useMemo(
+    () => (displayTopology ? getTopologyChartHeight(displayTopology) : 500),
+    [displayTopology],
+  );
+  const topRoutes = useMemo(() => (topology?.nodes ?? [])
+    .filter((node) => node.type === 'route')
+    .sort((a, b) => (b.metrics?.requestCount || 0) - (a.metrics?.requestCount || 0))
+    .slice(0, 5), [topology]);
+  const aggregateActive = displayTopology?.nodes.some((node) => node.id.startsWith('aggregate:')) ?? false;
+  const maxRouteRequests = topRoutes[0]?.metrics?.requestCount || 1;
 
   const loadTopology = useCallback(async () => {
     setLoading(true);
@@ -261,53 +277,47 @@ const TrafficTopologyPage: React.FC = () => {
 
   return (
     <div className="topology-page console-workspace-page console-resource-page">
-      <div className="page-header console-page-header" style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-      }}
-      >
-        <Title level={4} style={{ margin: 0 }}>
-          <ApiOutlined style={{ marginRight: 8 }} />
-          {t('topology.title')}
-        </Title>
-        <Space>
-          <Input
-            placeholder={t('topology.search_placeholder')}
-            prefix={<SearchOutlined />}
-            suffix={searchKeyword ? (
-              <CloseOutlined
-                style={{ cursor: 'pointer', color: palette.textMuted }}
-                onClick={() => setSearchKeyword('')}
-              />
-            ) : null}
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            style={{ width: 180 }}
-            allowClear
-          />
-          {selectedNodeId && (
-            <Tooltip title={t('topology.clear_filter_tooltip')}>
-              <Button
-                type="primary"
-                icon={<EyeOutlined />}
-                onClick={() => setSelectedNodeId(null)}
-                size="small"
-                style={{
-                  background: `linear-gradient(135deg, ${palette.infoSolid}, ${palette.infoSolid})`,
-                  border: 'none',
-                  boxShadow: `0 2px 10px ${withAlpha(palette.info, 0.4)}`,
-                }}
-              >
-                {t('topology.exit_focus')}
-              </Button>
-            </Tooltip>
-          )}
+      <ConsolePageHeader
+        icon={<ApartmentOutlined />}
+        eyebrow={t('topology.eyebrow')}
+        title={t('topology.title')}
+        description={t('topology.subtitle')}
+        actions={(
+          <>
+            <Button
+              type={autoRefresh ? 'primary' : 'default'}
+              icon={<ReloadOutlined spin={loading} />}
+              onClick={() => setAutoRefresh(!autoRefresh)}
+            >
+              {autoRefresh ? t('topology.auto_refresh_on') : t('topology.auto_refresh_off')}
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={loadTopology} loading={loading}>
+              {t('common.refresh')}
+            </Button>
+          </>
+        )}
+      />
+
+      <div className="topology-toolbar">
+        <Input
+          className="topology-search"
+          placeholder={t('topology.search_placeholder')}
+          prefix={<SearchOutlined />}
+          suffix={searchKeyword ? (
+            <CloseOutlined
+              style={{ cursor: 'pointer', color: palette.textMuted }}
+              onClick={() => setSearchKeyword('')}
+            />
+          ) : null}
+          value={searchKeyword}
+          onChange={(e) => setSearchKeyword(e.target.value)}
+          allowClear
+        />
+        <div className="topology-toolbar-controls">
           <Select
+            aria-label={t('topology.title')}
             value={timeRange}
             onChange={setTimeRange}
-            style={{ width: 120 }}
             options={[
               { value: 15, label: t('topology.last_15m') },
               { value: 30, label: t('topology.last_30m') },
@@ -317,26 +327,35 @@ const TrafficTopologyPage: React.FC = () => {
             ]}
           />
           <Tooltip title={t('topology.show_disabled_routes_tooltip')}>
-            <Space style={{ marginRight: 8 }}>
-              <Text style={{ color: palette.textTertiary, fontSize: 12 }}>{t('topology.show_disabled_routes')}</Text>
-              <Switch
-                checked={showDisabledRoutes}
-                onChange={setShowDisabledRoutes}
-                size="small"
-              />
-            </Space>
+            <span className="topology-toggle">
+              <Switch checked={showDisabledRoutes} onChange={setShowDisabledRoutes} size="small" />
+              <Text>{t('topology.show_disabled_routes')}</Text>
+            </span>
           </Tooltip>
-          <Button
-            type={autoRefresh ? 'primary' : 'default'}
-            icon={<ReloadOutlined spin={loading} />}
-            onClick={() => setAutoRefresh(!autoRefresh)}
-          >
-            {autoRefresh ? t('topology.auto_refresh_on') : t('topology.auto_refresh_off')}
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={loadTopology} loading={loading}>
-            {t('common.refresh')}
-          </Button>
-        </Space>
+          <Tooltip title={t('topology.active_only_tooltip')}>
+            <span className="topology-toggle">
+              <Switch checked={showOnlyActiveRoutes} onChange={setShowOnlyActiveRoutes} size="small" />
+              <Text>{t('topology.active_only')}</Text>
+            </span>
+          </Tooltip>
+          <Tooltip title={t('topology.smart_aggregate_tooltip')}>
+            <span className="topology-toggle is-emphasized">
+              <ControlOutlined />
+              <Switch checked={smartAggregate} onChange={setSmartAggregate} size="small" />
+              <Text>{t('topology.smart_aggregate')}</Text>
+            </span>
+          </Tooltip>
+          {selectedNodeId && (
+            <Button
+              type="primary"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => setSelectedNodeId(null)}
+            >
+              {t('topology.exit_focus')}
+            </Button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -351,137 +370,131 @@ const TrafficTopologyPage: React.FC = () => {
         />
       )}
 
-      {/* Metrics Summary */}
       {topology?.metrics && (
-        <Row gutter={12} style={{ marginBottom: 16 }}>
-          <Col span={3}>
-            <Card size="small" style={{ background: palette.bgCard }}>
-              <Statistic
-                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.total_requests')}</span>}
-                value={topology.metrics.totalRequests}
-                styles={{ content: { color: palette.primary, fontSize: 16 } }}
-              />
-            </Card>
-          </Col>
-          <Col span={3}>
-            <Card size="small" style={{ background: palette.bgCard }}>
-              <Statistic
-                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.rps')}</span>}
-                value={topology.metrics.requestsPerSecond.toFixed(2)}
-                styles={{ content: { color: palette.info, fontSize: 16 } }}
-              />
-            </Card>
-          </Col>
-          <Col span={3}>
-            <Card size="small" style={{ background: palette.bgCard }}>
-              <Statistic
-                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.avg_latency')}</span>}
-                value={topology.metrics.avgLatency.toFixed(2)}
-                suffix="ms"
-                styles={{ content: { fontSize: 16 } }}
-              />
-            </Card>
-          </Col>
-          <Col span={3}>
-            <Card size="small" style={{ background: palette.bgCard }}>
-              <Statistic
-                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.error_rate')}</span>}
-                value={topology.metrics.errorRate.toFixed(2)}
-                suffix="%"
-                styles={{
-                  content: {
-                  color: topology.metrics.errorRate > 5 ? palette.error : palette.success,
-                  fontSize: 16,
-                }
-                }}
-              />
-            </Card>
-          </Col>
-          <Col span={3}>
-            <Card size="small" style={{ background: palette.bgCard }}>
-              <Statistic
-                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.clients')}</span>}
-                value={topology.metrics.uniqueClients}
-                styles={{ content: { fontSize: 16 } }}
-                prefix={<GlobalOutlined />}
-              />
-            </Card>
-          </Col>
-          <Col span={3}>
-            <Card size="small" style={{ background: palette.bgCard }}>
-              <Statistic
-                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.routes_status')}</span>}
-                value={`${topology.metrics.enabledRoutes ?? 0}${t('topology.enabled')}/${topology.metrics.configuredRoutes ?? 0}${t('topology.total')}`}
-                styles={{ content: { fontSize: 16 } }}
-                prefix={<ApiOutlined />}
-              />
-            </Card>
-          </Col>
-          <Col span={3}>
-            <Card
-              size="small"
-              style={{
-                background: showOnlyActiveRoutes ? withAlpha(palette.info, 0.18) : palette.bgCard,
-                cursor: 'pointer',
-                border: showOnlyActiveRoutes ? `1px solid ${palette.info}` : 'none',
-                transition: 'all 0.3s',
-              }}
-              onClick={() => setShowOnlyActiveRoutes(!showOnlyActiveRoutes)}
-            >
-              <Statistic
-                title={<span style={{ color: palette.textTertiary, fontSize: 11 }}>{t('topology.routes_with_traffic')}</span>}
-                value={topology.metrics.uniqueRoutes}
-                styles={{ content: { color: palette.info, fontSize: 16 } }}
-                prefix={<ApiOutlined />}
-              />
-              {showOnlyActiveRoutes && (
-                <div style={{ fontSize: 10, color: palette.info, marginTop: 4 }}>{t('topology.filter_active')}</div>
-              )}
-            </Card>
-          </Col>
-        </Row>
+        <section className="topology-kpi-grid" aria-label={t('topology.traffic_flow')}>
+          <div className="topology-kpi tone-primary">
+            <span>{t('topology.total_requests')}</span>
+            <strong>{topology.metrics.totalRequests.toLocaleString()}</strong>
+            <small>{topology.metrics.uniqueClients} {t('topology.clients')}</small>
+          </div>
+          <div className="topology-kpi tone-info">
+            <span>{t('topology.rps')}</span>
+            <strong>{topology.metrics.requestsPerSecond.toFixed(2)}</strong>
+            <small>{topology.metrics.uniqueRoutes} {t('topology.routes_with_traffic')}</small>
+          </div>
+          <div className="topology-kpi tone-accent">
+            <span>{t('topology.avg_latency')}</span>
+            <strong>{topology.metrics.avgLatency.toFixed(2)}<em>ms</em></strong>
+            <small>{topology.metrics.enabledRoutes ?? 0}/{topology.metrics.configuredRoutes ?? 0} {t('topology.enabled')}</small>
+          </div>
+          <div className={`topology-kpi ${topology.metrics.errorRate > 5 ? 'tone-error' : 'tone-success'}`}>
+            <span>{t('topology.error_rate')}</span>
+            <strong>{topology.metrics.errorRate.toFixed(2)}<em>%</em></strong>
+            <small>{topology.metrics.totalErrors.toLocaleString()} {t('topology.tooltip_errors')}</small>
+          </div>
+        </section>
       )}
 
-      {/* Topology Graph — the chart div always exists for ECharts to attach */}
       <Card
-        style={{ background: palette.bgBase, minHeight: 500, position: 'relative' }}
+        className="topology-canvas-card"
+        style={{ background: palette.bgBase, position: 'relative' }}
         styles={{ body: { padding: 0, position: 'relative' } }}
       >
+        <div className="topology-canvas-header">
+          <div>
+            <span className="topology-section-eyebrow">{t('topology.request_map')}</span>
+            <h2>{t('topology.traffic_flow')}</h2>
+          </div>
+          <div className="topology-canvas-status">
+            {aggregateActive && <Tag className="topology-aggregate-badge">{t('topology.aggregate_badge')}</Tag>}
+            <span className="topology-live-status"><i />{t('topology.live')}</span>
+          </div>
+        </div>
         <div className="topology-chart-hint">
           <Text type="secondary">{t('topology.canvas_hint')}</Text>
+          <span>{t('topology.visible_nodes', { visible: displayTopology?.nodes.length ?? 0, total: topology?.nodes.length ?? 0 })}</span>
         </div>
-        {loading && !topology && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(8, 13, 25, 0.72)',
-            zIndex: 10,
-          }}
-          >
-            <Spin size="large" />
-            <div style={{ marginTop: 16 }}>
-              <Text type="secondary">{t('topology.loading')}</Text>
+        <div className="topology-workspace">
+          <div className="topology-chart-region">
+            {loading && !topology && (
+              <div className="topology-loading-overlay">
+                <Spin size="large" />
+                <div style={{ marginTop: 16 }}>
+                  <Text type="secondary">{t('topology.loading')}</Text>
+                </div>
+              </div>
+            )}
+            <div ref={chartViewportRef} className="topology-chart-viewport">
+              <div
+                ref={chartRef}
+                style={{ width: chartWidth, height: chartHeight, position: 'relative' }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+              />
             </div>
+            {topology && (topology.nodes?.length || 0) === 0 && (
+              <div className="topology-empty-overlay">
+                <Empty description={t('topology.no_data')} />
+              </div>
+            )}
           </div>
-        )}
-        <div ref={chartViewportRef} className="topology-chart-viewport">
-          <div
-            ref={chartRef}
-            style={{ width: chartWidth, height: chartHeight, position: 'relative' }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          />
+
+          {topRoutes.length > 0 && (
+            <aside className="topology-ranking" aria-label={t('topology.top_routes')}>
+              <div className="topology-ranking-header">
+                <FundOutlined />
+                <div>
+                  <span>{t('topology.top_routes')}</span>
+                  <small>{t('topology.top_routes_hint')}</small>
+                </div>
+              </div>
+              <div className="topology-ranking-list">
+                {topRoutes.map((route, index) => {
+                  const requestCount = route.metrics?.requestCount || 0;
+                  const selected = selectedNodeId === route.id;
+                  return (
+                    <button
+                      type="button"
+                      key={route.id}
+                      className={`topology-route-rank${selected ? ' is-selected' : ''}`}
+                      onClick={() => setSelectedNodeId(selected ? null : route.id)}
+                      title={route.name}
+                    >
+                      <span className="topology-route-rank-topline">
+                        <span className="topology-route-position">{String(index + 1).padStart(2, '0')}</span>
+                        <strong>{route.name}</strong>
+                        <em className={(route.metrics?.errorRate || 0) > 5 ? 'is-error' : undefined}>
+                          {(route.metrics?.errorRate || 0).toFixed(1)}%
+                        </em>
+                      </span>
+                      <span className="topology-route-rank-meta">
+                        {requestCount.toLocaleString()} {t('topology.tooltip_requests')}
+                      </span>
+                      <span className="topology-route-rank-line">
+                        <i style={{ width: `${Math.max(3, requestCount / maxRouteRequests * 100)}%` }} />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="topology-ranking-summary">
+                <div>
+                  <GlobalOutlined />
+                  <span>{t('topology.clients')}</span>
+                  <strong>{topology?.metrics?.uniqueClients ?? 0}</strong>
+                </div>
+                <div>
+                  <ApiOutlined />
+                  <span>{t('topology.routes_status')}</span>
+                  <strong>{topology?.metrics?.enabledRoutes ?? 0}/{topology?.metrics?.configuredRoutes ?? 0}</strong>
+                </div>
+              </div>
+            </aside>
+          )}
         </div>
-        {/* Context menu rendered at the mouse position */}
+
         {contextMenuNode && (
           <div
             style={{
@@ -528,59 +541,22 @@ const TrafficTopologyPage: React.FC = () => {
             ))}
           </div>
         )}
-        {/* Click-away layer closes the context menu */}
         {contextMenuNode && (
           <div
             style={{ position: 'fixed', inset: 0, zIndex: 999 }}
             onClick={() => setContextMenuNode(null)}
           />
         )}
-        {topology && (topology.nodes?.length || 0) === 0 && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          >
-            <Empty description={t('topology.no_data')} />
-          </div>
-        )}
-      </Card>
 
-      {/* Legend */}
-      <Card size="small" style={{ marginTop: 16, background: palette.bgCard }}>
-        <Space size="large" wrap>
-          <Text type="secondary">{t('topology.legend')}:</Text>
-          <Space align="center">
-            <span className="legend-circle" style={{ background: palette.primary, width: 18, height: 18 }} />
-            <Text>{t('topology.node_gateway')}</Text>
-          </Space>
-          <Space align="center">
-            <span className="legend-diamond" style={{ background: palette.infoSolid, width: 14, height: 14 }} />
-            <Text>{t('topology.node_route_enabled')}</Text>
-          </Space>
-          <Space align="center">
-            <span className="legend-diamond" style={{ background: palette.textMuted, width: 14, height: 14, border: '2px dashed #fff' }} />
-            <Text>{t('topology.node_route_disabled')}</Text>
-          </Space>
-          <Space align="center">
-            <span className="legend-rect" style={{ background: palette.accentSolid, width: 16, height: 14 }} />
-            <Text>{t('topology.node_service_discovery')}</Text>
-          </Space>
-          <Space align="center">
-            <span className="legend-rect" style={{ background: palette.successSolid, width: 16, height: 14 }} />
-            <Text>{t('topology.node_service_static')}</Text>
-          </Space>
-          <Space align="center">
-            <span className="legend-circle" style={{ background: palette.warningSolid, width: 14, height: 14 }} />
-            <Text>{t('topology.node_client')}</Text>
-          </Space>
-        </Space>
+        <div className="topology-legend">
+          <span className="topology-legend-title">{t('topology.legend')}</span>
+          <span className="topology-legend-item"><i className="legend-circle" style={{ background: palette.primary }} />{t('topology.node_gateway')}</span>
+          <span className="topology-legend-item"><i className="legend-diamond" style={{ background: palette.infoSolid }} />{t('topology.node_route_enabled')}</span>
+          <span className="topology-legend-item"><i className="legend-diamond is-disabled" style={{ background: palette.textMuted }} />{t('topology.node_route_disabled')}</span>
+          <span className="topology-legend-item"><i className="legend-rect" style={{ background: palette.accentSolid }} />{t('topology.node_service_discovery')}</span>
+          <span className="topology-legend-item"><i className="legend-rect" style={{ background: palette.successSolid }} />{t('topology.node_service_static')}</span>
+          <span className="topology-legend-item"><i className="legend-circle" style={{ background: palette.warningSolid }} />{t('topology.node_client')}</span>
+        </div>
       </Card>
     </div>
   );

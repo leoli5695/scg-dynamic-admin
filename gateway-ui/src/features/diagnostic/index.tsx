@@ -5,7 +5,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, Button, Card, Col, Progress, Row, Select, Space, Spin, Statistic,
+  Alert, Button, Card, Col, Progress, Row, Select, Spin, Statistic,
   Switch, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
@@ -22,10 +22,11 @@ import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
 import ComponentCard from './components/ComponentCard';
 import HistoryTrendCard from './components/HistoryTrendCard';
 import { getScoreColor, getScoreStatus, getStatusIcon } from './utils';
+import ConsolePageHeader from '../instance-detail/ConsolePageHeader';
 import './diagnostic.css';
 import { palette } from '../../styles/palette';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 
 const DiagnosticPage: React.FC = () => {
   const { t } = useTranslation();
@@ -86,56 +87,44 @@ const DiagnosticPage: React.FC = () => {
 
   return (
     <div className="diagnostic-page console-workspace-page console-resource-page">
-      <div className="page-header console-page-header" style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-      }}>
-        <Title level={4} style={{ margin: 0 }}>
-          <MedicineBoxOutlined style={{ marginRight: 8 }} />
-          {t('diagnostic.title')}
-        </Title>
-        <Space>
-          {/* Auto refresh controls */}
-          <Space>
-            <Text type="secondary">{t('diagnostic.auto_refresh')}</Text>
-            <Switch
-              checked={autoRefresh}
-              onChange={setAutoRefresh}
-              checkedChildren={<SyncOutlined spin />}
-              unCheckedChildren={<SyncOutlined />}
-            />
-            {autoRefresh && (
-              <Select
-                value={refreshInterval}
-                onChange={setRefreshInterval}
-                style={{ width: 100 }}
-                options={[
-                  { value: 30, label: '30s' },
-                  { value: 60, label: '1min' },
-                  { value: 120, label: '2min' },
-                  { value: 300, label: '5min' },
-                ]}
-              />
-            )}
-          </Space>
-          <Button
-            type="primary"
-            icon={<RocketOutlined />}
-            onClick={() => runDiagnostic('full')}
-            loading={loading}
-          >
-            {t('diagnostic.full_check')}
-          </Button>
-          <Button
-            icon={<ThunderboltOutlined />}
-            onClick={() => runDiagnostic('quick')}
-            loading={loading}
-          >
-            {t('diagnostic.quick_check')}
-          </Button>
-        </Space>
+      <ConsolePageHeader
+        icon={<MedicineBoxOutlined />}
+        eyebrow={t('diagnostic.eyebrow')}
+        title={t('diagnostic.title')}
+        description={t('diagnostic.subtitle')}
+        actions={(
+          <>
+            <Button type="primary" icon={<RocketOutlined />} onClick={() => runDiagnostic('full')} loading={loading}>
+              {t('diagnostic.full_check')}
+            </Button>
+            <Button icon={<ThunderboltOutlined />} onClick={() => runDiagnostic('quick')} loading={loading}>
+              {t('diagnostic.quick_check')}
+            </Button>
+          </>
+        )}
+      />
+
+      <div className="diagnostic-control-strip">
+        <span className="diagnostic-control-label"><SyncOutlined />{t('diagnostic.auto_refresh')}</span>
+        <Switch
+          checked={autoRefresh}
+          onChange={setAutoRefresh}
+          checkedChildren={<SyncOutlined spin />}
+          unCheckedChildren={<SyncOutlined />}
+        />
+        {autoRefresh && (
+          <Select
+            value={refreshInterval}
+            onChange={setRefreshInterval}
+            style={{ width: 100 }}
+            options={[
+              { value: 30, label: '30s' },
+              { value: 60, label: '1min' },
+              { value: 120, label: '2min' },
+              { value: 300, label: '5min' },
+            ]}
+          />
+        )}
       </div>
 
       {error && (
@@ -152,7 +141,7 @@ const DiagnosticPage: React.FC = () => {
 
       {/* Overall score */}
       {report && (
-        <Card style={{ marginBottom: 16 }}>
+        <Card className="diagnostic-score-card" style={{ marginBottom: 16 }}>
           <Row gutter={24} align="middle">
             <Col xs={24} sm={8} md={6}>
               <div style={{ textAlign: 'center' }}>
@@ -201,7 +190,7 @@ const DiagnosticPage: React.FC = () => {
 
               {/* Recommendations */}
               {report.recommendations && report.recommendations.length > 0 && (
-                <div style={{ marginTop: 16 }}>
+                <div className="diagnostic-recommendations" style={{ marginTop: 16 }}>
                   <Text strong>{t('diagnostic.recommendations')}:</Text>
                   <ul style={{ margin: '8px 0 0 20px' }}>
                     {report.recommendations.map((rec, i) => (

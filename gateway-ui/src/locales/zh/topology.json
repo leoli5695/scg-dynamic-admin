@@ -63,5 +63,19 @@
   "topology.tooltip_instance_list": "实例列表",
   "topology.tooltip_weight": "(权重:{{weight}})",
   "topology.tooltip_traffic_metrics": "流量指标",
-  "topology.edge_title": "流量连接"
+  "topology.edge_title": "流量连接",
+  "topology.eyebrow": "TRAFFIC INTELLIGENCE",
+  "topology.subtitle": "从客户端到下游服务，快速定位高流量链路与异常路径。",
+  "topology.active_only": "仅活跃路由",
+  "topology.active_only_tooltip": "只保留所选时间范围内有请求的路由",
+  "topology.smart_aggregate": "智能聚合",
+  "topology.smart_aggregate_tooltip": "节点较多时保留高流量客户端与路由，其余合并展示；关闭后查看完整大图",
+  "topology.aggregate_badge": "概览模式",
+  "topology.aggregate_clients": "其他 {{count}} 个客户端",
+  "topology.aggregate_routes": "其他 {{count}} 条路由",
+  "topology.request_map": "REQUEST MAP",
+  "topology.live": "实时",
+  "topology.visible_nodes": "{{visible}} / {{total}} 节点",
+  "topology.top_routes": "高流量路由",
+  "topology.top_routes_hint": "按请求量排序 · 点击聚焦"
 }

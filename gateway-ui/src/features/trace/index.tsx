@@ -33,12 +33,13 @@ import {
   exportTraces, getMethodColor, getStatusColor,
 } from './utils';
 import TraceDetailDrawer from './components/TraceDetailDrawer';
+import ConsolePageHeader from '../instance-detail/ConsolePageHeader';
 import FullChainTab from './components/FullChainTab';
 import { requestJourneyUrl, routeConfigurationUrl } from '../request-journey/links';
 import './trace.css';
 import { palette } from '../../styles/palette';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { RangePicker } = DatePicker;
 
 interface TraceFilters {
@@ -332,32 +333,29 @@ const TracePage: React.FC = () => {
 
   return (
     <div className="console-workspace-page console-resource-page">
-      <div className="console-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={3} style={{ margin: 0 }}>
-          <ApiOutlined style={{ marginRight: 8 }} />
-          {t('trace.title')}
-        </Title>
-        <Space>
-          <Button icon={<SearchOutlined />} onClick={() => navigate(`/instances/${encodeURIComponent(instanceId)}/requests`)}>{t('menu.requests')}</Button>
-          <Button
-            icon={<PlayCircleOutlined />}
-            onClick={() => navigate(`/instances/${instanceId}/request_replay`)}
-          >
-            {t('trace.go_to_replay')}
-          </Button>
-          <Dropdown menu={{
-            items: [
-              { key: 'json', label: 'JSON', icon: <DownloadOutlined />, onClick: () => handleExport('json') },
-              { key: 'csv', label: 'CSV', icon: <DownloadOutlined />, onClick: () => handleExport('csv') },
-            ],
-          }}
-          >
-            <Button icon={<DownloadOutlined />}>
-              {t('trace.export')}
+      <ConsolePageHeader
+        icon={<ApiOutlined />}
+        eyebrow={t('trace.eyebrow')}
+        title={t('trace.title')}
+        description={t('trace.subtitle')}
+        actions={(
+          <Space>
+            <Button icon={<SearchOutlined />} onClick={() => navigate(`/instances/${encodeURIComponent(instanceId)}/requests`)}>{t('menu.requests')}</Button>
+            <Button icon={<PlayCircleOutlined />} onClick={() => navigate(`/instances/${instanceId}/request_replay`)}>
+              {t('trace.go_to_replay')}
             </Button>
-          </Dropdown>
-        </Space>
-      </div>
+            <Dropdown menu={{
+              items: [
+                { key: 'json', label: 'JSON', icon: <DownloadOutlined />, onClick: () => handleExport('json') },
+                { key: 'csv', label: 'CSV', icon: <DownloadOutlined />, onClick: () => handleExport('csv') },
+              ],
+            }}
+            >
+              <Button icon={<DownloadOutlined />}>{t('trace.export')}</Button>
+            </Dropdown>
+          </Space>
+        )}
+      />
 
       {/* Statistics Cards */}
       <Row gutter={16} style={{ marginBottom: 24 }}>

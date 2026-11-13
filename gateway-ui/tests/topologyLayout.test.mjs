@@ -1,15 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as echarts from 'echarts';
-import { buildChartOption, filterTopology, getTopologyChartHeight, isSameTopologyContent } from '../src/features/topology/chartOption.ts';
+import {
+  AGGREGATE_CLIENT_ID, AGGREGATE_ROUTE_ID, buildChartOption, filterTopology,
+  getTopologyChartHeight, getTopologyDisplayGraph, isSameTopologyContent,
+} from '../src/features/topology/chartOption.ts';
 
 const filters = { showDisabledRoutes: true, showOnlyActiveRoutes: false, searchKeyword: '', selectedNodeId: null };
-function fixture(clients = 18) {
+function fixture(clients = 18, routeCount = 8) {
   const nodes = [
     ...Array.from({ length: clients }, (_, i) => ({ id: `c${i}`, name: `47.108.150.${i}`, type: 'client' })),
     { id: 'g', name: 'gateway', type: 'gateway' },
-    ...Array.from({ length: 8 }, (_, i) => ({ id: `r${i}`, name: `route-${i}`, type: 'route', enabled: i !== 7, metrics: { requestCount: i } })),
-    ...Array.from({ length: 8 }, (_, i) => ({ id: `s${i}`, name: `service-${i}`, type: 'service' })),
+    ...Array.from({ length: routeCount }, (_, i) => ({ id: `r${i}`, name: `route-${i}`, type: 'route', enabled: i !== 7, metrics: { requestCount: i } })),
+    ...Array.from({ length: routeCount }, (_, i) => ({ id: `s${i}`, name: `service-${i}`, type: 'service' })),
   ];
   return { instanceId: 'g', generatedAt: 0, timeRangeMinutes: 60, nodes, edges: [
     ...nodes.filter(n => n.type === 'client').map(n => ({ source: n.id, target: 'g', type: 'client-gateway' })),
@@ -88,4 +91,26 @@ test('topology polling detects every rendered metrics, node and edge change', ()
     ...data,
     edges: data.edges.map((edge, index) => index === 0 ? { ...edge, metrics: { requestCount: 1 } } : edge),
   }), false);
+});
+
+test('overview aggregation bounds dense columns without losing traffic or focus', () => {
+  const data = fixture(100, 24);
+  const display = getTopologyDisplayGraph(data, { ...filters, aggregate: true });
+  assert.equal(display.nodes.filter(n => n.type === 'client').length, 8);
+  assert.equal(display.nodes.filter(n => n.type === 'route').length, 12);
+  assert.ok(display.nodes.some(n => n.id === AGGREGATE_CLIENT_ID));
+  assert.ok(display.nodes.some(n => n.id === AGGREGATE_ROUTE_ID));
+  assert.ok(getTopologyChartHeight(display) < getTopologyChartHeight(data));
+
+  const visibleIds = new Set(display.nodes.map(n => n.id));
+  assert.ok(display.edges.every(e => visibleIds.has(e.source) && visibleIds.has(e.target)));
+  assert.equal(buildChartOption(data, { ...filters, aggregate: true }).series[0].data.length, display.nodes.length);
+  const focused = getTopologyDisplayGraph(data, { ...filters, aggregate: true, selectedNodeId: AGGREGATE_CLIENT_ID });
+  assert.ok(focused.nodes.some(n => n.id === AGGREGATE_CLIENT_ID));
+
+  const requestsByType = (graph, type) => graph.nodes
+    .filter(n => n.type === type)
+    .reduce((sum, n) => sum + (n.metrics?.requestCount || 0), 0);
+  assert.equal(requestsByType(display, 'client'), requestsByType(data, 'client'));
+  assert.equal(requestsByType(display, 'route'), requestsByType(data, 'route'));
 });

@@ -22,9 +22,10 @@ import type { ReplayableRequest, ReplayOptions, ReplayResult } from '../../types
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
 import EditRequestModal from './components/EditRequestModal';
 import ReplayResultModal from './components/ReplayResultModal';
+import ConsolePageHeader from '../instance-detail/ConsolePageHeader';
 import './replay.css';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { RangePicker } = DatePicker;
 
 const TIME_RANGE_OPTIONS = [
@@ -257,42 +258,42 @@ const RequestReplayPage: React.FC = () => {
 
   return (
     <div className="request-replay-page console-workspace-page console-resource-page">
-      <div className="replay-header console-page-header">
-        <Title level={4} style={{ margin: 0 }}>
-          <PlayCircleOutlined style={{ marginRight: 8 }} />
-          {t('replay.title')}
-        </Title>
-        <Space>
-          <Segmented
-            options={TIME_RANGE_OPTIONS}
-            value={customTimeRange ? 'custom' : timeRange}
-            onChange={(val) => handleTimeRangeChange(val as number | string)}
-          />
-          {customTimeRange && (
-            <RangePicker
-              showTime
-              value={customTimeRange}
-              onChange={handleCustomTimeRangeChange}
-              format="YYYY-MM-DD HH:mm"
-              style={{ width: 280 }}
+      <ConsolePageHeader
+        icon={<PlayCircleOutlined />}
+        eyebrow={t('replay.eyebrow')}
+        title={t('replay.title')}
+        description={t('replay.subtitle')}
+        actions={(
+          <Space>
+            <Segmented
+              options={TIME_RANGE_OPTIONS}
+              value={customTimeRange ? 'custom' : timeRange}
+              onChange={(val) => handleTimeRangeChange(val as number | string)}
             />
-          )}
-          <Button icon={<PlayCircleOutlined />} onClick={loadTraces} loading={loading}>
-            {t('common.refresh')}
-          </Button>
-          <Popconfirm
-            title={t('replay.clear_confirm')}
-            description={t('replay.clear_confirm_desc')}
-            onConfirm={handleClearTraces}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-          >
-            <Button danger icon={<DeleteOutlined />}>
-              {t('replay.clear_all')}
+            {customTimeRange && (
+              <RangePicker
+                showTime
+                value={customTimeRange}
+                onChange={handleCustomTimeRangeChange}
+                format="YYYY-MM-DD HH:mm"
+                style={{ width: 280 }}
+              />
+            )}
+            <Button type="primary" icon={<PlayCircleOutlined />} onClick={loadTraces} loading={loading}>
+              {t('common.refresh')}
             </Button>
-          </Popconfirm>
-        </Space>
-      </div>
+            <Popconfirm
+              title={t('replay.clear_confirm')}
+              description={t('replay.clear_confirm_desc')}
+              onConfirm={handleClearTraces}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
+            >
+              <Button danger icon={<DeleteOutlined />}>{t('replay.clear_all')}</Button>
+            </Popconfirm>
+          </Space>
+        )}
+      />
 
       <Card title={t('replay.recent_traces')}>
         <Table scroll={{ x: 'max-content' }}

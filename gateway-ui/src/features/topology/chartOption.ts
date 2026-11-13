@@ -5,7 +5,7 @@
  */
 import type * as echarts from 'echarts';
 import type { TFunction } from 'i18next';
-import type { TopologyEdge, TopologyGraph, TopologyNode } from '../../types/topology';
+import type { TopologyEdge, TopologyGraph, TopologyMetricsRecord, TopologyNode } from '../../types/topology';
 import { chartAxis, palette, withAlpha } from '../../styles/palette.ts';
 
 export interface ChartFilterOptions {
@@ -13,6 +13,7 @@ export interface ChartFilterOptions {
   showOnlyActiveRoutes: boolean;
   searchKeyword: string;
   selectedNodeId: string | null;
+  aggregate?: boolean;
 }
 
 /* ------------------------------ Node styling ------------------------------ */
@@ -74,6 +75,19 @@ function getNodeItemStyle(node: TopologyNode, isSelected: boolean): Record<strin
     };
   }
 
+  if (node.id.startsWith('aggregate:')) {
+    return {
+      color: palette.accent,
+      borderColor: palette.accentLight,
+      borderWidth: 2,
+      borderType: 'dashed',
+      shadowBlur: 18,
+      shadowColor: withAlpha(palette.accent, 0.45),
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+    };
+  }
+
   switch (node.type) {
     case 'client':
       return {
@@ -128,7 +142,9 @@ function getNodeLabel(node: TopologyNode): Record<string, unknown> {
 
   switch (node.type) {
     case 'client': {
-      const clientName = node.name.length > 10 ? `${node.name.substring(0, 10)}..` : node.name;
+      const clientName = node.id === AGGREGATE_CLIENT_ID
+        ? node.name
+        : (node.name.length > 10 ? `${node.name.substring(0, 10)}..` : node.name);
       const reqCount = node.metrics?.requestCount || 0;
       const avgLat = node.metrics?.avgLatency?.toFixed(1) || '-';
       return {
@@ -144,7 +160,9 @@ function getNodeLabel(node: TopologyNode): Record<string, unknown> {
       };
     }
     case 'route': {
-      const routeName = node.name.length > 12 ? `${node.name.substring(0, 12)}..` : node.name;
+      const routeName = node.id === AGGREGATE_ROUTE_ID
+        ? node.name
+        : (node.name.length > 12 ? `${node.name.substring(0, 12)}..` : node.name);
       return {
         ...baseLabel,
         position: 'bottom',
@@ -410,7 +428,7 @@ export function filterTopology(
   }
 
   // Focus filter: only related nodes (gateway always kept)
-  if (selectedNodeId) {
+  if (selectedNodeId && !selectedNodeId.startsWith('aggregate:')) {
     const relatedNodeIds = getRelatedNodes(selectedNodeId);
     filteredNodes = filteredNodes.filter((n) => relatedNodeIds.has(n.id));
   }
@@ -421,6 +439,102 @@ export function filterTopology(
   const visibleIds = new Set(filteredNodes.map((n) => n.id));
   filteredEdges = filteredEdges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
   return { ...data, nodes: filteredNodes, edges: filteredEdges };
+}
+
+const OVERVIEW_CLIENT_LIMIT = 8;
+const OVERVIEW_ROUTE_LIMIT = 12;
+export const AGGREGATE_CLIENT_ID = 'aggregate:clients';
+export const AGGREGATE_ROUTE_ID = 'aggregate:routes';
+
+function aggregateMetrics(items: Array<{ metrics?: TopologyMetricsRecord }>): TopologyMetricsRecord | undefined {
+  if (items.every((item) => !item.metrics)) return undefined;
+  const requestCount = items.reduce((sum, item) => sum + (item.metrics?.requestCount || 0), 0);
+  const totalWeight = items.reduce((sum, item) => sum + (item.metrics?.requestCount || 1), 0);
+  const weightedAverage = (key: 'avgLatency' | 'errorRate') => items.reduce(
+    (sum, item) => sum + (item.metrics?.[key] || 0) * (item.metrics?.requestCount || 1), 0,
+  ) / totalWeight;
+  return {
+    requestCount,
+    avgLatency: weightedAverage('avgLatency'),
+    errorRate: weightedAverage('errorRate'),
+  };
+}
+
+function byTrafficThenId(a: TopologyNode, b: TopologyNode): number {
+  return (b.metrics?.requestCount || 0) - (a.metrics?.requestCount || 0)
+    || a.id.localeCompare(b.id);
+}
+
+export function aggregateTopology(data: TopologyGraph, t?: TFunction): TopologyGraph {
+  const clients = data.nodes.filter((node) => node.type === 'client');
+  const routes = data.nodes.filter((node) => node.type === 'route');
+  if (clients.length <= OVERVIEW_CLIENT_LIMIT && routes.length <= OVERVIEW_ROUTE_LIMIT) return data;
+
+  const keptClients = new Set(
+    (clients.length > OVERVIEW_CLIENT_LIMIT ? [...clients].sort(byTrafficThenId).slice(0, OVERVIEW_CLIENT_LIMIT - 1) : clients)
+      .map((node) => node.id),
+  );
+  const keptRoutes = new Set(
+    (routes.length > OVERVIEW_ROUTE_LIMIT ? [...routes].sort(byTrafficThenId).slice(0, OVERVIEW_ROUTE_LIMIT - 1) : routes)
+      .map((node) => node.id),
+  );
+  const groupedClients = clients.filter((node) => !keptClients.has(node.id));
+  const groupedRoutes = routes.filter((node) => !keptRoutes.has(node.id));
+  const groupForNode = new Map<string, string>();
+  groupedClients.forEach((node) => groupForNode.set(node.id, AGGREGATE_CLIENT_ID));
+  groupedRoutes.forEach((node) => groupForNode.set(node.id, AGGREGATE_ROUTE_ID));
+
+  const groups: TopologyNode[] = [];
+  if (groupedClients.length > 0) {
+    groups.push({
+      id: AGGREGATE_CLIENT_ID,
+      type: 'client',
+      name: t?.('topology.aggregate_clients', { count: groupedClients.length })
+        ?? `${groupedClients.length} more clients`,
+      metrics: aggregateMetrics(groupedClients),
+    });
+  }
+  if (groupedRoutes.length > 0) {
+    groups.push({
+      id: AGGREGATE_ROUTE_ID,
+      type: 'route',
+      name: t?.('topology.aggregate_routes', { count: groupedRoutes.length })
+        ?? `${groupedRoutes.length} more routes`,
+      enabled: true,
+      metrics: aggregateMetrics(groupedRoutes),
+    });
+  }
+
+  const edges = new Map<string, TopologyEdge>();
+  data.edges.forEach((edge) => {
+    const source = groupForNode.get(edge.source) ?? edge.source;
+    const target = groupForNode.get(edge.target) ?? edge.target;
+    const grouped = source !== edge.source || target !== edge.target;
+    const mapped: TopologyEdge = {
+      ...edge,
+      source,
+      target,
+      routeId: grouped ? undefined : edge.routeId,
+    };
+    const key = `${source}|${target}|${edge.type}`;
+    const existing = edges.get(key);
+    edges.set(key, existing ? { ...mapped, metrics: aggregateMetrics([existing, mapped]) } : mapped);
+  });
+
+  return {
+    ...data,
+    nodes: [...data.nodes.filter((node) => !groupForNode.has(node.id)), ...groups],
+    edges: [...edges.values()],
+  };
+}
+
+export function getTopologyDisplayGraph(
+  data: TopologyGraph,
+  filters: ChartFilterOptions,
+  t?: TFunction,
+): TopologyGraph {
+  const filtered = filterTopology(data, filters);
+  return filters.aggregate ? aggregateTopology(filtered, t) : filtered;
 }
 
 export function isSameTopologyContent(previous: TopologyGraph, next: TopologyGraph): boolean {
@@ -452,7 +566,7 @@ export function buildChartOption(
 ): echarts.EChartsOption | null {
   if (!data || (data.nodes?.length || 0) === 0) return null;
   const { selectedNodeId } = filters;
-  const visible = filterTopology(data, filters);
+  const visible = getTopologyDisplayGraph(data, filters, t);
   const filteredNodes = visible.nodes;
   const filteredEdges = visible.edges;
   const gatewayId = data.nodes.find((n) => n.type === 'gateway')?.id;

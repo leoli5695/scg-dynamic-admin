@@ -32,6 +32,7 @@ import './instance-detail.css';
 import './console-ui.css';
 import './operations-ui.css';
 import './instance-navigation.css';
+import './advanced-diagnostics.css';
 
 const { Title } = Typography;
 
@@ -320,7 +321,7 @@ const InstanceDetailLayout: React.FC = () => {
         </nav>
 
         {/* Tab content via router Outlet */}
-        <div className="instance-detail-content">
+        <div className={`instance-detail-content${activeGroup?.key === 'diagnostics' ? ' diagnostics-surface' : ''}`}>
           <React.Suspense fallback={(
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
               <Spin size="large" />

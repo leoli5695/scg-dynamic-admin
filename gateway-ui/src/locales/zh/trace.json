@@ -1,6 +1,8 @@
 {
   "trace.instanceMismatch": "该追踪记录不属于当前实例，无法打开。",
   "trace.title": "请求追踪",
+  "trace.eyebrow": "REQUEST EVIDENCE",
+  "trace.subtitle": "把错误、慢请求与完整调用证据放在同一条排障路径上。",
   "trace.total": "追踪总数",
   "trace.errors_today": "今日错误",
   "trace.errors_last_hour": "近1小时错误",

@@ -1,5 +1,7 @@
 {
   "filterChain.title": "Filter链",
+  "filterChain.eyebrow": "FILTER OBSERVABILITY",
+  "filterChain.subtitle": "沿请求执行链定位耗时、失败与性能拐点，让每一跳都有据可查。",
   "filterChain.select_instance": "请选择一个实例",
   "filterChain.search_trace": "搜索 Trace ID...",
   "filterChain.filter_name": "过滤器",
