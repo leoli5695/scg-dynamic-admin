@@ -98,6 +98,7 @@
   "tokenUsage.chart.prompt": "Prompt tokens",
   "tokenUsage.chart.completion": "Completion tokens",
   "tokenUsage.chart.total": "Recorded tokens",
+  "tokenUsage.chart.centerTotal": "Total",
   "tokenUsage.table.title": "Metering events",
   "tokenUsage.table.time": "Time",
   "tokenUsage.table.tenant": "Tenant",

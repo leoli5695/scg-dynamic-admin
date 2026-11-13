@@ -1,5 +1,8 @@
 .token-usage-page .token-filter-card {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+}
+.token-usage-page .token-pending-alert {
+  margin-bottom: 16px;
 }
 .token-usage-page .metric-unit {
   margin-left: 5px;
@@ -7,20 +10,39 @@
   font-size: 12px;
   font-weight: 400;
 }
+
+/* Financial-scope note: one quiet line instead of a full alert bar. */
+.token-usage-page .token-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 2px 18px;
+  color: var(--text-caption);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.token-usage-page .token-note .anticon {
+  margin-top: 3px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 .token-filters-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  gap: 14px 16px;
 }
 .token-filter-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 .token-filter-field > span {
-  color: var(--text-tertiary);
-  font-size: 11px;
+  color: var(--text-caption);
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
 }
 .token-filter-wide {
   grid-column: span 2;
@@ -32,7 +54,7 @@
   width: 100% !important;
   min-width: 0;
   min-height: 36px;
-  border-radius: 8px;
+  background-color: rgba(9, 16, 30, 0.55);
 }
 .token-usage-page .token-filter-field .ant-input {
   font-size: 12px;
@@ -51,12 +73,43 @@
 }
 .token-usage-page .ant-table-thead > tr > th {
   font-size: 11px;
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 .token-usage-page .ant-table-tbody > tr > td {
-  font-size: 11px;
+  font-size: 11.5px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+.token-usage-page .ant-table-tbody > tr > td.token-col-time {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: -0.2px;
+  color: var(--text-tertiary);
+}
+.token-usage-page .ant-table-tbody > tr > td.token-col-prompt {
+  color: #9fc0ff;
+}
+.token-usage-page .ant-table-tbody > tr > td.token-col-completion {
+  color: #c3b0ff;
+}
+.token-usage-page .ant-table-tbody > tr > td.token-col-total {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 .token-usage-page .ant-card .ant-card-body {
   min-width: 0;
+}
+
+/* Metric cards: the number leads, the trend sits behind it. */
+.token-usage-page .management-metric-value {
+  font-size: 30px;
+  letter-spacing: -0.5px;
+}
+@media (max-width: 768px) {
+  .token-usage-page .management-metric-value {
+    font-size: 24px;
+  }
 }
 @media (max-width: 1000px) {
   .token-filters-grid {

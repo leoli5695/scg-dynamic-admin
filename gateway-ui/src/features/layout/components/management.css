@@ -85,11 +85,35 @@
 }
 .management-metric {
   --metric-color: var(--primary-light);
+  position: relative;
+  overflow: hidden;
   min-width: 0;
   padding: 18px 20px;
   background: var(--bg-card);
   border: 1px solid #809ac329;
   border-radius: 13px;
+}
+.management-metric.has-spark .management-metric-value {
+  max-width: 62%;
+}
+.management-metric-spark {
+  position: absolute;
+  top: 46px;
+  right: 16px;
+  width: 38%;
+  height: 36px;
+  pointer-events: none;
+}
+.management-metric-accent {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  height: 2px;
+  pointer-events: none;
+}
+.management-metric-accent > i {
+  display: block;
+  height: 100%;
 }
 .metric-green {
   --metric-color: var(--success-color);
@@ -256,6 +280,13 @@
   }
   .management-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Narrow cards cannot host a number and a trend side by side. */
+  .management-metric.has-spark .management-metric-value {
+    max-width: none;
+  }
+  .management-metric-spark {
+    display: none;
   }
   .management-section-heading {
     align-items: stretch;

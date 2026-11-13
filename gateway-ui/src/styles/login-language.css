@@ -118,6 +118,25 @@
   box-shadow: 0 10px 30px -18px rgba(3, 7, 18, 0.8) !important;
 }
 
+/* The title yields to the actions instead of wrapping out of the fixed header. */
+#root .main-header .header-left {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+#root .main-header .header-title {
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#root .main-header .console-header-actions {
+  flex-shrink: 0;
+}
+
 /* The instance console owns its header; give it the same glass chrome. */
 #root .instance-detail-page .instance-detail-header {
   background: rgba(11, 18, 34, 0.86) !important;

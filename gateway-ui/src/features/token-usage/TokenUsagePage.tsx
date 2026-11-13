@@ -42,13 +42,16 @@ import {
   ApiOutlined,
   BarChartOutlined,
   ClockCircleOutlined,
+  InfoCircleOutlined,
   ReloadOutlined,
   TeamOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { ManagementMetric, ManagementPageHeader } from '../layout/components/ManagementPage';
-import { chartAxis, chartColors } from '../../styles/palette';
-import { chartTooltip } from '../../styles/chartTheme';
+import {
+  chartAxis, chartColors, palette, withAlpha,
+} from '../../styles/palette';
+import { chartLegend, chartTooltip } from '../../styles/chartTheme';
 import './token-usage.css';
 
 const { RangePicker } = DatePicker;
@@ -56,6 +59,32 @@ const { RangePicker } = DatePicker;
 const PALETTE = chartColors;
 const AXIS_TEXT = chartAxis.label;
 const SPLIT_LINE = chartAxis.grid;
+
+/** Axis labels stay compact: 12.4k / 3.1M instead of seven-digit rows. */
+const compact = (value: number): string => {
+  if (value >= 1e9) return `${(value / 1e9).toFixed(value >= 1e10 ? 0 : 1)}B`;
+  if (value >= 1e6) return `${(value / 1e6).toFixed(value >= 1e7 ? 0 : 1)}M`;
+  if (value >= 1e3) return `${(value / 1e3).toFixed(value >= 1e4 ? 0 : 1)}k`;
+  return String(value);
+};
+
+const verticalFade = (from: string, to: string) => ({
+  type: 'linear' as const,
+  x: 0,
+  y: 0,
+  x2: 0,
+  y2: 1,
+  colorStops: [{ offset: 0, color: from }, { offset: 1, color: to }],
+});
+
+const horizontalFade = (from: string, to: string) => ({
+  type: 'linear' as const,
+  x: 0,
+  y: 0,
+  x2: 1,
+  y2: 0,
+  colorStops: [{ offset: 0, color: from }, { offset: 1, color: to }],
+});
 
 // Stable identity for "no data yet". An inline `?? []` below produced a fresh array on every render,
 // which made the timeseries useMemo dependency change every time and defeated the memo entirely.
@@ -65,50 +94,77 @@ const baseOption = () => ({
   animation: false,
   backgroundColor: 'transparent',
   color: PALETTE,
-  textStyle: { color: AXIS_TEXT },
+  textStyle: { color: AXIS_TEXT, fontSize: 11 },
   tooltip: {
     trigger: 'axis',
     ...chartTooltip,
+    axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(121, 157, 249, 0.06)' } },
   },
   grid: { left: 48, right: 24, top: 32, bottom: 28 },
 });
 
 const CHART_OPTIONS = { renderer: 'svg' as const };
 
-const barOption = (rows: { key: string; totalTokens: number }[], horizontal: boolean) => ({
-  ...baseOption(),
-  xAxis: horizontal
-    ? {
-        type: 'value',
-        splitLine: { lineStyle: { color: SPLIT_LINE } },
-        axisLabel: { color: AXIS_TEXT },
-      }
-    : {
-        type: 'category',
-        data: rows.map((r) => r.key),
-        axisLine: { lineStyle: { color: SPLIT_LINE } },
-        axisLabel: { color: AXIS_TEXT, interval: 0, rotate: rows.length > 5 ? 24 : 0 },
-      },
-  yAxis: horizontal
-    ? {
-        type: 'category',
-        data: rows.map((r) => r.key).reverse(),
-        axisLabel: { color: AXIS_TEXT },
-      }
-    : {
-        type: 'value',
-        splitLine: { lineStyle: { color: SPLIT_LINE } },
-        axisLabel: { color: AXIS_TEXT },
-      },
-  series: [
-    {
-      type: 'bar',
-      data: horizontal ? rows.map((r) => r.totalTokens).reverse() : rows.map((r) => r.totalTokens),
-      itemStyle: { borderRadius: horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0] },
+const barOption = (rows: { key: string; totalTokens: number }[], horizontal: boolean) => {
+  const max = Math.max(...rows.map((r) => r.totalTokens), 1);
+  const gradient = horizontal
+    ? horizontalFade(withAlpha('#6f9dff', 0.92), withAlpha('#a78bfa', 0.68))
+    : verticalFade(withAlpha('#6f9dff', 0.92), withAlpha('#a78bfa', 0.55));
+  return {
+    ...baseOption(),
+    tooltip: {
+      trigger: 'axis',
+      ...chartTooltip,
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(121, 157, 249, 0.06)' } },
     },
-  ],
-  grid: { left: horizontal ? 120 : 48, right: 24, top: 16, bottom: 28 },
-});
+    xAxis: horizontal
+      ? { type: 'value', show: false, max: max * 1.15 }
+      : {
+          type: 'category',
+          data: rows.map((r) => r.key),
+          axisLine: { lineStyle: { color: 'rgba(145, 169, 222, 0.16)' } },
+          axisTick: { show: false },
+          axisLabel: { color: AXIS_TEXT, fontSize: 10, interval: 0, rotate: rows.length > 5 ? 24 : 0 },
+        },
+    yAxis: horizontal
+      ? {
+          type: 'category',
+          data: rows.map((r) => r.key).reverse(),
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { color: AXIS_TEXT, fontSize: 10, width: 96, overflow: 'truncate' },
+        }
+      : {
+          type: 'value',
+          splitLine: { lineStyle: { color: 'rgba(145, 169, 222, 0.075)', type: 'dashed' } },
+          axisLabel: { color: AXIS_TEXT, fontSize: 10, formatter: compact },
+        },
+    series: [
+      {
+        type: 'bar',
+        barWidth: horizontal ? 10 : '34%',
+        showBackground: horizontal,
+        backgroundStyle: { color: 'rgba(145, 169, 222, 0.06)', borderRadius: 6 },
+        data: (horizontal ? [...rows].reverse() : rows).map((r) => ({
+          value: r.totalTokens,
+          itemStyle: { color: gradient, borderRadius: horizontal ? 6 : [4, 4, 0, 0] },
+        })),
+        label: horizontal
+          ? {
+              show: true,
+              position: 'right',
+              color: palette.textTertiary,
+              fontSize: 10,
+              formatter: (params: { value: number }) => compact(params.value),
+            }
+          : undefined,
+      },
+    ],
+    grid: horizontal
+      ? { left: 110, right: 40, top: 12, bottom: 10 }
+      : { left: 46, right: 16, top: 18, bottom: 30 },
+  };
+};
 
 export interface TokenUsagePageProps {
   scopeInstanceId?: string;
@@ -185,63 +241,132 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
   const series = seriesReq.data?.series ?? EMPTY_SERIES;
   const hasData = (overview?.requests ?? 0) > 0;
 
-  const timeseriesOption = useMemo(
-    () => ({
+  const timeseriesOption = useMemo(() => {
+    const firstDay = series[0]?.bucket.slice(0, 10);
+    const singleDay = Boolean(firstDay) && series.every((s) => s.bucket.slice(0, 10) === firstDay);
+    const bucketLabel = (value: string): string => {
+      const time = value.match(/^(\d{4})-(\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+      if (!time) return value;
+      return singleDay ? time[3] : `${time[2]} ${time[3]}`;
+    };
+    return {
       ...baseOption(),
-      legend: { textStyle: { color: AXIS_TEXT }, top: 0 },
+      grid: { left: 46, right: 18, top: 44, bottom: 26 },
+      legend: {
+        ...chartLegend,
+        top: 2,
+        left: 0,
+        itemGap: 18,
+        textStyle: { color: AXIS_TEXT, fontSize: 11 },
+      },
       xAxis: {
         type: 'category',
         data: series.map((s) => s.bucket),
-        axisLine: { lineStyle: { color: SPLIT_LINE } },
-        axisLabel: { color: AXIS_TEXT },
+        axisLine: { lineStyle: { color: 'rgba(145, 169, 222, 0.16)' } },
+        axisTick: { show: false },
+        axisLabel: {
+          color: AXIS_TEXT, fontSize: 10, hideOverlap: true, margin: 12, formatter: bucketLabel,
+        },
       },
       yAxis: {
         type: 'value',
-        splitLine: { lineStyle: { color: SPLIT_LINE } },
-        axisLabel: { color: AXIS_TEXT },
+        splitLine: { lineStyle: { color: 'rgba(145, 169, 222, 0.075)', type: 'dashed' } },
+        axisLabel: { color: AXIS_TEXT, fontSize: 10, formatter: compact },
       },
       series: [
         {
           name: t('tokenUsage.chart.prompt'),
           type: 'bar',
           stack: 'tokens',
+          barWidth: '46%',
           data: series.map((s) => s.promptTokens),
+          itemStyle: {
+            color: verticalFade(withAlpha('#5b8cf5', 0.95), withAlpha('#5b8cf5', 0.28)),
+          },
+          emphasis: { itemStyle: { color: '#7ba6ff' } },
         },
         {
           name: t('tokenUsage.chart.completion'),
           type: 'bar',
           stack: 'tokens',
+          barWidth: '46%',
           data: series.map((s) => s.completionTokens),
+          itemStyle: {
+            color: verticalFade(withAlpha('#a78bfa', 0.95), withAlpha('#a78bfa', 0.24)),
+            borderRadius: [3, 3, 0, 0],
+          },
+          emphasis: { itemStyle: { color: '#bfa8ff' } },
         },
         {
           name: t('tokenUsage.chart.total'),
           type: 'line',
-          smooth: true,
+          smooth: 0.35,
+          symbol: 'none',
           data: series.map((s) => s.totalTokens),
+          lineStyle: {
+            width: 2,
+            color: '#a7c5ff',
+            shadowBlur: 10,
+            shadowColor: 'rgba(126, 166, 255, 0.45)',
+          },
+          z: 3,
         },
       ],
-    }),
-    [series, t],
-  );
+    };
+  }, [series, t]);
 
-  const pieOption = useMemo(
-    () => ({
+  const pieOption = useMemo(() => {
+    const rows = tenantReq.data?.rows ?? [];
+    const total = rows.reduce((sum, row) => sum + row.totalTokens, 0);
+    return {
       ...baseOption(),
       tooltip: {
         trigger: 'item',
         ...chartTooltip,
       },
+      title: {
+        text: rows.length ? compact(total) : '',
+        subtext: rows.length ? t('tokenUsage.chart.centerTotal') : '',
+        left: 'center',
+        top: '34%',
+        textAlign: 'center',
+        itemGap: 3,
+        textStyle: { color: palette.textPrimary, fontSize: 22, fontWeight: 600 },
+        subtextStyle: { color: palette.textCaption, fontSize: 10 },
+      },
+      legend: {
+        ...chartLegend,
+        bottom: 0,
+        left: 'center',
+        type: 'scroll',
+        icon: 'circle',
+        itemWidth: 8,
+        itemHeight: 8,
+        itemGap: 12,
+        textStyle: { color: AXIS_TEXT, fontSize: 10 },
+      },
       series: [
         {
           type: 'pie',
-          radius: ['42%', '70%'],
-          label: { color: AXIS_TEXT, formatter: '{b}: {d}%' },
-          data: (tenantReq.data?.rows ?? []).map((r) => ({ name: r.key, value: r.totalTokens })),
+          radius: ['54%', '74%'],
+          center: ['50%', '46%'],
+          avoidLabelOverlap: true,
+          itemStyle: { borderColor: palette.bgCard, borderWidth: 2, borderRadius: 4 },
+          label: { show: false },
+          labelLine: { show: false },
+          emphasis: {
+            scaleSize: 4,
+            itemStyle: { shadowBlur: 18, shadowColor: 'rgba(3, 7, 18, 0.6)' },
+          },
+          data: rows.map((row, index) => ({
+            name: row.key,
+            value: row.totalTokens,
+            itemStyle: { color: PALETTE[index % PALETTE.length] },
+          })),
         },
       ],
-    }),
-    [tenantReq.data],
-  );
+    };
+  }, [tenantReq.data, t]);
 
   const routeBarOption = useMemo(() => barOption(routeReq.data?.rows ?? [], true), [routeReq.data]);
   const modelBarOption = useMemo(
@@ -258,7 +383,8 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
     {
       title: t('tokenUsage.table.time'),
       dataIndex: 'requestTime',
-      width: 170,
+      width: 150,
+      className: 'token-col-time',
       render: (v: string) => (v ? v.replace('T', ' ').slice(0, 19) : '—'),
     },
     {
@@ -283,31 +409,40 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
     {
       title: t('tokenUsage.table.prompt'),
       dataIndex: 'promptTokens',
-      render: (_: unknown, record: TokenUsageEvent) =>
-        usageTokenValue(record, 'promptTokens'),
-      width: 80,
+      className: 'token-col-prompt',
+      render: (_: unknown, record: TokenUsageEvent) => {
+        const value = usageTokenValue(record, 'promptTokens');
+        return typeof value === 'number' ? value.toLocaleString() : value;
+      },
+      width: 76,
       align: 'right',
     },
     {
       title: t('tokenUsage.table.completion'),
       dataIndex: 'completionTokens',
-      render: (_: unknown, record: TokenUsageEvent) =>
-        usageTokenValue(record, 'completionTokens'),
-      width: 80,
+      className: 'token-col-completion',
+      render: (_: unknown, record: TokenUsageEvent) => {
+        const value = usageTokenValue(record, 'completionTokens');
+        return typeof value === 'number' ? value.toLocaleString() : value;
+      },
+      width: 76,
       align: 'right',
     },
     {
       title: t('tokenUsage.table.total'),
       dataIndex: 'totalTokens',
-      render: (_: unknown, record: TokenUsageEvent) =>
-        usageTokenValue(record, 'totalTokens'),
-      width: 80,
+      className: 'token-col-total',
+      render: (_: unknown, record: TokenUsageEvent) => {
+        const value = usageTokenValue(record, 'totalTokens');
+        return typeof value === 'number' ? value.toLocaleString() : value;
+      },
+      width: 76,
       align: 'right',
     },
     {
       title: t('tokenUsage.table.status'),
       key: 'status',
-      width: 160,
+      width: 150,
       render: (_: unknown, record: TokenUsageEvent) => (
         <Space size={4} wrap>
           <Tag color={isUsageUnresolved(record) ? 'gold' : undefined}>
@@ -326,7 +461,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
           {
             title: t('tokenUsage.table.instance'),
             dataIndex: 'instanceId',
-            width: 140,
+            width: 120,
             ellipsis: true,
             render: (v: string | null) => v ?? '—',
           },
@@ -335,7 +470,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
     {
       title: t('tokenUsage.details.action'),
       key: 'details',
-      width: 90,
+      width: 80,
       fixed: 'right',
       render: (_: unknown, record: TokenUsageEvent) => (
         <Button type="link" onClick={() => setReconciling(record)}>
@@ -351,22 +486,6 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
 
   return (
     <div className="token-usage-page management-page">
-      {((overview?.unknownUsageRequests ?? 0) > 0 ||
-        (overview?.failedSettlementRequests ?? 0) > 0) && (
-        <Alert
-          type="warning"
-          showIcon
-          title={t('tokenUsage.pendingWarning', {
-            unknown: overview?.unknownUsageRequests ?? 0,
-            failed: overview?.failedSettlementRequests ?? 0,
-          })}
-          action={
-            <Button size="small" onClick={() => setQuery({ unresolvedOnly: true })}>
-              {t('tokenUsage.viewUnresolved')}
-            </Button>
-          }
-        />
-      )}
       <ManagementPageHeader
         title={t('tokenUsage.title')}
         subtitle={t('tokenUsage.subtitle')}
@@ -385,12 +504,32 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
         }
       />
 
+      {((overview?.unknownUsageRequests ?? 0) > 0 ||
+        (overview?.failedSettlementRequests ?? 0) > 0) && (
+        <Alert
+          className="token-pending-alert"
+          type="warning"
+          showIcon
+          title={t('tokenUsage.pendingWarning', {
+            unknown: overview?.unknownUsageRequests ?? 0,
+            failed: overview?.failedSettlementRequests ?? 0,
+          })}
+          action={
+            <Button size="small" onClick={() => setQuery({ unresolvedOnly: true })}>
+              {t('tokenUsage.viewUnresolved')}
+            </Button>
+          }
+        />
+      )}
+
       <div className="management-metrics">
         <ManagementMetric
           title={t('tokenUsage.card.requests')}
           value={overview?.requests ?? '—'}
           icon={<ApiOutlined />}
           subtitle={t('tokenUsage.requests_hint')}
+          spark={series.map((s) => s.requests)}
+          sparkTone={palette.primaryLight}
         />
         <ManagementMetric
           title={t('tokenUsage.card.totalTokens')}
@@ -405,6 +544,24 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
                 })
               : t('tokenUsage.tokens_hint')
           }
+          spark={series.map((s) => s.totalTokens)}
+          sparkTone={palette.accentLight}
+          accentBar={overview && overview.totalTokens > 0 ? (
+            <span className="management-metric-accent" aria-hidden="true">
+              <i
+                style={{
+                  width: `${(overview.promptTokens / overview.totalTokens) * 100}%`,
+                  background: 'linear-gradient(90deg, #5b8cf5, #6f9dff)',
+                }}
+              />
+              <i
+                style={{
+                  width: `${(overview.completionTokens / overview.totalTokens) * 100}%`,
+                  background: 'linear-gradient(90deg, #a78bfa, #bfa8ff)',
+                }}
+              />
+            </span>
+          ) : undefined}
         />
         <ManagementMetric
           title={t('tokenUsage.card.avgLatency')}
@@ -434,7 +591,10 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
           }
         />
       </div>
-      <Alert type="info" showIcon title={t('tokenUsage.recordedTokensNote')} />
+      <p className="token-note">
+        <InfoCircleOutlined aria-hidden="true" />
+        <span>{t('tokenUsage.recordedTokensNote')}</span>
+      </p>
 
       <Card
         className="token-filter-card"
@@ -640,7 +800,7 @@ const TokenUsageView: React.FC<TokenUsagePageProps> = ({ scopeInstanceId }) => {
           ]}
         />
         <Table
-          scroll={{ x: scopeInstanceId === undefined ? 1200 : 1060 }}
+          scroll={{ x: scopeInstanceId === undefined ? 1120 : 1000 }}
           rowKey="id"
           size="small"
           loading={eventsReq.loading}

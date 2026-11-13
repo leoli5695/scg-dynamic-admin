@@ -98,6 +98,7 @@
   "tokenUsage.chart.prompt": "输入 Token",
   "tokenUsage.chart.completion": "输出 Token",
   "tokenUsage.chart.total": "已记录 Token",
+  "tokenUsage.chart.centerTotal": "合计",
   "tokenUsage.table.title": "计量明细",
   "tokenUsage.table.time": "时间",
   "tokenUsage.table.tenant": "租户",
