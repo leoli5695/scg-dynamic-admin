@@ -138,6 +138,7 @@ const PluginsPage: React.FC = () => {
         title: t('plugins.category'),
         dataIndex: 'category',
         key: 'category',
+        width: 150,
         render: (category: string) => (
           <span className="plugin-category">{(category || 'other').toUpperCase()}</span>
         ),

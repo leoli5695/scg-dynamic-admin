@@ -45,6 +45,7 @@
   color: var(--text-tertiary);
   font-size: 10px;
   letter-spacing: 0.8px;
+  white-space: nowrap;
 }
 .plugins-page .ant-table-tbody > tr > td.plugin-col-time {
   font-family: var(--font-mono);
