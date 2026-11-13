@@ -34,6 +34,19 @@ public class ServiceMiddlewareViewController {
     private final RocketMQConsoleClient rocketMQConsoleClient;
 
     /**
+     * 指标中文显示名映射。内容与原 getMetricDisplayName 内的局部 map 完全一致，
+     * 提取为静态 map 以便与英文映射做 key 集合一致性校验（单元测试）。
+     * Package-private for unit tests.
+     */
+    static final Map<String, String> METRIC_DISPLAY_NAME_MAP = buildMetricDisplayNameMap();
+
+    /**
+     * 指标英文显示名映射，key 集合与 METRIC_DISPLAY_NAME_MAP 完全一致。
+     * Package-private for unit tests.
+     */
+    static final Map<String, String> METRIC_DISPLAY_NAME_EN_MAP = buildMetricDisplayNameEnMap();
+
+    /**
      * 获取所有服务及其中间件信息
      * <p>
      * 直接从 service_middleware 表查询，按 service_name 分组
@@ -734,6 +747,7 @@ public class ServiceMiddlewareViewController {
             metricInfo.put("name", key);
             metricInfo.put("value", numericValue);
             metricInfo.put("displayName", getMetricDisplayName(key));
+            metricInfo.put("displayNameEn", getMetricDisplayNameEn(key));
             metricInfo.put("unit", getUnitForMetric(key));
             metricInfo.put("status", evaluateMetricStatus(key, value));
             metricInfo.put("category", categorizeMetric(key));
@@ -754,9 +768,21 @@ public class ServiceMiddlewareViewController {
     }
 
     /**
-     * 获取指标显示名称
+     * 获取指标显示名称（中文，保持原有行为不变）
      */
     private String getMetricDisplayName(String metricName) {
+        return METRIC_DISPLAY_NAME_MAP.getOrDefault(metricName, metricName);
+    }
+
+    /**
+     * 获取指标英文显示名称。查不到英文映射时回退为指标 key 本身
+     * （与中文方法的回退策略一致；key 本身是英文标识符，英文界面下可读）。
+     */
+    private String getMetricDisplayNameEn(String metricName) {
+        return METRIC_DISPLAY_NAME_EN_MAP.getOrDefault(metricName, metricName);
+    }
+
+    private static Map<String, String> buildMetricDisplayNameMap() {
         Map<String, String> nameMap = new LinkedHashMap<>();
 
         // Redis 指标名称
@@ -828,7 +854,82 @@ public class ServiceMiddlewareViewController {
         nameMap.put("maxMessageLag", "最大消息堆积");
         nameMap.put("maxLagConsumerGroup", "最大堆积消费组");
 
-        return nameMap.getOrDefault(metricName, metricName);
+        return Collections.unmodifiableMap(nameMap);
+    }
+
+    private static Map<String, String> buildMetricDisplayNameEnMap() {
+        Map<String, String> nameMap = new LinkedHashMap<>();
+
+        // Redis metrics
+        nameMap.put("redis_memory_used_bytes", "Memory Used");
+        nameMap.put("redis_memory_max_bytes", "Max Memory Limit");
+        nameMap.put("redis_connected_clients", "Connected Clients");
+        nameMap.put("redis_commands_processed_total", "Total Commands Processed");
+        nameMap.put("redis_keyspace_hits_total", "Keyspace Hits");
+        nameMap.put("redis_keyspace_misses_total", "Keyspace Misses");
+        nameMap.put("redis_keyspace_keys", "Total Keys");
+        nameMap.put("redis_instantaneous_ops_per_sec", "Instantaneous OPS");
+        nameMap.put("redis_hit_rate", "Cache Hit Rate");
+        nameMap.put("hit_rate", "Cache Hit Rate");  // prefix-less alias
+        nameMap.put("redis_blocked_clients", "Blocked Clients");
+        nameMap.put("redis_connected_slaves", "Connected Replicas");
+        nameMap.put("redis_expired_keys_total", "Total Expired Keys");
+        nameMap.put("redis_evicted_keys_total", "Total Evicted Keys");
+        nameMap.put("redis_total_net_input_bytes", "Network Input Bytes");
+        nameMap.put("redis_total_net_output_bytes", "Network Output Bytes");
+
+        // MySQL metrics
+        nameMap.put("mysql_global_status_threads_connected", "Current Connections");
+        nameMap.put("mysql_global_status_threads_running", "Running Threads");
+        nameMap.put("mysql_global_status_questions", "Total Queries");
+        nameMap.put("mysql_global_status_slow_queries", "Slow Queries");
+        nameMap.put("mysql_global_status_connections", "Total Connections");
+        nameMap.put("mysql_global_status_aborted_connections", "Aborted Connections");
+        nameMap.put("mysql_global_status_bytes_received", "Bytes Received");
+        nameMap.put("mysql_global_status_bytes_sent", "Bytes Sent");
+        nameMap.put("mysql_global_variables_max_connections", "Max Connections Limit");
+        nameMap.put("mysql_innodb_buffer_pool_pages_data", "Buffer Pool Data Pages");
+
+        // Elasticsearch metrics
+        nameMap.put("elasticsearch_cluster_health_status", "Cluster Health Status");
+        nameMap.put("elasticsearch_cluster_health_number_of_nodes", "Number of Nodes");
+        nameMap.put("elasticsearch_cluster_health_number_of_data_nodes", "Number of Data Nodes");
+        nameMap.put("elasticsearch_indices_indexing_index_total", "Total Indexing Operations");
+        nameMap.put("elasticsearch_indices_docs", "Document Count");
+        nameMap.put("elasticsearch_indices_store_size_bytes", "Store Size");
+        nameMap.put("elasticsearch_indices_search_query_time_seconds", "Search Query Time");
+        nameMap.put("elasticsearch_indices_search_query_total", "Total Search Queries");
+        nameMap.put("elasticsearch_jvm_memory_used_bytes", "JVM Memory Used");
+        nameMap.put("elasticsearch_jvm_memory_max_bytes", "JVM Max Memory");
+        nameMap.put("elasticsearch_process_cpu_percent", "CPU Usage");
+        nameMap.put("elasticsearch_thread_pool_active_count", "Active Threads");
+        nameMap.put("elasticsearch_transport_rx_size_bytes_total", "Transport RX Bytes");
+        nameMap.put("elasticsearch_transport_tx_size_bytes_total", "Transport TX Bytes");
+
+        // RocketMQ exporter metrics
+        nameMap.put("rocketmq_producer_tps", "Producer TPS");
+        nameMap.put("rocketmq_consumer_tps", "Consumer TPS");
+        nameMap.put("rocketmq_group_diff", "Message Lag");
+        nameMap.put("rocketmq_message_accumulation", "Total Message Accumulation");
+        nameMap.put("rocketmq_consumer_lag", "Message Lag");    // deprecated alias
+        nameMap.put("rocketmq_broker_total_messages", "Total Messages");
+        nameMap.put("rocketmq_broker_messages_in_today", "Messages In Today");
+        nameMap.put("rocketmq_broker_messages_out_today", "Messages Out Today");
+        nameMap.put("rocketmq_broker_topic_count", "Topic Count");
+        nameMap.put("rocketmq_broker_group_count", "Consumer Group Count");
+
+        // RocketMQ Console API metrics
+        nameMap.put("rocketmq_topic_count", "Topic Count");
+        nameMap.put("rocketmq_consumer_group_count", "Consumer Group Count");
+        nameMap.put("rocketmq_max_message_lag", "Max Message Lag");
+        nameMap.put("topicCount", "Topic Count");
+        nameMap.put("userTopicCount", "User Topic Count");
+        nameMap.put("consumerGroupCount", "Consumer Group Count");
+        nameMap.put("totalMessageLag", "Total Message Lag");
+        nameMap.put("maxMessageLag", "Max Message Lag");
+        nameMap.put("maxLagConsumerGroup", "Max Lag Consumer Group");
+
+        return Collections.unmodifiableMap(nameMap);
     }
 
     /**
