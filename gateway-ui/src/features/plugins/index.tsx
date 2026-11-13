@@ -8,13 +8,9 @@ import {
   Badge,
   Button,
   Card,
-  Col,
   Popconfirm,
-  Row,
   Space,
-  Statistic,
   Table,
-  Tag,
   Tooltip,
 } from 'antd';
 import { message } from '../../utils/antdStatic';
@@ -26,7 +22,6 @@ import {
   EyeOutlined,
   FileTextOutlined,
   PlayCircleOutlined,
-  RocketOutlined,
   StopOutlined,
   SyncOutlined,
   ThunderboltOutlined,
@@ -41,7 +36,9 @@ import { getCategoryColor, getCategoryIcon, getPluginDescription, getPluginStatu
 import UploadPluginModal from './components/UploadPluginModal';
 import PluginDetailDrawer from './components/PluginDetailDrawer';
 import DevGuideCard from './components/DevGuideCard';
-import { palette, statusTone, toneForLegacyColor } from '../../styles/palette';
+import { ManagementMetric, ManagementPageHeader } from '../layout/components/ManagementPage';
+import { statusTone, toneForLegacyColor, withAlpha } from '../../styles/palette';
+import './plugins.css';
 
 const PluginsPage: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -110,27 +107,37 @@ const PluginsPage: React.FC = () => {
         title: t('plugins.plugin_name'),
         dataIndex: 'pluginName',
         key: 'pluginName',
-        render: (name: string, record: Plugin) => (
-          <Tag
-            icon={getCategoryIcon(record.category)}
-            color={record.color ? statusTone[toneForLegacyColor(record.color)].solid : getCategoryColor(record.category)}
-          >
-            {name}
-          </Tag>
-        ),
+        render: (name: string, record: Plugin) => {
+          const color = record.color
+            ? statusTone[toneForLegacyColor(record.color)].color
+            : getCategoryColor(record.category);
+          return (
+            <span
+              className="plugin-name-chip"
+              style={{
+                color,
+                background: withAlpha(color, 0.12),
+                borderColor: withAlpha(color, 0.32),
+              }}
+            >
+              {getCategoryIcon(record.category)}
+              <span>{name}</span>
+            </span>
+          );
+        },
       },
       {
         title: t('plugins.version'),
         dataIndex: 'version',
         key: 'version',
-        render: (version: string) => <Tag>{version}</Tag>,
+        render: (version: string) => <span className="plugin-version">{version}</span>,
       },
       {
         title: t('plugins.category'),
         dataIndex: 'category',
         key: 'category',
         render: (category: string) => (
-          <Tag color={getCategoryColor(category)}>{(category || 'other').toUpperCase()}</Tag>
+          <span className="plugin-category">{(category || 'other').toUpperCase()}</span>
         ),
       },
       {
@@ -151,6 +158,7 @@ const PluginsPage: React.FC = () => {
         title: t('plugins.created'),
         dataIndex: 'createdAt',
         key: 'createdAt',
+        className: 'plugin-col-time',
         render: (date: string) => formatServerTime(date),
       },
       {
@@ -198,103 +206,78 @@ const PluginsPage: React.FC = () => {
 
   return (
     <div className="plugins-page console-resource-page">
-      <Card>
-        <Row gutter={[16, 16]}>
-          <Col span={24}>
-            <Row justify="space-between" align="middle">
-              <Col>
-                <h2 style={{ margin: 0 }}>
-                  <RocketOutlined style={{ marginRight: 8 }} />
-                  {t('plugins.title')}
-                </h2>
-              </Col>
-              <Col>
-                <Space>
-                  <Button
-                    type="primary"
-                    icon={<UploadOutlined />}
-                    onClick={() => setUploadOpen(true)}
-                  >
-                    {t('plugins.upload')}
-                  </Button>
-                  <Button icon={<SyncOutlined />} onClick={reload}>
-                    {t('plugins.refresh')}
-                  </Button>
-                </Space>
-              </Col>
-            </Row>
-          </Col>
+      <ManagementPageHeader
+        eyebrow={t('instance_nav.tools')}
+        title={t('plugins.title')}
+        subtitle={t('plugins.description')}
+        actions={(
+          <Space>
+            <Button
+              type="primary"
+              icon={<UploadOutlined />}
+              onClick={() => setUploadOpen(true)}
+            >
+              {t('plugins.upload')}
+            </Button>
+            <Button icon={<SyncOutlined />} onClick={reload} loading={pluginsRequest.loading}>
+              {t('plugins.refresh')}
+            </Button>
+          </Space>
+        )}
+      />
 
-          {/* Stats Row */}
-          <Col span={24}>
-            <Row gutter={16}>
-              <Col xs={12} sm={8} xl={4}>
-                <Statistic
-                  title={t('plugins.total_plugins')}
-                  value={stats.total}
-                  prefix={<AppstoreOutlined />}
-                />
-              </Col>
-              <Col xs={12} sm={8} xl={4}>
-                <Statistic
-                  title={t('plugins.enabled')}
-                  value={stats.enabled}
-                  styles={{ content: { color: '#3f8600' } }}
-                  prefix={<PlayCircleOutlined />}
-                />
-              </Col>
-              <Col xs={12} sm={8} xl={4}>
-                <Statistic
-                  title={t('plugins.disabled')}
-                  value={stats.disabled}
-                  styles={{ content: { color: palette.error } }}
-                  prefix={<StopOutlined />}
-                />
-              </Col>
-              <Col xs={12} sm={8} xl={4}>
-                <Statistic
-                  title={t('plugins.loaded')}
-                  value={stats.loaded}
-                  styles={{ content: { color: palette.primary } }}
-                  prefix={<ThunderboltOutlined />}
-                />
-              </Col>
-              <Col xs={12} sm={8} xl={4}>
-                <Statistic
-                  title={t('plugins.registered')}
-                  value={stats.registered}
-                  styles={{ content: { color: palette.success } }}
-                  prefix={<FileTextOutlined />}
-                />
-              </Col>
-              <Col xs={12} sm={8} xl={4}>
-                <Statistic
-                  title={t('plugins.active_rate')}
-                  value={stats.total ? Math.round((stats.registered / stats.total) * 100) : 0}
-                  suffix="%"
-                />
-              </Col>
-            </Row>
-          </Col>
+      <div className="management-metrics plugins-metrics">
+        <ManagementMetric
+          title={t('plugins.total_plugins')}
+          value={stats.total}
+          icon={<AppstoreOutlined />}
+          subtitle={t('plugins.card.total_hint', { count: stats.registered })}
+        />
+        <ManagementMetric
+          title={t('plugins.enabled')}
+          value={stats.enabled}
+          icon={<PlayCircleOutlined />}
+          tone="green"
+          subtitle={t('plugins.card.enabled_hint', { count: stats.disabled })}
+        />
+        <ManagementMetric
+          title={t('plugins.loaded')}
+          value={stats.loaded}
+          icon={<ThunderboltOutlined />}
+          tone="purple"
+          subtitle={t('plugins.card.loaded_hint')}
+        />
+        <ManagementMetric
+          title={t('plugins.active_rate')}
+          value={`${stats.total ? Math.round((stats.registered / stats.total) * 100) : 0}%`}
+          icon={<FileTextOutlined />}
+          tone="amber"
+          subtitle={t('plugins.card.active_hint')}
+          accentBar={(
+            <span className="management-metric-accent" aria-hidden="true">
+              <i
+                style={{
+                  width: `${stats.total ? Math.round((stats.registered / stats.total) * 100) : 0}%`,
+                  background: 'linear-gradient(90deg, #5b8cf5, #a78bfa)',
+                }}
+              />
+            </span>
+          )}
+        />
+      </div>
 
-          {/* Development guide + example template */}
-          <Col span={24}>
-            <DevGuideCard />
-          </Col>
-
-          {/* Table */}
-          <Col span={24}>
-            <Table
-              columns={columns}
-              dataSource={plugins}
-              rowKey="pluginId"
-              loading={pluginsRequest.loading}
-              pagination={{ defaultPageSize: 10 }}
-              scroll={{ x: 900 }}
-            />
-          </Col>
-        </Row>
+      <Card className="plugins-table-card">
+        <Table
+          columns={columns}
+          dataSource={plugins}
+          rowKey="pluginId"
+          loading={pluginsRequest.loading}
+          pagination={{ defaultPageSize: 10 }}
+          scroll={{ x: 900 }}
+        />
       </Card>
+
+      <DevGuideCard />
 
       {uploadOpen && (
         <UploadPluginModal

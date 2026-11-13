@@ -1,0 +1,56 @@
+/* Plugin inventory: management header + metric strip + dense table. */
+.plugins-page .plugins-metrics {
+  margin-bottom: 20px;
+}
+.plugins-page .plugins-table-card {
+  margin-bottom: 20px;
+}
+#root .plugins-page .ant-table-thead > tr > th {
+  padding-block: 10px;
+}
+#root .plugins-page .ant-table-tbody > tr > td {
+  padding-block: 9px;
+  font-size: 12px;
+}
+.plugin-name-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 9px 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.plugin-name-chip .anticon {
+  font-size: 12px;
+}
+.plugin-version {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.plugin-category {
+  padding: 2px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+}
+.plugins-page .ant-table-tbody > tr > td.plugin-col-time {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+/* Code samples in the developer guide use the console's well surface. */
+.plugins-page pre {
+  background: rgba(6, 13, 25, 0.55) !important;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px !important;
+  color: #c9d6ec !important;
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+}

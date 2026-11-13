@@ -1,0 +1,56 @@
+/* Plugin bindings: dense table with scope chips instead of solid tags. */
+.plugin-bindings-page .bindings-table-card {
+  margin-top: 4px;
+}
+#root .plugin-bindings-page .ant-table-thead > tr > th {
+  padding-block: 10px;
+}
+#root .plugin-bindings-page .ant-table-tbody > tr > td {
+  padding-block: 9px;
+  font-size: 12px;
+}
+.binding-plugin {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent-light);
+  font-size: 12px;
+  font-weight: 500;
+}
+.binding-plugin .anticon {
+  font-size: 12px;
+  color: var(--accent-color);
+}
+.binding-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+.binding-scope .anticon {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.binding-scope.is-global {
+  color: var(--warning-color);
+}
+.binding-scope.is-global .anticon {
+  color: var(--warning-color);
+}
+.binding-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.binding-order .anticon {
+  font-size: 10px;
+}
+.plugin-bindings-page .bindings-empty-icon {
+  font-size: 40px;
+  color: var(--text-muted);
+  opacity: 0.5;
+}

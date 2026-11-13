@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Space, Tabs, Tag, Typography } from 'antd';
+import { Button, Card, Tabs, Tag, Typography } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
   BookOutlined,
@@ -24,8 +24,9 @@ import ToolsTab from './components/ToolsTab';
 import LearnTab from './components/LearnTab';
 import KnowledgeTab from './components/KnowledgeTab';
 import ConfigModal from './components/ConfigModal';
+import './copilot.css';
 
-const { Paragraph, Text, Title } = Typography;
+const { Paragraph, Title } = Typography;
 
 const AiCopilotPage: React.FC = () => {
   const { t } = useTranslation();
@@ -192,7 +193,7 @@ const AiCopilotPage: React.FC = () => {
   ];
 
   return (
-    <div className="console-workspace-page console-resource-page">
+    <div className="copilot-page console-workspace-page console-resource-page">
       <div className="page-header-modern console-page-header">
         <div className="page-header-left">
           <RobotOutlined className="page-icon" />
@@ -202,28 +203,10 @@ const AiCopilotPage: React.FC = () => {
       <Paragraph type="secondary">{t('copilot.description')}</Paragraph>
 
       <Card>
-        {/* Model Configuration */}
-        <Card
-          size="small"
-          title={
-            <Space>
-              <SettingOutlined />
-              {t('copilot.model_config')}
-            </Space>
-          }
-          extra={
-            <Button
-              size="small"
-              icon={<SettingOutlined />}
-              onClick={() => setConfigModalVisible(true)}
-            >
-              {t('copilot.configure')}
-            </Button>
-          }
-          style={{ marginBottom: '16px' }}
-        >
-          <Space wrap>
-            <Text type="secondary">{t('copilot.current_model')}:</Text>
+        <div className="copilot-model-bar">
+          <span className="copilot-model-icon" aria-hidden="true"><SettingOutlined /></span>
+          <div className="copilot-model-copy">
+            <span className="copilot-model-label">{t('copilot.current_model')}</span>
             {selectedProvider && selectedModel ? (
               <Tag color="blue" icon={<CheckCircleOutlined />}>
                 {providers.find(p => p.provider === selectedProvider)?.providerName} - {selectedModel}
@@ -231,8 +214,15 @@ const AiCopilotPage: React.FC = () => {
             ) : (
               <Tag color="orange">{t('copilot.not_configured')}</Tag>
             )}
-          </Space>
-        </Card>
+          </div>
+          <Button
+            size="small"
+            icon={<SettingOutlined />}
+            onClick={() => setConfigModalVisible(true)}
+          >
+            {t('copilot.configure')}
+          </Button>
+        </div>
 
         <Tabs
           activeKey={activeTab}

@@ -501,6 +501,17 @@
   #root .console-workspace::after {
     background-size: 56px 56px;
   }
+  /* Narrow headers stack: title block first, actions below it. */
+  #root .console-page-header {
+    align-items: flex-start;
+  }
+  #root .console-page-header .page-header-left {
+    flex: 0 1 auto !important;
+    width: 100%;
+  }
+  #root .console-page-header .page-header-right {
+    width: 100%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

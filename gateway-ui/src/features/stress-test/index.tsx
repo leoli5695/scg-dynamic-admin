@@ -42,8 +42,10 @@ import HistoryTab from './components/HistoryTab';
 import CreateTab from './components/CreateTab';
 import QuickTestModal from './components/QuickTestModal';
 import AnalysisModal from './components/AnalysisModal';
+import { ManagementPageHeader } from '../layout/components/ManagementPage';
+import './stress-test.css';
 
-const { Title, Text, Paragraph } = Typography;
+const { Paragraph } = Typography;
 
 const errorMessage = (e: unknown, fallback: string) =>
   (e instanceof ApiError && e.message ? e.message : fallback);
@@ -338,12 +340,11 @@ const StressTestPage: React.FC = () => {
 
   return (
     <div className="console-workspace-page console-resource-page">
-      {/* Header */}
-      <div className="console-page-header" style={{ marginBottom: '24px' }}>
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Title level={3} style={{ color: '#fff' }}>
-            {t('stress_test.title')}
-          </Title>
+      <ManagementPageHeader
+        eyebrow={t('instance_nav.tools')}
+        title={t('stress_test.title')}
+        subtitle={t('stress_test.subtitle')}
+        actions={(
           <Space>
             <Button
               type="primary"
@@ -356,11 +357,8 @@ const StressTestPage: React.FC = () => {
               {t('stress_test.refresh')}
             </Button>
           </Space>
-        </Space>
-        <Text style={{ color: 'rgba(255,255,255,0.65)' }}>
-          {t('stress_test.subtitle')}
-        </Text>
-      </div>
+        )}
+      />
 
       {/* Tabs */}
       <Tabs

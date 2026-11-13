@@ -71,7 +71,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({ service, onCl
 
         {/* Health Overview */}
         <div className="drawer-health-section">
-          <Card size="small" styles={{ body: { background: palette.bgElevated } }}>
+          <Card size="small">
             <Row gutter={16}>
               <Col span={8}>
                 <Statistic

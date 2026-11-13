@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Empty, Input, Select, Spin, Tooltip, Typography } from 'antd';
+import { Button, Input, Select, Spin, Tooltip, Typography } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
   ClearOutlined,
@@ -10,6 +10,7 @@ import {
   LikeOutlined,
   RobotOutlined,
   SendOutlined,
+  ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -347,68 +348,46 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 350px)' }}>
+    <div className="copilot-chat">
       {/* Messages Area */}
       <div
+        className="copilot-thread"
         onScroll={event => {
           const area = event.currentTarget;
           followBottomRef.current = area.scrollHeight - area.scrollTop - area.clientHeight < 80;
         }}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '16px',
-          background: 'rgba(0,0,0,0.2)',
-          borderRadius: '8px',
-        }}
       >
         {messages.length === 0 ? (
-          <Empty
-            description={
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>
-                {t('copilot.empty_message')}
-              </span>
-            }
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          />
+          <div className="copilot-empty">
+            <span className="copilot-empty-icon"><RobotOutlined /></span>
+            <h3>{t('copilot.empty_message')}</h3>
+            <p>{t('copilot.empty_hint')}</p>
+            <div className="copilot-suggestions">
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setInputMessage(t(`copilot.suggest.${n}_prompt`))}
+                >
+                  {t(`copilot.suggest.${n}`)}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : (
           messages.map((msg, index) => (
             <div
               key={index}
-              style={{
-                marginBottom: '16px',
-                display: 'flex',
-                flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
-              }}
+              className={`copilot-msg ${msg.role === 'user' ? 'is-user' : 'is-assistant'}`}
             >
-              <div
-                style={{
-                  maxWidth: '80%',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  background:
-                    msg.role === 'user'
-                      ? 'rgba(76, 128, 236, 0.2)'
-                      : 'rgba(255,255,255,0.05)',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    marginBottom: '8px',
-                  }}
-                >
-                  {msg.role === 'assistant' ? (
-                    <RobotOutlined style={{ color: palette.success, marginRight: '8px' }} />
-                  ) : (
-                    <UserOutlined style={{ color: palette.primary, marginRight: '8px' }} />
-                  )}
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
-                    {msg.timestamp.toLocaleTimeString()}
-                  </Text>
+              <span className="copilot-avatar" aria-hidden="true">
+                {msg.role === 'assistant' ? <RobotOutlined /> : <UserOutlined />}
+              </span>
+              <div className="copilot-bubble">
+                <div className="copilot-bubble-meta">
+                  <span>{msg.timestamp.toLocaleTimeString()}</span>
                 </div>
-                <div style={{ color: 'rgba(255,255,255,0.85)' }}>
+                <div className="copilot-bubble-body">
                   <AiReportRenderer content={msg.content} />
                 </div>
                 {msg.link && (
@@ -419,7 +398,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
                   </div>
                 )}
                 {msg.role === 'assistant' && msg.fromAi && (
-                  <div style={{ marginTop: '8px', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                  <div style={{ marginTop: '6px', display: 'flex', gap: '4px', alignItems: 'center' }}>
                     <Tooltip title={t('copilot.feedback_up')}>
                       <Button
                         size="small"
@@ -450,19 +429,13 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
         )}
         {/* 打字机：最终答案的 token 流式增量，临时气泡，收到终态 message 后被正式消息替换 */}
         {loading && streamingContent && (
-          <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'row' }}>
-            <div
-              style={{
-                maxWidth: '80%',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                background: 'rgba(255,255,255,0.05)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                <RobotOutlined style={{ color: palette.success, marginRight: '8px' }} />
+          <div className="copilot-msg is-assistant">
+            <span className="copilot-avatar" aria-hidden="true"><RobotOutlined /></span>
+            <div className="copilot-bubble">
+              <div className="copilot-bubble-meta">
+                <span>{t('copilot.ai_thinking')}</span>
               </div>
-              <div style={{ color: 'rgba(255,255,255,0.85)' }}>
+              <div className="copilot-bubble-body">
                 <AiReportRenderer content={streamingContent} />
               </div>
             </div>
@@ -470,11 +443,9 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
         )}
         {/* 思考/调用工具阶段（尚无 token 流出）显示进度提示；终态到达后立即退场 */}
         {loading && !streamingContent && !streamDone && (
-          <div style={{ textAlign: 'center', padding: '16px' }}>
-            <Spin />
-            <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>
-              {streamNote || t('copilot.ai_thinking')}
-            </div>
+          <div className="copilot-thinking">
+            <Spin size="small" />
+            <span>{streamNote || t('copilot.ai_thinking')}</span>
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -482,15 +453,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
 
       {/* Pending write action — requires explicit human confirmation (P0 fix) */}
       {pendingAction && (
-        <div
-          style={{
-            marginTop: '12px',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            border: `1px solid rgba(232, 180, 100, 0.5)`,
-            background: 'rgba(232, 180, 100, 0.08)',
-          }}
-        >
+        <div className="copilot-confirm">
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
             <ExclamationCircleOutlined style={{ color: palette.warning, marginRight: '8px' }} />
             <Text strong style={{ color: palette.warning }}>
@@ -502,18 +465,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
               {t('copilot.warning')}: {String(pendingAction.preview?.warning)}
             </div>
           )}
-          <pre
-            style={{
-              maxHeight: '180px',
-              overflow: 'auto',
-              margin: '0 0 12px',
-              padding: '8px',
-              borderRadius: '4px',
-              background: 'rgba(0,0,0,0.3)',
-              color: 'rgba(255,255,255,0.85)',
-              fontSize: '12px',
-            }}
-          >
+          <pre>
             {JSON.stringify(pendingAction.arguments, null, 2)}
           </pre>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -534,7 +486,11 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
       )}
 
       {/* Focused entry points: trace troubleshooting, config explanation, draft generation */}
-      <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="copilot-tools-strip">
+        <span className="copilot-tools-label">
+          <ThunderboltOutlined />
+          {t('copilot.quick_tools')}
+        </span>
         <Input
           size="small"
           allowClear
@@ -583,14 +539,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
       </div>
 
       {/* Input Area */}
-      <div
-        style={{
-          marginTop: '16px',
-          display: 'flex',
-          gap: '8px',
-          alignItems: 'flex-end',
-        }}
-      >
+      <div className="copilot-composer">
         <TextArea
           value={inputMessage}
           onChange={e => setInputMessage(e.target.value)}
@@ -604,14 +553,10 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
               handleSendMessage();
             }
           }}
-          style={{
-            flex: 1,
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: '#fff',
-          }}
+          style={{ flex: 1 }}
         />
         <Button
+          className="copilot-send"
           type="primary"
           icon={<SendOutlined />}
           onClick={() => handleSendMessage()}
@@ -621,7 +566,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
           {t('copilot.send')}
         </Button>
         <Tooltip title={t('copilot.clear_conversation')}>
-          <Button icon={<ClearOutlined />} onClick={handleClearConversation} loading={clearing} disabled={historyLoading || executing} />
+          <Button className="copilot-clear" icon={<ClearOutlined />} onClick={handleClearConversation} loading={clearing} disabled={historyLoading || executing} />
         </Tooltip>
       </div>
     </div>

@@ -2,7 +2,7 @@
    Shared .stats-bar / .page-header-modern styles live in App.premium.css. */
 
 .service-middleware-page {
-  padding: 24px;
+  padding: 0;
   min-height: 100%;
 }
 
@@ -27,55 +27,92 @@
   background: rgba(76, 128, 236, 0.1);
 }
 
+#root .service-middleware-page .ant-table-thead > tr > th {
+  padding-block: 10px;
+}
+#root .service-middleware-page .ant-table-tbody > tr > td {
+  padding-block: 9px;
+  font-size: 12px;
+}
+#root .service-middleware-page .ant-table-tbody > tr > td.middleware-col-time {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+.middleware-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.middleware-health .ant-progress {
+  line-height: 1;
+}
+.middleware-health .ant-progress-inner {
+  background: rgba(145, 169, 222, 0.10);
+}
+.middleware-health .ant-progress-bg {
+  height: 5px !important;
+  border-radius: 999px;
+}
+.middleware-health .middleware-health-value {
+  min-width: 38px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
 /* Drawer Styles */
 .middleware-detail-drawer .ant-drawer-body {
   padding: 0;
-  background: var(--bg-primary, #0f172a);
+  background: transparent;
 }
 
 .middleware-detail-drawer .drawer-content {
-  padding: 24px;
-  background: var(--bg-primary, #0f172a);
+  padding: 20px;
+  background: transparent;
 }
 
 .middleware-detail-drawer .drawer-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 24px;
-  background: linear-gradient(135deg, rgba(30, 58, 95, 0.8) 0%, rgba(10, 16, 32, 0.9) 100%);
-  margin-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 4px 18px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
 }
 
 .middleware-detail-drawer .drawer-header-left {
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
+  gap: 14px;
+  align-items: center;
 }
 
 .middleware-detail-drawer .drawer-icon {
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-active) 100%);
-  border-radius: 12px;
-  color: white;
-  font-size: 24px;
+  background: linear-gradient(135deg, rgba(71, 120, 233, 0.24), rgba(139, 101, 240, 0.16));
+  border: 1px solid rgba(121, 147, 222, 0.32);
+  border-radius: 13px;
+  color: #bdd1ff;
+  font-size: 21px;
 }
 
 .middleware-detail-drawer .drawer-title-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .middleware-detail-drawer .drawer-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
   color: var(--text-primary, #ffffff);
 }
 
@@ -91,28 +128,28 @@
 
 /* Sections */
 .middleware-detail-drawer .drawer-section {
-  background: var(--bg-card, rgba(30, 41, 59, 0.8));
-  padding: 20px;
-  border-radius: 12px;
-  margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(6, 13, 25, 0.38);
+  padding: 18px;
+  border-radius: 14px;
+  margin-bottom: 14px;
+  box-shadow: inset 0 1px 0 rgba(210, 225, 255, 0.03);
+  border: 1px solid var(--border-subtle);
 }
 
 .middleware-detail-drawer .section-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary, #ffffff);
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .middleware-detail-drawer .section-title .anticon {
-  color: var(--primary-color);
+  color: var(--primary-light);
 }
 
 /* Middleware Cards */
@@ -122,34 +159,31 @@
 }
 
 .middleware-detail-drawer .middleware-card {
-  border-radius: 8px;
-  transition: all 0.2s ease;
-  background: rgba(16, 24, 40, 0.5);
+  border-radius: 12px;
+  transition: border-color 0.2s ease;
+  background: rgba(6, 13, 25, 0.38);
 }
 
 .middleware-detail-drawer .middleware-card.success {
   border-left: 3px solid var(--success-color);
-  background: rgba(61, 220, 151, 0.1);
 }
 
 .middleware-detail-drawer .middleware-card.warning {
   border-left: 3px solid var(--warning-color);
-  background: rgba(232, 180, 100, 0.1);
 }
 
 .middleware-detail-drawer .middleware-card.error {
   border-left: 3px solid var(--error-color);
-  background: rgba(242, 113, 127, 0.1);
 }
 
 .middleware-detail-drawer .middleware-card.default {
   border-left: 3px solid var(--border-strong);
-  background: rgba(16, 24, 40, 0.3);
 }
 
 .middleware-detail-drawer .middleware-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transform: none;
+  border-color: var(--border-default);
+  box-shadow: none;
 }
 
 /* Text colors */
@@ -168,7 +202,7 @@
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .service-middleware-page {
-    padding: 16px;
+    padding: 0;
   }
 
   .middleware-detail-drawer .ant-drawer-body {
@@ -176,10 +210,10 @@
   }
 
   .middleware-detail-drawer .drawer-content {
-    padding: 16px;
+    padding: 8px;
   }
 
   .middleware-detail-drawer .drawer-header {
-    padding: 16px;
+    padding: 0 0 14px;
   }
 }

@@ -4,26 +4,20 @@
  */
 import React from 'react';
 import {
-  Alert,
   Button,
   Card,
-  Col,
-  Divider,
   Progress,
-  Row,
   Space,
   Spin,
-  Statistic,
-  Tag,
-  Typography
+  Typography,
 } from 'antd';
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   CloseCircleOutlined,
-  DashboardOutlined,
   DeleteOutlined,
   DownloadOutlined,
+  LineChartOutlined,
   RobotOutlined,
   ShareAltOutlined,
   StopOutlined,
@@ -34,8 +28,9 @@ import type { StressTest, StressTestLiveStatus, StressTestMetrics } from '../../
 import { parseServerTime } from '../../../utils/serverTime';
 import StressTestCharts from './Charts';
 import { palette } from '../../../styles/palette';
+import '../stress-test.css';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface Props {
   tests: StressTest[];
@@ -50,16 +45,6 @@ interface Props {
   onExport: (testId: number) => void;
   onShare: (testId: number) => void;
 }
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'RUNNING': return 'blue';
-    case 'COMPLETED': return 'green';
-    case 'STOPPED': return 'orange';
-    case 'FAILED': return 'red';
-    default: return 'default';
-  }
-};
 
 const getStatusIcon = (status: string) => {
   switch (status) {
@@ -88,77 +73,59 @@ const HistoryTab: React.FC<Props> = ({
 
   const renderRunningTest = () => {
     if (!runningTestId || !runningStatus) return null;
+    const errorRate = runningStatus.errorRate ?? 0;
 
     return (
       <div>
         <Card
-          title={
-            <Space>
-              <ThunderboltOutlined style={{ color: palette.primary }} />
-              <Title level={5} style={{ margin: 0, color: '#fff' }}>
-                {t('stress_test.test_number', { id: runningTestId })} {t('stress_test.running')}
-              </Title>
-              <Tag color="blue">RUNNING</Tag>
-            </Space>
-          }
-          style={{ background: 'rgba(255,255,255,0.05)', marginBottom: '24px' }}
-          extra={
-            <Button danger icon={<StopOutlined />} onClick={() => onStop(runningTestId)}>
+          className="stress-result-card stress-running-card"
+          title={(
+            <div className="stress-result-title">
+              <span className="stress-result-name">
+                {t('stress_test.test_number', { id: runningTestId })}
+                {' '}
+                {t('stress_test.running')}
+              </span>
+              <span className="stress-status stress-status-running">
+                <ClockCircleOutlined />
+                RUNNING
+              </span>
+            </div>
+          )}
+          extra={(
+            <Button size="small" danger icon={<StopOutlined />} onClick={() => onStop(runningTestId)}>
               {t('stress_test.stop_test')}
             </Button>
-          }
+          )}
         >
           <Spin spinning={statusLoading}>
-            <Row gutter={[24, 24]}>
-              <Col span={24}>
-                <Progress
-                  percent={Math.round(runningStatus.progress * 100)}
-                  status="active"
-                  strokeColor={{ from: palette.primary, to: palette.success }}
-                />
-              </Col>
-
-              <Col xs={12} sm={6}>
-                <Statistic
-                  title={t('stress_test.requests_sent')}
-                  value={runningStatus.actualRequests || 0}
-                  prefix={<ThunderboltOutlined />}
-                  styles={{ content: { color: palette.primary } }}
-                />
-              </Col>
-
-              <Col xs={12} sm={6}>
-                <Statistic
-                  title={t('stress_test.live_rps')}
-                  value={runningStatus.liveRps?.toFixed(2) || '0'}
-                  suffix="req/s"
-                  prefix={<DashboardOutlined />}
-                  styles={{ content: { color: palette.success } }}
-                />
-              </Col>
-
-              <Col xs={12} sm={6}>
-                <Statistic
-                  title={t('stress_test.avg_response_time')}
-                  value={runningStatus.avgResponseTimeMs?.toFixed(2) || '0'}
-                  suffix="ms"
-                  prefix={<ClockCircleOutlined />}
-                  styles={{ content: { color: '#fff' } }}
-                />
-              </Col>
-
-              <Col xs={12} sm={6}>
-                <Statistic
-                  title={t('stress_test.error_rate')}
-                  value={runningStatus.errorRate?.toFixed(2) || '0'}
-                  suffix="%"
-                  prefix={<CloseCircleOutlined />}
-                  styles={{
-                    content: { color: runningStatus.errorRate > 5 ? palette.error : palette.success }
-                  }}
-                />
-              </Col>
-            </Row>
+            <Progress
+              percent={Math.round(runningStatus.progress * 100)}
+              status="active"
+              strokeColor={{ from: palette.primary, to: palette.success }}
+            />
+            <div className="stress-kpis">
+              <div className="stress-kpi">
+                <span>{t('stress_test.requests_sent')}</span>
+                <b>{(runningStatus.actualRequests || 0).toLocaleString()}</b>
+                <em>req</em>
+              </div>
+              <div className="stress-kpi">
+                <span>{t('stress_test.live_rps')}</span>
+                <b>{(runningStatus.liveRps ?? 0).toFixed(2)}</b>
+                <em>req/s</em>
+              </div>
+              <div className="stress-kpi">
+                <span>{t('stress_test.avg_response_time')}</span>
+                <b>{(runningStatus.avgResponseTimeMs ?? 0).toFixed(2)}</b>
+                <em>ms</em>
+              </div>
+              <div className={`stress-kpi${errorRate > 5 ? ' is-bad' : ''}`}>
+                <span>{t('stress_test.error_rate')}</span>
+                <b>{errorRate.toFixed(2)}</b>
+                <em>%</em>
+              </div>
+            </div>
           </Spin>
         </Card>
 
@@ -168,124 +135,142 @@ const HistoryTab: React.FC<Props> = ({
     );
   };
 
-  const renderCompletedTest = (test: StressTest) => (
-    <Card
-      key={test.id}
-      title={
-        <Space>
-          <Title level={5} style={{ margin: 0, color: '#fff' }}>
-            {test.testName || t('stress_test.test_number', { id: test.id })}
-          </Title>
-          <Tag color={getStatusColor(test.status)} icon={getStatusIcon(test.status)}>
-            {test.status}
-          </Tag>
-        </Space>
-      }
-      style={{ background: 'rgba(255,255,255,0.05)', marginBottom: '16px' }}
-      extra={
-        <Space>
-          {test.status === 'COMPLETED' && (
-            <>
-              <Button icon={<RobotOutlined />} onClick={() => onAnalyze(test.id)}>
-                {t('stress_test.ai_analysis')}
+  const renderCompletedTest = (test: StressTest) => {
+    const total = Math.max(test.actualRequests || 0, 1);
+    const failed = test.failedRequests || 0;
+    const success = Math.max(test.successfulRequests ?? total - failed, 0);
+    const errorRate = test.errorRate ?? 0;
+    const maxLatency = Math.max(test.p99ResponseTimeMs || 0, 1);
+    const latencyRows = [
+      { key: 'min', label: t('stress_test.min'), value: test.minResponseTimeMs || 0 },
+      { key: 'p50', label: 'P50', value: test.p50ResponseTimeMs || 0 },
+      { key: 'p90', label: 'P90', value: test.p90ResponseTimeMs || 0 },
+      { key: 'p99', label: 'P99', value: test.p99ResponseTimeMs || 0, max: true },
+    ];
+
+    return (
+      <Card
+        key={test.id}
+        className="stress-result-card"
+        title={(
+          <div className="stress-result-title">
+            <span className="stress-result-name">
+              {test.testName || t('stress_test.test_number', { id: test.id })}
+            </span>
+            <span className={`stress-status stress-status-${(test.status || '').toLowerCase()}`}>
+              {getStatusIcon(test.status)}
+              {test.status}
+            </span>
+          </div>
+        )}
+        extra={(
+          <Space size={4}>
+            {test.status === 'COMPLETED' && (
+              <>
+                <Button size="small" icon={<RobotOutlined />} onClick={() => onAnalyze(test.id)}>
+                  {t('stress_test.ai_analysis')}
+                </Button>
+                <Button size="small" icon={<DownloadOutlined />} onClick={() => onExport(test.id)}>
+                  {t('stress_test.export')}
+                </Button>
+                <Button size="small" icon={<ShareAltOutlined />} onClick={() => onShare(test.id)}>
+                  {t('stress_test.share')}
+                </Button>
+              </>
+            )}
+            {test.status !== 'RUNNING' && test.status !== 'CREATED' && (
+              <Button size="small" danger icon={<DeleteOutlined />} onClick={() => onDelete(test.id)}>
+                {t('stress_test.delete_test')}
               </Button>
-              <Button icon={<DownloadOutlined />} onClick={() => onExport(test.id)}>
-                {t('stress_test.export')}
-              </Button>
-              <Button icon={<ShareAltOutlined />} onClick={() => onShare(test.id)}>
-                {t('stress_test.share')}
-              </Button>
-            </>
-          )}
-          {test.status !== 'RUNNING' && test.status !== 'CREATED' && (
-            <Button danger icon={<DeleteOutlined />} onClick={() => onDelete(test.id)}>
-              {t('stress_test.delete_test')}
-            </Button>
-          )}
-        </Space>
-      }
-    >
-      <Row gutter={[24, 24]}>
-        <Col xs={24} sm={12}>
-          <Statistic
-            title={t('stress_test.total_requests')}
-            value={test.actualRequests}
-            suffix={test.totalRequests ? `/ ${test.totalRequests}` : ''}
-            styles={{ content: { color: '#fff' } }}
-          />
-          <Space style={{ marginTop: '8px' }}>
-            <Tag color="green">{test.successfulRequests} {t('stress_test.success')}</Tag>
-            <Tag color="red">{test.failedRequests} {t('stress_test.failed')}</Tag>
+            )}
           </Space>
-        </Col>
+        )}
+      >
+        <div className="stress-kpis">
+          <div className="stress-kpi">
+            <span>{t('stress_test.total_requests')}</span>
+            <b>{(test.actualRequests ?? 0).toLocaleString()}</b>
+            <em>{test.totalRequests ? `/ ${test.totalRequests.toLocaleString()}` : '—'}</em>
+          </div>
+          <div className="stress-kpi">
+            <span>{t('stress_test.req_per_sec')}</span>
+            <b>{(test.requestsPerSecond ?? 0).toFixed(2)}</b>
+            <em>req/s</em>
+          </div>
+          <div className="stress-kpi">
+            <span>{t('stress_test.avg_response_time')}</span>
+            <b>{(test.avgResponseTimeMs ?? 0).toFixed(2)}</b>
+            <em>ms</em>
+          </div>
+          <div className={`stress-kpi${errorRate > 5 ? ' is-bad' : ''}`}>
+            <span>{t('stress_test.error_rate')}</span>
+            <b>{errorRate.toFixed(2)}</b>
+            <em>%</em>
+          </div>
+        </div>
 
-        <Col xs={24} sm={12}>
-          <Statistic
-            title={t('stress_test.req_per_sec')}
-            value={test.requestsPerSecond?.toFixed(2) || '0'}
-            suffix="req/s"
-            styles={{ content: { color: palette.success } }}
-          />
-        </Col>
+        <div className="stress-split" aria-hidden="true">
+          <i className="ok" style={{ width: `${(success / total) * 100}%` }} />
+          <i className="bad" style={{ width: `${(failed / total) * 100}%` }} />
+        </div>
 
-        <Col xs={24} sm={12}>
-          <Statistic
-            title={t('stress_test.error_rate')}
-            value={test.errorRate?.toFixed(2) || '0'}
-            suffix="%"
-            styles={{ content: { color: test.errorRate > 5 ? palette.error : palette.success } }}
-          />
-        </Col>
+        <div className="stress-latency">
+          <div className="stress-latency-head">
+            <span>{t('stress_test.response_time_dist')}</span>
+            <span>
+              {success.toLocaleString()}
+              {' '}
+              {t('stress_test.success')}
+              {' · '}
+              {failed.toLocaleString()}
+              {' '}
+              {t('stress_test.failed')}
+            </span>
+          </div>
+          {latencyRows.map((row) => (
+            <div key={row.key} className={`stress-latency-row${row.max ? ' is-max' : ''}`}>
+              <span className="stress-latency-label">{row.label}</span>
+              <span className="stress-latency-track">
+                <i
+                  className="stress-latency-fill"
+                  style={{ display: 'block', width: `${Math.min(100, (row.value / maxLatency) * 100)}%` }}
+                />
+              </span>
+              <span className="stress-latency-value">{row.value.toFixed(2)} ms</span>
+            </div>
+          ))}
+        </div>
 
-        <Col xs={24} sm={12}>
-          <Statistic
-            title={t('stress_test.avg_response_time')}
-            value={test.avgResponseTimeMs?.toFixed(2) || '0'}
-            suffix="ms"
-            styles={{ content: { color: '#fff' } }}
-          />
-        </Col>
-
-        <Col span={24}>
-          <Divider>{t('stress_test.response_time_dist')}</Divider>
-          <Row gutter={[16, 16]}>
-            <Col xs={12} sm={6}>
-              <Statistic title={t('stress_test.min')} value={test.minResponseTimeMs?.toFixed(2) || '0'} suffix="ms" />
-            </Col>
-            <Col xs={12} sm={6}>
-              <Statistic title="P50" value={test.p50ResponseTimeMs?.toFixed(2) || '0'} suffix="ms" />
-            </Col>
-            <Col xs={12} sm={6}>
-              <Statistic title="P90" value={test.p90ResponseTimeMs?.toFixed(2) || '0'} suffix="ms" />
-            </Col>
-            <Col xs={12} sm={6}>
-              <Statistic title="P99" value={test.p99ResponseTimeMs?.toFixed(2) || '0'} suffix="ms" />
-            </Col>
-          </Row>
-        </Col>
-
-        <Col span={24}>
-          <Text type="secondary">{t('stress_test.target')}: {test.targetUrl}</Text>
-          <br />
-          <Text type="secondary">{t('stress_test.method')}: {test.method} | {t('stress_test.concurrent')}: {test.concurrentUsers}</Text>
-          <br />
-          <Text type="secondary">
-            {test.startTime && `${t('stress_test.started')}: ${parseServerTime(test.startTime).toLocaleString()}`}
-            {test.endTime && ` | ${t('stress_test.ended')}: ${parseServerTime(test.endTime).toLocaleString()}`}
-          </Text>
-        </Col>
-      </Row>
-    </Card>
-  );
+        <div className="stress-meta">
+          <span>
+            <span className="stress-meta-label">{t('stress_test.target')}:</span>
+            {' '}
+            <code>{test.targetUrl}</code>
+          </span>
+          <span>{t('stress_test.method')}: {test.method}</span>
+          <span>{t('stress_test.concurrent')}: {test.concurrentUsers}</span>
+          {test.startTime && (
+            <span>{t('stress_test.started')}: {parseServerTime(test.startTime).toLocaleString()}</span>
+          )}
+          {test.endTime && (
+            <span>{t('stress_test.ended')}: {parseServerTime(test.endTime).toLocaleString()}</span>
+          )}
+        </div>
+      </Card>
+    );
+  };
 
   return (
     <div>
       {/* Running test display */}
       {renderRunningTest()}
-      {tests.filter(test => (test.status === 'RUNNING' || test.status === 'CREATED') && test.id !== runningTestId).map(test => (
-        <Card key={test.id} size="small" style={{ marginBottom: 16 }}
-          title={<Space><Tag color="blue">{test.status}</Tag>{test.testName || t('stress_test.test_number', { id: test.id })}</Space>}
-          extra={<Button danger icon={<StopOutlined />} onClick={() => onStop(test.id)}>{t('stress_test.stop_test')}</Button>}
+      {tests.filter((test) => (test.status === 'RUNNING' || test.status === 'CREATED') && test.id !== runningTestId).map((test) => (
+        <Card
+          key={test.id}
+          size="small"
+          className="stress-result-card"
+          title={<Space><span className={`stress-status stress-status-${(test.status || '').toLowerCase()}`}>{test.status}</span>{test.testName || t('stress_test.test_number', { id: test.id })}</Space>}
+          extra={<Button size="small" danger icon={<StopOutlined />} onClick={() => onStop(test.id)}>{t('stress_test.stop_test')}</Button>}
         >
           <Text type="secondary">{test.targetUrl}</Text>
         </Card>
@@ -294,12 +279,13 @@ const HistoryTab: React.FC<Props> = ({
       {/* Completed tests */}
       <Spin spinning={loading}>
         {tests.length === 0 ? (
-          <Alert
-            type="info"
-            title={t('stress_test.no_tests')}
-            description={t('stress_test.no_tests_desc')}
-            showIcon
-          />
+          <div className="management-empty">
+            <span className="management-empty-icon">
+              <LineChartOutlined />
+            </span>
+            <h3>{t('stress_test.no_tests')}</h3>
+            <p>{t('stress_test.no_tests_desc')}</p>
+          </div>
         ) : (
           tests.filter((test) => test.status !== 'RUNNING' && test.status !== 'CREATED').map(renderCompletedTest)
         )}

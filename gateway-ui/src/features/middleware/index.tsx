@@ -104,17 +104,17 @@ const ServiceMiddlewarePage: React.FC = () => {
         const color = health.status === 'healthy' ? palette.success
           : health.status === 'warning' ? palette.warning : palette.error;
         return (
-          <Space>
+          <span className="middleware-health">
             {getStatusIcon(health.status)}
             <Progress
               percent={health.score}
               size="small"
-              style={{ width: 60 }}
+              style={{ width: 64 }}
               strokeColor={color}
               showInfo={false}
             />
-            <Text style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{health.score}%</Text>
-          </Space>
+            <span className="middleware-health-value">{health.score}%</span>
+          </span>
         );
       },
     },
@@ -123,6 +123,7 @@ const ServiceMiddlewarePage: React.FC = () => {
       dataIndex: 'reportTime',
       key: 'reportTime',
       width: 180,
+      className: 'middleware-col-time',
       render: (time: string) => (time ? parseServerTime(time).toLocaleString() : '-'),
     },
     {

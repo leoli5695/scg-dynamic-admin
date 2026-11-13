@@ -13,9 +13,7 @@ import {
   Popconfirm,
   Space,
   Table,
-  Tag,
   Tooltip,
-  Typography,
 } from 'antd';
 import { message } from '../../utils/antdStatic';
 import InlineStatChips from '../../components/InlineStatChips';
@@ -58,9 +56,8 @@ import type {
 } from '../../types/plugin';
 import PluginSelectModal from './components/PluginSelectModal';
 import BindingFormModal, { BindingFormPayload } from './components/BindingFormModal';
-import { palette } from '../../styles/palette';
-
-const { Text, Title } = Typography;
+import { ManagementPageHeader } from '../layout/components/ManagementPage';
+import './plugin-bindings.css';
 
 interface CreateBindingState {
   plugin: Plugin;
@@ -297,9 +294,10 @@ const RoutePluginBindingsPage: React.FC = () => {
         dataIndex: 'pluginName',
         key: 'pluginName',
         render: (name: string) => (
-          <Tag color="purple" icon={<ThunderboltOutlined />}>
+          <span className="binding-plugin">
+            <ThunderboltOutlined />
             {name}
-          </Tag>
+          </span>
         ),
       },
       {
@@ -308,13 +306,15 @@ const RoutePluginBindingsPage: React.FC = () => {
         key: 'routeName',
         render: (name: string, record: PluginBindingView) =>
           record.routeId === GLOBAL_BINDING_ROUTE_ID ? (
-            <Tag color="gold" icon={<GlobalOutlined />}>
+            <span className="binding-scope is-global">
+              <GlobalOutlined />
               {t('plugin_bindings.global')}
-            </Tag>
+            </span>
           ) : (
-            <Tag color="green" icon={<ApiOutlined />}>
+            <span className="binding-scope">
+              <ApiOutlined />
               {name}
-            </Tag>
+            </span>
           ),
       },
       {
@@ -322,7 +322,13 @@ const RoutePluginBindingsPage: React.FC = () => {
         dataIndex: 'order',
         key: 'order',
         width: 80,
-        render: (order: number) => <Tag icon={<OrderedListOutlined />}>{order}</Tag>,
+        className: 'binding-col-order',
+        render: (order: number) => (
+          <span className="binding-order">
+            <OrderedListOutlined />
+            {order}
+          </span>
+        ),
         sorter: (a: PluginBindingView, b: PluginBindingView) => a.order - b.order,
       },
       {
@@ -389,79 +395,54 @@ const RoutePluginBindingsPage: React.FC = () => {
 
   return (
     <div className="plugin-bindings-page console-resource-page">
-      {/* Page Header with inline stat chips and Create Button */}
-      <div
-        className="page-header-modern"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 24,
-        }}
-      >
-        <div>
-          <Title level={3} style={{ margin: 0, color: 'var(--text-primary)' }}>
-            <ThunderboltOutlined style={{ marginRight: 8, color: palette.accent }} />
-            {t('plugin_bindings.plugins_title')}
-          </Title>
-          <Text type="secondary" style={{ color: 'var(--text-muted)' }}>
-            {t('plugin_bindings.plugins_desc')}
-          </Text>
-        </div>
-        <Space>
-          <InlineStatChips
-            items={[
-              { key: 'total', value: bindingStats.total, label: t('plugin_bindings.stats_total') },
-              {
-                key: 'global',
-                value: bindingStats.global,
-                label: t('plugin_bindings.stats_global'),
-                tone: 'amber',
-              },
-              {
-                key: 'route',
-                value: bindingStats.route,
-                label: t('plugin_bindings.stats_route'),
-                tone: 'green',
-              },
-              {
-                key: 'enabled',
-                value: bindingStats.enabled,
-                label: t('plugin_bindings.stats_enabled'),
-                tone: 'blue',
-              },
-            ]}
-          />
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setSelectOpen(true)}
-            style={{
-              background: `linear-gradient(135deg, ${palette.accentSolid} 0%, ${palette.accentSolid} 100%)`,
-              border: 'none',
-              borderRadius: 8,
-            }}
-          >
-            {t('plugin_bindings.create_binding')}
-          </Button>
-          <Button
-            icon={<SyncOutlined />}
-            onClick={bindingsRequest.run}
-            loading={bindingsRequest.loading}
-          >
-            {t('common.refresh')}
-          </Button>
-        </Space>
-      </div>
+      <ManagementPageHeader
+        eyebrow={t('instance_nav.tools')}
+        title={t('plugin_bindings.plugins_title')}
+        subtitle={t('plugin_bindings.plugins_desc')}
+        actions={(
+          <Space wrap>
+            <InlineStatChips
+              items={[
+                { key: 'total', value: bindingStats.total, label: t('plugin_bindings.stats_total') },
+                {
+                  key: 'global',
+                  value: bindingStats.global,
+                  label: t('plugin_bindings.stats_global'),
+                  tone: 'amber',
+                },
+                {
+                  key: 'route',
+                  value: bindingStats.route,
+                  label: t('plugin_bindings.stats_route'),
+                  tone: 'green',
+                },
+                {
+                  key: 'enabled',
+                  value: bindingStats.enabled,
+                  label: t('plugin_bindings.stats_enabled'),
+                  tone: 'blue',
+                },
+              ]}
+            />
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setSelectOpen(true)}
+            >
+              {t('plugin_bindings.create_binding')}
+            </Button>
+            <Button
+              icon={<SyncOutlined />}
+              onClick={bindingsRequest.run}
+              loading={bindingsRequest.loading}
+            >
+              {t('common.refresh')}
+            </Button>
+          </Space>
+        )}
+      />
 
-      {/* Bindings Table - Main Content */}
-      <Card
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 12,
-        }}
-      >
+      <Card className="bindings-table-card">
         <Table
           columns={columns}
           dataSource={bindings}
@@ -472,13 +453,12 @@ const RoutePluginBindingsPage: React.FC = () => {
           locale={{
             emptyText: (
               <Empty
-                image={<ThunderboltOutlined style={{ fontSize: 48, color: 'var(--text-muted)' }} />}
+                image={<ThunderboltOutlined className="bindings-empty-icon" />}
                 description={t('plugin_bindings.bindings_empty')}
               />
             ),
           }}
           size="middle"
-          style={{ background: 'transparent' }}
         />
       </Card>
 

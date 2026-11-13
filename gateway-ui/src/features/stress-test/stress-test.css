@@ -1,0 +1,191 @@
+/* Stress test results: KPI strip + latency profile instead of a wall of statistics. */
+.stress-result-card {
+  margin-bottom: 16px;
+}
+.stress-result-card .ant-card-head {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.stress-result-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.stress-result-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.stress-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+.stress-status-completed {
+  color: var(--success-color);
+  background: rgba(61, 220, 151, 0.10);
+  border-color: rgba(61, 220, 151, 0.28);
+}
+.stress-status-running,
+.stress-status-created {
+  color: var(--primary-light);
+  background: rgba(76, 128, 236, 0.12);
+  border-color: rgba(124, 167, 255, 0.30);
+}
+.stress-status-stopped {
+  color: var(--warning-color);
+  background: rgba(232, 180, 100, 0.10);
+  border-color: rgba(232, 180, 100, 0.28);
+}
+.stress-status-failed {
+  color: var(--error-color);
+  background: rgba(242, 113, 127, 0.10);
+  border-color: rgba(242, 113, 127, 0.30);
+}
+.stress-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--border-subtle);
+}
+.stress-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: rgba(6, 13, 25, 0.42);
+}
+.stress-kpi > span {
+  color: var(--text-caption);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+.stress-kpi > b {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.4px;
+  font-variant-numeric: tabular-nums;
+}
+.stress-kpi > em {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-style: normal;
+}
+.stress-kpi.is-bad > b {
+  color: var(--error-color);
+}
+.stress-split {
+  display: flex;
+  height: 4px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(145, 169, 222, 0.08);
+}
+.stress-split .ok {
+  background: linear-gradient(90deg, #3ddc97, #22b07d);
+}
+.stress-split .bad {
+  background: linear-gradient(90deg, #f2717f, #c0424f);
+}
+.stress-latency {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.stress-latency-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--text-caption);
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+}
+.stress-latency-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 76px;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.stress-latency-label {
+  color: var(--text-caption);
+  font-size: 10.5px;
+  letter-spacing: 0.5px;
+}
+.stress-latency-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(145, 169, 222, 0.07);
+}
+.stress-latency-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5b8cf5, #a78bfa);
+}
+.stress-latency-row.is-max .stress-latency-fill {
+  background: linear-gradient(90deg, #8f7bec, #cf8bf0);
+}
+.stress-latency-value {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-align: right;
+}
+.stress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 14px;
+  color: var(--text-caption);
+  font-size: 10.5px;
+}
+.stress-meta code {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.stress-meta .stress-meta-label {
+  color: var(--text-disabled);
+}
+.stress-running-card .ant-progress {
+  margin-bottom: 16px;
+}
+@media (max-width: 900px) {
+  .stress-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stress-result-card .ant-card-head-wrapper {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .stress-result-card .ant-card-extra {
+    margin-inline-start: 0;
+    width: 100%;
+  }
+  .stress-result-card .ant-card-extra .ant-space {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 600px) {
+  .stress-latency-row {
+    grid-template-columns: 36px minmax(0, 1fr) 64px;
+  }
+}
