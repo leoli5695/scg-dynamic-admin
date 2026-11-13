@@ -3,7 +3,6 @@ import { Button, Empty, Input, Modal, Segmented, Spin } from 'antd';
 import { ArrowRightOutlined, SearchOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { StrategyTypeInfo } from '../../../types/strategy';
-import { CATEGORY_LABELS } from '../utils';
 import { filterStrategyTypes, getCreatableStrategyTypes } from '../strategyPicker';
 import type { StrategyPickerTab } from '../strategyPicker';
 import { getStrategyTypeIcon } from './icons';
@@ -30,10 +29,9 @@ const StrategyTypeSelectModal: React.FC<StrategyTypeSelectModalProps> = ({
   const [category, setCategory] = useState('all');
   const [query, setQuery] = useState('');
   const types = useMemo(() => getCreatableStrategyTypes(strategyTypes), [strategyTypes]);
+  // Labels come from strategy.picker_category_*; unknown categories fall back to the raw value.
   const categoryLabel = (value: string) =>
-    t(`strategy.picker_category_${value}`, {
-      defaultValue: CATEGORY_LABELS[value] || value,
-    });
+    t(`strategy.picker_category_${value}`, { defaultValue: value });
   const scopedTypes = filterStrategyTypes(types, { tab });
   const categories = Array.from(new Set(scopedTypes.map((type) => type.category)));
   const results = filterStrategyTypes(types, { tab, category, query }, categoryLabel);

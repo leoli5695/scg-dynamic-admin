@@ -96,7 +96,7 @@ const HistoryTab: React.FC<Props> = ({
             <Space>
               <ThunderboltOutlined style={{ color: palette.primary }} />
               <Title level={5} style={{ margin: 0, color: '#fff' }}>
-                Test #{runningTestId} {t('stress_test.running')}
+                {t('stress_test.test_number', { id: runningTestId })} {t('stress_test.running')}
               </Title>
               <Tag color="blue">RUNNING</Tag>
             </Space>
@@ -174,7 +174,7 @@ const HistoryTab: React.FC<Props> = ({
       title={
         <Space>
           <Title level={5} style={{ margin: 0, color: '#fff' }}>
-            {test.testName || `Test #${test.id}`}
+            {test.testName || t('stress_test.test_number', { id: test.id })}
           </Title>
           <Tag color={getStatusColor(test.status)} icon={getStatusIcon(test.status)}>
             {test.status}
@@ -284,7 +284,7 @@ const HistoryTab: React.FC<Props> = ({
       {renderRunningTest()}
       {tests.filter(test => (test.status === 'RUNNING' || test.status === 'CREATED') && test.id !== runningTestId).map(test => (
         <Card key={test.id} size="small" style={{ marginBottom: 16 }}
-          title={<Space><Tag color="blue">{test.status}</Tag>{test.testName || `Test #${test.id}`}</Space>}
+          title={<Space><Tag color="blue">{test.status}</Tag>{test.testName || t('stress_test.test_number', { id: test.id })}</Space>}
           extra={<Button danger icon={<StopOutlined />} onClick={() => onStop(test.id)}>{t('stress_test.stop_test')}</Button>}
         >
           <Text type="secondary">{test.targetUrl}</Text>

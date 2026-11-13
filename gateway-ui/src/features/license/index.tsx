@@ -107,7 +107,7 @@ const LicensePage: React.FC = () => {
 
   const licenseColumns: ColumnsType<LicenseListItem> = [
     {
-      title: 'License ID',
+      title: t('licenseUI.license_id'),
       dataIndex: 'licenseId',
       key: 'licenseId',
       width: 180,
@@ -120,7 +120,7 @@ const LicensePage: React.FC = () => {
       ),
     },
     {
-      title: '版本',
+      title: t('licenseUI.col_edition'),
       dataIndex: 'edition',
       key: 'edition',
       width: 100,
@@ -128,13 +128,13 @@ const LicensePage: React.FC = () => {
         const config = EDITION_CONFIG[edition as LicenseEdition] ?? EDITION_CONFIG.BASIC;
         return (
           <Tag color={config.color} icon={config.icon}>
-            {config.label}
+            {t(config.labelKey)}
           </Tag>
         );
       },
     },
     {
-      title: '客户',
+      title: t('licenseUI.customer'),
       dataIndex: 'customerName',
       key: 'customerName',
       width: 150,
@@ -145,7 +145,7 @@ const LicensePage: React.FC = () => {
       ),
     },
     {
-      title: '状态',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
@@ -155,12 +155,12 @@ const LicensePage: React.FC = () => {
       },
     },
     {
-      title: '有效期',
+      title: t('licenseUI.col_validity'),
       dataIndex: 'expiresAt',
       key: 'expiresAt',
       width: 180,
       render: (date: string | null) => {
-        if (!date) return <Text>永久</Text>;
+        if (!date) return <Text>{t('licenseUI.forever')}</Text>;
         const expired = parseServerTime(date).getTime() < Date.now();
         return (
           <Text type={expired ? 'danger' : undefined}>
@@ -171,7 +171,7 @@ const LicensePage: React.FC = () => {
       },
     },
     {
-      title: '功能数',
+      title: t('licenseUI.col_feature_count'),
       dataIndex: 'features',
       key: 'features',
       width: 80,
@@ -211,8 +211,8 @@ const LicensePage: React.FC = () => {
         {!licenseInfo && (
           <Alert
             type="warning"
-            title="未检测到有效 License"
-            description="请激活 License 以使用高级功能。基础版功能可免费使用。"
+            title={t('licenseUI.no_license_title')}
+            description={t('licenseUI.no_license_desc')}
             showIcon
             style={{ marginBottom: 16 }}
           />
@@ -221,8 +221,12 @@ const LicensePage: React.FC = () => {
         {licenseInfo && licenseInfo.expired && (
           <Alert
             type="error"
-            title="License 已过期"
-            description={`您的 License 于 ${licenseInfo.expiresAt ? new Date(licenseInfo.expiresAt).toLocaleDateString() : '-'} 过期，部分功能已受限。请联系管理员续期。`}
+            title={t('licenseUI.expired_title')}
+            description={t('licenseUI.expired_desc', {
+              date: licenseInfo.expiresAt
+                ? new Date(licenseInfo.expiresAt).toLocaleDateString()
+                : '-',
+            })}
             showIcon
             style={{ marginBottom: 16 }}
           />
@@ -234,7 +238,7 @@ const LicensePage: React.FC = () => {
           items={[
             {
               key: 'status',
-              label: '授权状态',
+              label: t('licenseUI.tab_status'),
               icon: <SafetyCertificateOutlined />,
               children: (
                 <div className="license-tab-content">
@@ -246,9 +250,9 @@ const LicensePage: React.FC = () => {
                           {licenseInfo ? (
                             <>
                               <div className="edition-icon">{editionConfig.icon}</div>
-                              <Title level={3}>{editionConfig.label}</Title>
+                              <Title level={3}>{t(editionConfig.labelKey)}</Title>
                               <Tag color={licenseInfo.valid ? 'success' : 'error'}>
-                                {licenseInfo.valid ? '有效' : '无效'}
+                                {licenseInfo.valid ? t('licenseUI.valid') : t('licenseUI.invalid')}
                               </Tag>
                             </>
                           ) : (
@@ -327,7 +331,7 @@ const LicensePage: React.FC = () => {
                         >
                           {licenseInfo && (
                             <>
-                              <Descriptions.Item label="License ID">
+                              <Descriptions.Item label={t('licenseUI.license_id')}>
                                 <Text
                                   copyable={{ text: licenseInfo.licenseId || '' }}
                                   style={{ fontSize: 12 }}
@@ -335,16 +339,16 @@ const LicensePage: React.FC = () => {
                                   {licenseInfo.licenseId || '—'}
                                 </Text>
                               </Descriptions.Item>
-                              <Descriptions.Item label="客户">
+                              <Descriptions.Item label={t('licenseUI.customer')}>
                                 {licenseInfo.customerName || '-'}
                               </Descriptions.Item>
-                              <Descriptions.Item label="组织">
+                              <Descriptions.Item label={t('licenseUI.organization')}>
                                 {licenseInfo.organization || '-'}
                               </Descriptions.Item>
-                              <Descriptions.Item label="有效期至">
+                              <Descriptions.Item label={t('licenseUI.valid_until_label')}>
                                 {licenseInfo.expiresAt
                                   ? parseServerTime(licenseInfo.expiresAt).toLocaleDateString()
-                                  : '永久'}
+                                  : t('licenseUI.forever')}
                               </Descriptions.Item>
                             </>
                           )}
@@ -360,11 +364,11 @@ const LicensePage: React.FC = () => {
             },
             {
               key: 'manage',
-              label: 'License 管理',
+              label: t('licenseUI.tab_manage'),
               icon: <SettingOutlined />,
               children: (
                 <div className="license-tab-content">
-                  <Card title="License 列表">
+                  <Card title={t('licenseUI.list_title')}>
                     <Table
                       dataSource={licenseList}
                       columns={licenseColumns}
@@ -372,11 +376,11 @@ const LicensePage: React.FC = () => {
                       pagination={{
                         pageSize: 10,
                         showSizeChanger: true,
-                        showTotal: (total) => `共 ${total} 条`,
+                        showTotal: (total) => t('licenseUI.total_records', { total }),
                       }}
                       scroll={{ x: 1000 }}
                       locale={{
-                        emptyText: <Empty description="暂无 License 记录" />,
+                        emptyText: <Empty description={t('licenseUI.empty_list')} />,
                       }}
                     />
                   </Card>

@@ -104,7 +104,7 @@ const UsageExampleModal: React.FC<UsageExampleModalProps> = ({ policy, onClose }
               <Text type="secondary">{t('auth_policy.credentials')}</Text>
               <div style={{ marginTop: 8 }}>
                 <Text code>{example.credentialsFormat}</Text>
-                <Text type="secondary" style={{ marginLeft: 8 }}>(Base64: {example.credentialsEncoded})</Text>
+                <Text type="secondary" style={{ marginLeft: 8 }}>{t('auth_policy.credentials_base64', { value: example.credentialsEncoded ?? '' })}</Text>
               </div>
             </div>
             {renderCurlBlock('auth_policy.curl_example', example.curlExample)}
@@ -127,8 +127,8 @@ const UsageExampleModal: React.FC<UsageExampleModalProps> = ({ policy, onClose }
               </div>
             </div>
             <div style={{ marginBottom: 8 }}>
-              <Tag color="blue">Client ID: {example.clientId}</Tag>
-              <Tag color="green">Token Endpoint: {example.tokenEndpoint}</Tag>
+              <Tag color="blue">{t('auth_policy.client_id')}: {example.clientId}</Tag>
+              <Tag color="green">{t('auth_policy.token_endpoint')}: {example.tokenEndpoint}</Tag>
             </div>
             {example.requiredScopes && (
               <Tag color="orange">{t('auth_policy.required_scopes')}: {example.requiredScopes}</Tag>

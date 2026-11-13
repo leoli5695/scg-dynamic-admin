@@ -158,7 +158,7 @@ const ScaleModal: React.FC<ScaleModalProps> = ({
                 value={cpuCores}
                 onChange={(value) => setCpuCores(value || 1)}
                 style={{ width: '100%' }}
-                suffix="核"
+                suffix={t('instance.cpu_cores_unit')}
               />
             </Form.Item>
             <Form.Item label={t('instance.memory_mb')} required>

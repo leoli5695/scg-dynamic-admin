@@ -149,5 +149,21 @@
   "stress_test.no_limit": "不限",
   "stress_test.mode_hint_title": "测试模式选择",
   "stress_test.mode_hint_desc": "持续时间模式和请求计数模式互斥。填写其中一个字段时，另一个字段会自动清空。填写\"持续时间\"将按指定时间运行，填写\"总请求数\"将运行到指定请求数后停止。",
-  "stress_test.placeholder_randomInt": "随机整数（1-1,000,000）"
+  "stress_test.placeholder_randomInt": "随机整数（1-1,000,000）",
+  "stress_test.report_unavailable": "报告不可用",
+  "stress_test.report_title": "压力测试报告",
+  "stress_test.share_link_invalid": "分享链接不存在或已过期",
+  "stress_test.download": "下载",
+  "stress_test.start_time": "开始时间",
+  "stress_test.end_time": "结束时间",
+  "stress_test.duration": "持续时间",
+  "stress_test.requests_value": "{{n}} 次请求",
+  "stress_test.test_results": "测试结果",
+  "stress_test.share_generated_by": "由 Gateway Admin 生成",
+  "stress_test.test_number": "测试 #{{id}}",
+  "stress_test.chart_response_time": "响应时间 (ms)",
+  "stress_test.chart_error_rate": "错误率 (%)",
+  "stress_test.chart_cumulative_requests": "累计请求数",
+  "stress_test.chart_avg": "平均",
+  "stress_test.chart_error_warning": "警告：{{value}}%"
 }

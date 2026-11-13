@@ -60,7 +60,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
       formatter: (params: Array<{ value: [string, number] }>) => {
         const date = parseServerTime(params[0].value[0] as string | number).toLocaleString();
         const score = params[0].value[1];
-        return `${date}<br/>评分: ${score}`;
+        return `${date}<br/>${t('diagnostic.score_label')}: ${score}`;
       },
     },
     xAxis: {
@@ -96,8 +96,8 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
       markLine: {
         silent: true,
         data: [
-          { yAxis: 80, lineStyle: { color: palette.success }, label: { formatter: '健康线' } },
-          { yAxis: 50, lineStyle: { color: palette.warning }, label: { formatter: '警告线' } },
+          { yAxis: 80, lineStyle: { color: palette.success }, label: { formatter: t('diagnostic.health_line') } },
+          { yAxis: 50, lineStyle: { color: palette.warning }, label: { formatter: t('diagnostic.warning_line') } },
         ],
       },
     }],
@@ -139,7 +139,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
           color: chartColors,
           legend: {
             ...chartLegend,
-            data: ['QPS', '错误率(%)', '堆内存(%)'],
+            data: ['QPS', t('diagnostic.error_rate_percent'), t('diagnostic.heap_memory_percent')],
             bottom: 0,
           },
           xAxis: {
@@ -162,7 +162,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
               lineStyle: { color: chartColors[0] },
             },
             {
-              name: '错误率(%)',
+              name: t('diagnostic.error_rate_percent'),
               type: 'line',
               data: history.map((h) => h.gatewayErrorRate || 0),
               smooth: true,
@@ -170,7 +170,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
               lineStyle: { color: palette.error },
             },
             {
-              name: '堆内存(%)',
+              name: t('diagnostic.heap_memory_percent'),
               type: 'line',
               data: history.map((h) => h.gatewayHeapUsagePercent || 0),
               smooth: true,
@@ -198,11 +198,11 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
             onChange={setHours}
             style={{ width: 120, marginLeft: 16 }}
             options={[
-              { value: 1, label: '最近1小时' },
-              { value: 6, label: '最近6小时' },
-              { value: 12, label: '最近12小时' },
-              { value: 24, label: '最近24小时' },
-              { value: 72, label: '最近3天' },
+              { value: 1, label: t('diagnostic.last_1h') },
+              { value: 6, label: t('diagnostic.last_6h') },
+              { value: 12, label: t('diagnostic.last_12h') },
+              { value: 24, label: t('diagnostic.last_24h') },
+              { value: 72, label: t('diagnostic.last_3d') },
             ]}
           />
         </Space>
@@ -238,7 +238,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
               <Statistic
                 title={t('diagnostic.previous_score')}
                 value={comparison.previousScore}
-                suffix={comparison.previousScore >= 80 ? '(健康)' : comparison.previousScore >= 50 ? '(警告)' : '(危险)'}
+                suffix={comparison.previousScore >= 80 ? t('diagnostic.score_healthy') : comparison.previousScore >= 50 ? t('diagnostic.score_warning') : t('diagnostic.score_danger')}
                 styles={{ content: { color: getScoreColor(comparison.previousScore) } }}
               />
             </Col>
@@ -255,7 +255,7 @@ const HistoryTrendCard: React.FC<HistoryTrendCardProps> = ({ instanceId, report,
             <Col span={12}>
               <Alert
                 type={(comparison.scoreChange ?? 0) > 0 ? 'success' : (comparison.scoreChange ?? 0) < -5 ? 'warning' : 'info'}
-                title={'系统健康度保持稳定'}
+                title={t('diagnostic.health_stable')}
                 showIcon
               />
             </Col>

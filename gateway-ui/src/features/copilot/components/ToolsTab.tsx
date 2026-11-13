@@ -53,7 +53,7 @@ interface ToolsTabProps {
 }
 
 const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
 
   // Route generation
   const [routeDescription, setRouteDescription] = useState('');
@@ -294,7 +294,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
               <Select.OptGroup label={t('routes.nacos_services')}>
                 {nacosServices.map(s => (
                   <Select.Option key={`nacos:${s.serviceName}`} value={`nacos:${s.serviceName}`}>
-                    {s.displayName} {(s.instanceCount ?? 0) > 0 ? `(${s.instanceCount}实例)` : ''}
+                    {s.displayName} {(s.instanceCount ?? 0) > 0 ? t('copilot.instance_count', { count: s.instanceCount }) : ''}
                   </Select.Option>
                 ))}
               </Select.OptGroup>
@@ -389,7 +389,7 @@ const ToolsTab: React.FC<ToolsTabProps> = ({ instanceId, provider, model }) => {
                       title={t('copilot.validation_failed')}
                       description={
                         validationResult.errors?.map((err, idx) => (
-                          <div key={idx}>• {translateValidationError(err, i18n.language)}</div>
+                          <div key={idx}>• {translateValidationError(err, t)}</div>
                         ))
                       }
                       style={{ marginBottom: '12px' }}

@@ -205,7 +205,7 @@ const RouteCard: React.FC<RouteCardProps> = ({
       {/* Meta */}
       <div className="route-meta">
         <Text type="secondary">
-          Order:
+          {t('routes.order')}:
           {' '}
           {route.order ?? 0}
         </Text>

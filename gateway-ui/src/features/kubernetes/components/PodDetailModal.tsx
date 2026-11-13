@@ -54,7 +54,7 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
         if (cancelled) return;
         setDetail(detailData);
         setYaml(yamlData);
-        setLogs(logsData || 'No logs available');
+        setLogs(logsData || t('common.no_logs'));
       } catch {
         if (!cancelled) message.error(t('k8s.load_failed'));
       } finally {
@@ -81,11 +81,11 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
       // continuation, so each poll re-delivers most of the previous window.
       // Appending accumulated those duplicates without bound - and with no
       // auto-scroll the genuinely new lines stayed below the fold anyway.
-      setLogs(data || 'No logs available');
+      setLogs(data || t('common.no_logs'));
     } catch {
       // Keep the previous logs on transient failures.
     }
-  }, [clusterId, pod, logTailLines, logSinceSeconds]);
+  }, [clusterId, pod, logTailLines, logSinceSeconds, t]);
 
   // Auto refresh timer (realtime mode only), with guaranteed cleanup.
   useEffect(() => {
@@ -277,7 +277,7 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
               children: (
                 <div className="pod-code-container">
                   <div className="pod-code-header">
-                    <span style={{ color: '#a1a1aa', fontSize: 13 }}>YAML Definition</span>
+                    <span style={{ color: '#a1a1aa', fontSize: 13 }}>{t('common.yaml_definition')}</span>
                     <Button className="copy-yaml-btn" icon={<CopyOutlined />} onClick={copyYamlToClipboard}>
                       {t('common.copy')}
                     </Button>
@@ -295,7 +295,7 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
                 <div className="pod-code-container">
                   <div className="pod-code-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                     <Space size="small">
-                      <span style={{ color: '#a1a1aa', fontSize: 13 }}>Container Logs</span>
+                      <span style={{ color: '#a1a1aa', fontSize: 13 }}>{t('common.container_logs')}</span>
                       <Select
                         value={logMode}
                         onChange={handleLogModeChange}
@@ -314,10 +314,10 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
                             onChange={setLogTailLines}
                             style={{ width: 100 }}
                             options={[
-                              { value: 100, label: '100 lines' },
-                              { value: 200, label: '200 lines' },
-                              { value: 500, label: '500 lines' },
-                              { value: 1000, label: '1000 lines' },
+                              { value: 100, label: t('common.log_lines', { n: 100 }) },
+                              { value: 200, label: t('common.log_lines', { n: 200 }) },
+                              { value: 500, label: t('common.log_lines', { n: 500 }) },
+                              { value: 1000, label: t('common.log_lines', { n: 1000 }) },
                             ]}
                           />
                           <Select
@@ -325,11 +325,11 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
                             onChange={setLogSinceSeconds}
                             style={{ width: 120 }}
                             options={[
-                              { value: 0, label: 'All time' },
-                              { value: 300, label: '5 min' },
-                              { value: 600, label: '10 min' },
-                              { value: 1800, label: '30 min' },
-                              { value: 3600, label: '1 hour' },
+                              { value: 0, label: t('common.all_time') },
+                              { value: 300, label: t('common.duration_minutes', { n: 5 }) },
+                              { value: 600, label: t('common.duration_minutes', { n: 10 }) },
+                              { value: 1800, label: t('common.duration_minutes', { n: 30 }) },
+                              { value: 3600, label: t('common.duration_hours', { n: 1 }) },
                             ]}
                           />
                           <Button

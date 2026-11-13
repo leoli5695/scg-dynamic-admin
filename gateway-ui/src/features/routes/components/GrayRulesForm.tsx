@@ -68,9 +68,9 @@ const GrayRulesForm: React.FC<GrayRulesFormProps> = ({
                           size="small"
                           suffixIcon={<span style={{ color: palette.textTertiary, fontSize: '12px' }}>▼</span>}
                         >
-                          <Select.Option value="HEADER">Header</Select.Option>
-                          <Select.Option value="COOKIE">Cookie</Select.Option>
-                          <Select.Option value="QUERY">Query</Select.Option>
+                          <Select.Option value="HEADER">{t('routes.rule_type_header')}</Select.Option>
+                          <Select.Option value="COOKIE">{t('routes.rule_type_cookie')}</Select.Option>
+                          <Select.Option value="QUERY">{t('routes.rule_type_query')}</Select.Option>
                           <Select.Option value="WEIGHT">Weight%</Select.Option>
                         </Select>
                       </Form.Item>

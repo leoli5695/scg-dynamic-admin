@@ -49,5 +49,19 @@
   "topology.menu_service_detail": "Service Details",
   "topology.menu_service_detail_new_tab": "Open in New Tab",
   "topology.menu_focus": "Focus Node",
-  "topology.exit_focus": "Show Full Topology"
+  "topology.exit_focus": "Show Full Topology",
+  "topology.tooltip_instance_id": "Instance ID",
+  "topology.tooltip_listen_uri": "Listen Address",
+  "topology.tooltip_run_status": "Runtime Status",
+  "topology.tooltip_route_id": "Route ID",
+  "topology.tooltip_route_status": "Route Status",
+  "topology.tooltip_health_status": "Health Status",
+  "topology.tooltip_service_id": "Service ID",
+  "topology.tooltip_service_type": "Service Type",
+  "topology.tooltip_instance_status": "Instance Status",
+  "topology.tooltip_healthy_count": "{{healthy}}/{{total}} healthy",
+  "topology.tooltip_instance_list": "Instance List",
+  "topology.tooltip_weight": "(weight: {{weight}})",
+  "topology.tooltip_traffic_metrics": "Traffic Metrics",
+  "topology.edge_title": "Traffic Connection"
 }

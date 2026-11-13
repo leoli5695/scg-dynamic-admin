@@ -38,7 +38,8 @@ const EventsTab: React.FC = () => {
           <Badge status={warningCount > 0 ? 'error' : 'success'} text={`${warningCount} Warning`} />
           <Badge status="processing" text={`${normalCount} Normal`} />
           <Text type="secondary">
-            Total:
+            {t('common.total_label')}
+            :
             {' '}
             {total}
           </Text>
@@ -89,7 +90,8 @@ const EventsTab: React.FC = () => {
                       {event.objectName}
                     </Text>
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      Count:
+                      {t('common.count_label')}
+                      :
                       {' '}
                       {event.count}
                     </Text>

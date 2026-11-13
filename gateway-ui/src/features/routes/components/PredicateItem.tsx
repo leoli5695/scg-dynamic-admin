@@ -52,10 +52,10 @@ const PredicateItem: React.FC<PredicateItemProps> = ({
           }}
           suffixIcon={<span style={{ color: palette.textTertiary, fontSize: '12px' }}>▼</span>}
         >
-          <Select.Option value="Path">Path</Select.Option>
-          <Select.Option value="Host">Host</Select.Option>
-          <Select.Option value="Method">Method</Select.Option>
-          <Select.Option value="Header">Header</Select.Option>
+          <Select.Option value="Path">{t('predicate.Path.name')}</Select.Option>
+          <Select.Option value="Host">{t('predicate.Host.name')}</Select.Option>
+          <Select.Option value="Method">{t('predicate.Method.name')}</Select.Option>
+          <Select.Option value="Header">{t('predicate.Header.name')}</Select.Option>
         </Select>
       </Form.Item>
 

@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Space, Tag, Tooltip, Typography } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import type { FilterExecution } from '../../../types/filterChain';
 import { palette } from '../../../styles/palette';
 
@@ -72,6 +73,7 @@ const getFilterColor = (filterName: string, selfTime: number): string => {
 
 const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
   ({ executions, totalDuration }, ref) => {
+    const { t } = useTranslation();
     const [tooltip, setTooltip] = useState<TooltipState>({
       visible: false,
       x: 0,
@@ -145,7 +147,7 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
               >
                 {/* Filter name column */}
                 <div style={{ width: 120, paddingRight: 8, flexShrink: 0 }}>
-                  <Tooltip title={`Order: ${exec.order}`}>
+                  <Tooltip title={`${t('filterChain.order')}: ${exec.order}`}>
                     <Text
                       code
                       style={{
@@ -203,11 +205,15 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
                         content: (
                           <div style={{ fontSize: 12 }}>
                             <div style={{ fontWeight: 600, marginBottom: 4 }}>{exec.filter}</div>
-                            <div>自身耗时: {timeDisplay}</div>
-                            <div>下游耗时: {downstreamTime.toFixed(2)}ms</div>
-                            <div>开始时间: {startTime.toFixed(2)}ms</div>
-                            <div>执行顺序: #{idx + 1} (order={exec.order})</div>
-                            <div>状态: {isSuccess ? '✅ 成功' : '❌ 失败'}</div>
+                            <div>{t('filterChain.waterfall_self_time', { time: timeDisplay })}</div>
+                            <div>{t('filterChain.waterfall_downstream_time', { time: downstreamTime.toFixed(2) })}</div>
+                            <div>{t('filterChain.waterfall_start_time', { time: startTime.toFixed(2) })}</div>
+                            <div>{t('filterChain.waterfall_order', { index: idx + 1, order: exec.order })}</div>
+                            <div>
+                              {t('filterChain.waterfall_status', {
+                                status: isSuccess ? t('filterChain.status_success') : t('filterChain.status_failed'),
+                              })}
+                            </div>
                           </div>
                         ),
                       });
@@ -283,19 +289,19 @@ const WaterfallChart = React.forwardRef<HTMLDivElement, WaterfallChartProps>(
           <Space size={16}>
             <Space size={4}>
               <div style={{ width: 14, height: 14, background: palette.successSolid, borderRadius: 2 }} />
-              <Text type="secondary" style={{ fontSize: 11 }}>自身耗时 (快)</Text>
+              <Text type="secondary" style={{ fontSize: 11 }}>{t('filterChain.legend_self_fast')}</Text>
             </Space>
             <Space size={4}>
               <div style={{ width: 14, height: 14, background: palette.warningSolid, borderRadius: 2 }} />
-              <Text type="secondary" style={{ fontSize: 11 }}>自身耗时 (慢)</Text>
+              <Text type="secondary" style={{ fontSize: 11 }}>{t('filterChain.legend_self_slow')}</Text>
             </Space>
             <Space size={4}>
               <div style={{ width: 14, height: 14, background: palette.bgSwitch, borderRadius: 2 }} />
-              <Text type="secondary" style={{ fontSize: 11 }}>下游耗时</Text>
+              <Text type="secondary" style={{ fontSize: 11 }}>{t('filterChain.downstream_time')}</Text>
             </Space>
           </Space>
           <Text type="secondary" style={{ fontSize: 11 }}>
-            总耗时: {totalDuration.toFixed(2)}ms
+            {t('filterChain.waterfall_total_time', { time: totalDuration.toFixed(2) })}
           </Text>
         </div>
 

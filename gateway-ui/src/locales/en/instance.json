@@ -94,11 +94,13 @@
   "instance.no_local_images": "No local images found in cluster",
   "instance.recommended": "recommended",
   "instance.image_tooltip": "Enter image name or select from list. For Never policy, use images that exist on cluster nodes.",
-  "instance.select_image_from_namespace": "Select image from {ns}",
+  "instance.select_image_from_namespace": "Select image from {{ns}}",
   "instance.select_local_image": "Select a local image",
   "instance.all_namespaces": "All Namespaces",
   "instance.filter_by_namespace": "Filter by namespace",
   "instance.no_local_images_manual": "No local images found in cluster. Enter image name manually.",
+  "instance.load_images_failed": "Failed to load local images from cluster",
+  "instance.image_tooltip_local": "Select from local images available on cluster nodes",
   "instance.not_found": "Instance not found",
   "instance.overview": "Overview",
   "instance.instance_id": "Instance ID",
@@ -163,5 +165,9 @@
   "instance.filtered_status": "Status filter: {{status}}",
   "instance.open_console": "Open console",
   "instance.inventory_title": "Gateway instances",
-  "instance.clear_filter": "Clear filter"
+  "instance.clear_filter": "Clear filter",
+  "instance.not_found_hint": "The instance may have been deleted, or you do not have access to it.",
+  "instance.cpu_cores_unit": "cores",
+  "resources.local_mode": "Local mode",
+  "resources.local_mode_desc": "This instance has no Kubernetes cluster association (started locally or externally), so node and pod resource metrics are unavailable."
 }

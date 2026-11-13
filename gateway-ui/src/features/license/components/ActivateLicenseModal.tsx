@@ -27,20 +27,20 @@ export const ActivateLicenseModal: React.FC<ActivateLicenseModalProps> = ({
     setSubmitting(true);
     try {
       await importLicense(values.licenseCode);
-      message.success('License 激活成功');
+      message.success(t('licenseUI.activate_success'));
       form.resetFields();
       onClose();
       onActivated();
     } catch (e) {
-      message.error(e instanceof ApiError && e.message ? e.message : '激活失败');
+      message.error(e instanceof ApiError && e.message ? e.message : t('licenseUI.activate_failed'));
     } finally {
       setSubmitting(false);
     }
-  }, [form, onClose, onActivated]);
+  }, [form, onClose, onActivated, t]);
 
   return (
     <Modal
-      title="激活 License"
+      title={t('licenseUI.activate_modal_title')}
       open={open}
       onCancel={onClose}
       footer={null}
@@ -50,25 +50,24 @@ export const ActivateLicenseModal: React.FC<ActivateLicenseModalProps> = ({
       <Form form={form} onFinish={handleActivate} layout="vertical">
         <Form.Item
           name="licenseCode"
-          label="License Code"
-          rules={[{ required: true, message: '请输入 License Code' }]}
+          label={t('licenseUI.code_label')}
+          rules={[{ required: true, message: t('licenseUI.code_required') }]}
         >
           <TextArea
             rows={6}
-            placeholder="粘贴 License Code（Base64 格式）"
+            placeholder={t('licenseUI.code_placeholder')}
             autoSize={{ minRows: 4, maxRows: 10 }}
           />
         </Form.Item>
         <div className="activate-hint">
           <Text type="secondary">
-            License Code 格式类似 JetBrains 激活码，为 Base64 编码的 JSON 字串。
-            请将完整的 License Code 粘贴到上方输入框中。
+            {t('licenseUI.code_hint')}
           </Text>
         </div>
         <Form.Item>
           <Space>
             <Button type="primary" htmlType="submit" loading={submitting}>
-              激活
+              {t('licenseUI.activate_submit')}
             </Button>
             <Button onClick={onClose}>
               {t('common.cancel')}

@@ -136,7 +136,7 @@ function RequestJourneyDetails({ instanceId, traceId }: { instanceId: string; tr
     {replayError && !pendingReplay && <Alert type="error" showIcon title={replayError} />}
     <Card>
       <Space orientation="vertical" style={{ width: '100%' }} size="large">
-        <Typography.Text copyable code>Trace ID: {traceId}</Typography.Text>
+        <Typography.Text copyable code>{t('access_log.trace_id')}: {traceId}</Typography.Text>
         <Steps size="small" items={[
           { title: t('journey.configuration'), status: stepStatus(!!route.data) },
           { title: t('journey.call'), status: stepStatus(!!evidence || !!usage.length) },

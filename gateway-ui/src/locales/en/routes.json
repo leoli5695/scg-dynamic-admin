@@ -133,6 +133,10 @@
   "routes.disabled_success": "Route disabled successfully",
   "routes.enable_failed": "Failed to enable route",
   "routes.disable_failed": "Failed to disable route",
+  "predicate.Path.name": "Path",
+  "predicate.Host.name": "Host",
+  "predicate.Method.name": "Method",
+  "predicate.Header.name": "Header",
   "predicate.Path.detail": "Match requests by URL path pattern. Supports Spring Ant-style patterns: ? (single char), * (any chars except /), ** (any chars including /). Example: /api/** matches all paths under /api/.",
   "predicate.Host.detail": "Match requests by Host header. Supports Ant-style patterns like *.example.com to match all subdomains. Useful for multi-tenant routing based on domain.",
   "predicate.Method.detail": "Match requests by HTTP method (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS). Supports multiple methods. Useful for API method restrictions.",
@@ -170,6 +174,9 @@
   "routes.gray_rule_name": "Name",
   "routes.gray_rule_value": "Value",
   "routes.rule_type": "Type",
+  "routes.rule_type_header": "Header",
+  "routes.rule_type_cookie": "Cookie",
+  "routes.rule_type_query": "Query",
   "routes.target_version": "Target Version",
   "routes.add_gray_rule": "Add Gray Rule",
   "routes.static_services": "Static Services",
@@ -271,5 +278,8 @@
   "routes.debug_auth_bound": "Bound to this route",
   "routes.debug_auth_other": "Other instance policies",
   "routes.debug_auth_failed": "Could not load authentication policies. Retry or enter headers manually.",
-  "routes.debug_auth_key": "Select credential"
+  "routes.debug_auth_key": "Select credential",
+  "routes.method_required": "Please select a request method",
+  "routes.select_methods": "Select request methods",
+  "routes.args_required": "Please enter a match value"
 }

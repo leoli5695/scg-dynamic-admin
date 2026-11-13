@@ -76,6 +76,7 @@
   "audit.view_diff": "查看差异",
   "audit.view_details": "查看详情",
   "audit.value_comparison": "值对比",
+  "audit.json_chars": "（{{count}} 字符）",
   "audit.version_conflict": "版本冲突警告",
   "audit.conflict_detected": "检测到版本冲突",
   "audit.force_rollback": "强制回滚（跳过校验）",

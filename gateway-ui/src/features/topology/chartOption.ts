@@ -4,6 +4,7 @@
  * edge styling, focus-mode filtering and HTML tooltips.
  */
 import type * as echarts from 'echarts';
+import type { TFunction } from 'i18next';
 import type { TopologyEdge, TopologyGraph, TopologyNode } from '../../types/topology';
 import { chartAxis, palette, withAlpha } from '../../styles/palette.ts';
 
@@ -197,12 +198,17 @@ function getNodeLabel(node: TopologyNode): Record<string, unknown> {
 
 /* ------------------------------ Tooltips ------------------------------ */
 
-function formatNodeTooltip(node: TopologyNode): string {
+/**
+ * Node tooltip HTML. `t` is supplied by the rendering component so the copy
+ * follows the active language; nothing here is translated at module load.
+ * `node.serviceType` comparisons match backend data values, not UI copy.
+ */
+function formatNodeTooltip(node: TopologyNode, t: TFunction): string {
   const typeInfo = {
-    gateway: { icon: '🚪', color: palette.primary, label: 'Gateway' },
-    route: { icon: '🔗', color: node.enabled === false ? palette.textMuted : palette.info, label: 'Route' },
-    service: { icon: '⚙️', color: node.serviceType === '静态服务' ? palette.success : palette.accent, label: 'Service' },
-    client: { icon: '👤', color: palette.warning, label: 'Client' },
+    gateway: { icon: '🚪', color: palette.primary, label: t('topology.node_gateway') },
+    route: { icon: '🔗', color: node.enabled === false ? palette.textMuted : palette.info, label: t('topology.node_route') },
+    service: { icon: '⚙️', color: node.serviceType === '静态服务' ? palette.success : palette.accent, label: t('topology.node_service') },
+    client: { icon: '👤', color: palette.warning, label: t('topology.node_client') },
   };
   const info = typeInfo[node.type as keyof typeof typeInfo] || { icon: '📦', color: palette.textMuted, label: node.type };
 
@@ -212,32 +218,32 @@ function formatNodeTooltip(node: TopologyNode): string {
 
   if (node.type === 'gateway') {
     html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-    html += `<span style="color: ${palette.textSecondary};">实例ID:</span>`;
+    html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_instance_id')}:</span>`;
     html += `<span style="color: ${palette.textPrimary};">${node.instanceId || '-'}</span>`;
     html += '</div>';
     if (node.uri) {
       html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-      html += `<span style="color: ${palette.textSecondary};">监听地址:</span>`;
+      html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_listen_uri')}:</span>`;
       html += `<span style="color: ${palette.textPrimary}; font-size: 12px;">${node.uri}</span>`;
       html += '</div>';
     }
     if (node.status) {
       const statusColor = node.status === 'healthy' ? palette.success : node.status === 'warning' ? palette.warning : palette.error;
       html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-      html += `<span style="color: ${palette.textSecondary};">运行状态:</span>`;
+      html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_run_status')}:</span>`;
       html += `<span style="color: ${statusColor}; font-weight: 500;">● ${node.status}</span>`;
       html += '</div>';
     }
     if (node.metrics?.requestCount) {
       html += '<div style="margin-top: 8px; padding: 6px 10px; background: rgba(22, 93, 255, 0.2); border-radius: 4px;">';
       html += '<div style="display: flex; justify-content: space-between; align-items: center;">';
-      html += `<span style="color: ${palette.textSecondary}; font-size: 11px;">总请求量</span>`;
+      html += `<span style="color: ${palette.textSecondary}; font-size: 11px;">${t('topology.total_requests')}</span>`;
       html += `<span style="color: #165DFF; font-weight: 600; font-size: 14px;">${node.metrics.requestCount}</span>`;
       html += '</div></div>';
     }
   } else if (node.type === 'route') {
     html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-    html += `<span style="color: ${palette.textSecondary};">Route ID:</span>`;
+    html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_route_id')}:</span>`;
     html += `<span style="color: ${palette.textPrimary};">${node.routeId || '-'}</span>`;
     html += '</div>';
     if (node.uri) {
@@ -247,40 +253,40 @@ function formatNodeTooltip(node: TopologyNode): string {
       html += '</div>';
     }
     const enabledColor = node.enabled === false ? palette.textMuted : palette.success;
-    const enabledText = node.enabled === false ? '禁用' : '启用';
+    const enabledText = node.enabled === false ? t('common.disabled') : t('common.enabled');
     html += '<div style="display: flex; align-items: center; gap: 8px;">';
-    html += `<span style="color: ${palette.textSecondary};">路由状态:</span>`;
+    html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_route_status')}:</span>`;
     html += `<span style="color: ${enabledColor}; font-weight: 500;">● ${enabledText}</span>`;
     html += '</div>';
     if (node.status) {
       const statusColor = node.status === 'healthy' ? palette.success : node.status === 'warning' ? palette.warning : palette.error;
       html += '<div style="display: flex; align-items: center; gap: 8px;">';
-      html += `<span style="color: ${palette.textSecondary};">健康状态:</span>`;
+      html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_health_status')}:</span>`;
       html += `<span style="color: ${statusColor}; font-weight: 500;">● ${node.status}</span>`;
       html += '</div>';
     }
   } else if (node.type === 'service') {
     html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-    html += `<span style="color: ${palette.textSecondary};">Service ID:</span>`;
+    html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_service_id')}:</span>`;
     html += `<span style="color: ${palette.textPrimary};">${node.serviceId || '-'}</span>`;
     html += '</div>';
     if (node.serviceType) {
       const typeColor = node.serviceType === '静态服务' ? palette.success : palette.accent;
       html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-      html += `<span style="color: ${palette.textSecondary};">服务类型:</span>`;
+      html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_service_type')}:</span>`;
       html += `<span style="color: ${typeColor}; font-weight: 500;">${node.serviceType}</span>`;
       html += '</div>';
     }
     if (node.totalInstances !== undefined && node.totalInstances > 0) {
       const healthyColor = node.healthyInstances === node.totalInstances ? palette.success : palette.warning;
       html += '<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
-      html += `<span style="color: ${palette.textSecondary};">实例状态:</span>`;
-      html += `<span style="color: ${healthyColor}; font-weight: 500;">${node.healthyInstances}/${node.totalInstances} 健康</span>`;
+      html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_instance_status')}:</span>`;
+      html += `<span style="color: ${healthyColor}; font-weight: 500;">${t('topology.tooltip_healthy_count', { healthy: node.healthyInstances, total: node.totalInstances })}</span>`;
       html += '</div>';
     }
     if (node.instances && node.instances.length > 0) {
       html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.15);">';
-      html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 4px;">实例列表</div>`;
+      html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 4px;">${t('topology.tooltip_instance_list')}</div>`;
       html += '<div style="max-height: 100px; overflow-y: auto;">';
       node.instances.forEach((inst) => {
         const statusColor = inst.enabled ? palette.success : palette.error;
@@ -288,7 +294,7 @@ function formatNodeTooltip(node: TopologyNode): string {
         html += `<span style="color: ${statusColor};">●</span>`;
         html += `<span style="color: ${palette.textPrimary};">${inst.ip}:${inst.port}</span>`;
         if (inst.weight !== undefined) {
-          html += `<span style="color: rgba(255,255,255,0.5); font-size: 11px;">(权重:${inst.weight})</span>`;
+          html += `<span style="color: rgba(255,255,255,0.5); font-size: 11px;">${t('topology.tooltip_weight', { weight: inst.weight })}</span>`;
         }
         html += '</div>';
       });
@@ -303,23 +309,23 @@ function formatNodeTooltip(node: TopologyNode): string {
 
   if (node.metrics) {
     html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.15);">';
-    html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 6px;">📊 流量指标</div>`;
+    html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 6px;">📊 ${t('topology.tooltip_traffic_metrics')}</div>`;
     if (node.metrics.requestCount) {
       html += '<div style="display: flex; justify-content: space-between; margin-bottom: 3px;">';
-      html += `<span style="color: ${palette.textSecondary};">请求数</span>`;
+      html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_requests')}</span>`;
       html += `<span style="color: #165DFF; font-weight: 500;">${node.metrics.requestCount}</span>`;
       html += '</div>';
     }
     if (node.metrics.avgLatency) {
       html += '<div style="display: flex; justify-content: space-between; margin-bottom: 3px;">';
-      html += `<span style="color: ${palette.textSecondary};">平均延迟</span>`;
+      html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_avg_latency')}</span>`;
       html += `<span style="color: ${palette.textPrimary};">${node.metrics.avgLatency.toFixed(2)}ms</span>`;
       html += '</div>';
     }
     if (node.metrics.errorRate !== undefined) {
       const rateColor = node.metrics.errorRate > 5 ? palette.error : palette.success;
       html += '<div style="display: flex; justify-content: space-between;">';
-      html += `<span style="color: ${palette.textSecondary};">错误率</span>`;
+      html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_error_rate')}</span>`;
       html += `<span style="color: ${rateColor}; font-weight: 500;">${node.metrics.errorRate.toFixed(2)}%</span>`;
       html += '</div>';
     }
@@ -330,25 +336,26 @@ function formatNodeTooltip(node: TopologyNode): string {
   return html;
 }
 
-function formatEdgeTooltip(edge: TopologyEdge): string {
-  let html = '<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">流量连接</div>';
-  html += `<div>类型: ${edge.type}</div>`;
+/** Edge tooltip HTML; `edge.type` stays raw because it is a backend enum value. */
+function formatEdgeTooltip(edge: TopologyEdge, t: TFunction): string {
+  let html = `<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${t('topology.edge_title')}</div>`;
+  html += `<div>${t('topology.tooltip_type')}: ${edge.type}</div>`;
   if (edge.routeId) {
-    html += `<div>Route: ${edge.routeId}</div>`;
+    html += `<div>${t('topology.node_route')}: ${edge.routeId}</div>`;
   }
 
   if (edge.metrics) {
     html += '<div style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 4px;">';
-    html += `<div style="color: ${palette.textSecondary}; font-size: 11px;">流量指标</div>`;
+    html += `<div style="color: ${palette.textSecondary}; font-size: 11px;">${t('topology.tooltip_traffic_metrics')}</div>`;
     if (edge.metrics.requestCount) {
-      html += `<div>请求数: ${edge.metrics.requestCount}</div>`;
+      html += `<div>${t('topology.tooltip_requests')}: ${edge.metrics.requestCount}</div>`;
     }
     if (edge.metrics.avgLatency) {
-      html += `<div>平均延迟: ${edge.metrics.avgLatency.toFixed(2)}ms</div>`;
+      html += `<div>${t('topology.tooltip_avg_latency')}: ${edge.metrics.avgLatency.toFixed(2)}ms</div>`;
     }
     if (edge.metrics.errorRate !== undefined) {
       const color = edge.metrics.errorRate > 5 ? palette.error : palette.success;
-      html += `<div style="color: ${color};">错误率: ${edge.metrics.errorRate.toFixed(2)}%</div>`;
+      html += `<div style="color: ${color};">${t('topology.tooltip_error_rate')}: ${edge.metrics.errorRate.toFixed(2)}%</div>`;
     }
     html += '</div>';
   }
@@ -422,10 +429,17 @@ export function getTopologyChartHeight(data: TopologyGraph): number {
   return Math.max(500, (Math.max(1, ...counts.values()) - 1) * 112 + 150);
 }
 
+/**
+ * Build the graph option. `t` must come from the rendering component (never a
+ * module-level constant) so tooltips follow language switches; when it is
+ * omitted the layout is still built but tooltips are skipped, which keeps the
+ * pure geometry helpers usable without an i18n instance.
+ */
 export function buildChartOption(
   data: TopologyGraph,
   filters: ChartFilterOptions,
   viewportWidth = 1100,
+  t?: TFunction,
 ): echarts.EChartsOption | null {
   if (!data || (data.nodes?.length || 0) === 0) return null;
   const { selectedNodeId } = filters;
@@ -542,11 +556,12 @@ export function buildChartOption(
       trigger: 'item',
       formatter: (params) => {
         const p = params as unknown as { dataType?: string; data?: { data?: TopologyNode | TopologyEdge } };
+        if (!t) return '';
         if (p.dataType === 'node' && p.data?.data) {
-          return formatNodeTooltip(p.data.data as TopologyNode);
+          return formatNodeTooltip(p.data.data as TopologyNode, t);
         }
         if (p.dataType === 'edge' && p.data?.data) {
-          return formatEdgeTooltip(p.data.data as TopologyEdge);
+          return formatEdgeTooltip(p.data.data as TopologyEdge, t);
         }
         return '';
       },

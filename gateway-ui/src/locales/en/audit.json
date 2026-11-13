@@ -76,6 +76,7 @@
   "audit.view_diff": "View Diff",
   "audit.view_details": "View Details",
   "audit.value_comparison": "Value Comparison",
+  "audit.json_chars": "({{count}} chars)",
   "audit.version_conflict": "Version Conflict Warning",
   "audit.conflict_detected": "Version conflict detected",
   "audit.force_rollback": "Force Rollback (Skip Validation)",

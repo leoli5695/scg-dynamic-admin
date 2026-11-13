@@ -118,19 +118,19 @@ function renderConfigFields(
             <Form.Item name="authType" label={t('strategy.config.auth_type')} initialValue="JWT">
               <Select onChange={() => form.resetFields(AUTH_RESET_FIELDS)}>
                 <Select.Option value="JWT">
-                  <KeyOutlined /> JWT
+                  <KeyOutlined /> {t('strategy.auth_type.jwt')}
                 </Select.Option>
                 <Select.Option value="API_KEY">
-                  <ApiOutlined /> API Key
+                  <ApiOutlined /> {t('strategy.auth_type.api_key')}
                 </Select.Option>
                 <Select.Option value="OAUTH2">
-                  <GlobalOutlined /> OAuth2
+                  <GlobalOutlined /> {t('strategy.auth_type.oauth2')}
                 </Select.Option>
                 <Select.Option value="BASIC">
-                  <LockOutlined /> Basic
+                  <LockOutlined /> {t('strategy.auth_type.basic')}
                 </Select.Option>
                 <Select.Option value="HMAC">
-                  <SafetyOutlined /> HMAC
+                  <SafetyOutlined /> {t('strategy.auth_type.hmac')}
                 </Select.Option>
               </Select>
             </Form.Item>
@@ -187,10 +187,7 @@ function renderConfigFields(
             if (!hasLowTimeout) return null;
             return (
               <Alert
-                title={t('strategy.timeout_low_warning', {
-                  defaultValue:
-                    '超时时间设置小于100ms可能导致正常请求被误拦截，请确认是否用于测试目的',
-                })}
+                title={t('strategy.timeout_low_warning')}
                 type="warning"
                 showIcon
                 icon={<WarningOutlined />}
@@ -429,7 +426,6 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
                               ? t('strategy.global_strategy_exists_helper', {
                                   type: typeInfo.typeName,
                                   name: existingGlobal?.strategyName,
-                                  defaultValue: `已存在全局${typeInfo.typeName}策略 "${existingGlobal?.strategyName}"，请选择路由级别`,
                                 })
                               : t('strategy.scope_helper')
                           }

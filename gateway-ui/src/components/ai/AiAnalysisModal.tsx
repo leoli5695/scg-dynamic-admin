@@ -245,7 +245,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
 
               <div style={{ marginBottom: 12 }}>
                 <label style={{ display: 'block', marginBottom: 4 }}>
-                  API Key
+                  {t('services.api_key')}
                 </label>
                 <Input.Password
                   value={apiKey}
@@ -343,7 +343,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
               <Button onClick={() => setResult('')} icon={<ThunderboltOutlined />}>
                 {t('ai.reanalyze')}
               </Button>
-              <Tag color="blue" icon={<CheckCircleOutlined />}>Analysis Complete</Tag>
+              <Tag color="blue" icon={<CheckCircleOutlined />}>{t('ai.analysis_complete')}</Tag>
             </Space>
           </div>
 

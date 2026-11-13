@@ -24,6 +24,10 @@
   "plugin.category.security": "Security",
   "plugin.category.request_size": "Request Size",
   "plugin.category.other": "Other",
+  "plugin.category.traffic": "Traffic Control",
+  "plugin.category.resilience": "Resilience",
+  "plugin.category.transform": "Transform",
+  "plugin.category.observability": "Observability",
   "plugin.AddRequestHeader.desc": "Add HTTP header to downstream requests",
   "plugin.SetRequestHeader.desc": "Set (replace) HTTP header in downstream requests",
   "plugin.RemoveRequestHeader.desc": "Remove specified HTTP header from downstream requests",
@@ -214,5 +218,6 @@
   "plugin_bindings.stats_global": "Global",
   "plugin_bindings.stats_route": "Route",
   "plugin_bindings.stats_enabled": "Enabled",
-  "plugin_bindings.binding_scope": "Scope"
+  "plugin_bindings.binding_scope": "Scope",
+  "plugin_bindings.config_json_placeholder": "Enter JSON configuration"
 }

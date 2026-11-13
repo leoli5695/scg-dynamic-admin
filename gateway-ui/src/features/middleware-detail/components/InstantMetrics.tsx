@@ -2,6 +2,7 @@
  * Instant metrics panel — metrics grouped by category as statistic cards.
  */
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Card, Col, Empty, Row, Space, Statistic, Tag, Tooltip
 } from 'antd';
@@ -15,6 +16,11 @@ interface InstantMetricsProps {
 }
 
 const InstantMetrics: React.FC<InstantMetricsProps> = ({ instant }) => {
+  const { t, i18n } = useTranslation();
+  const metricName = (metric: MiddlewareDetailMetric) =>
+    (i18n.resolvedLanguage || i18n.language || 'zh').startsWith('zh')
+      ? metric.displayName
+      : metric.displayNameEn || metric.displayName;
   const groupedMetrics = useMemo(() => {
     const grouped: Record<string, MiddlewareDetailMetric[]> = {};
     for (const metric of instant ?? []) {
@@ -26,7 +32,7 @@ const InstantMetrics: React.FC<InstantMetricsProps> = ({ instant }) => {
   }, [instant]);
 
   if (!instant || instant.length === 0) {
-    return <Empty description="暂无即时指标数据" />;
+    return <Empty description={t('middleware.no_instant_metrics')} />;
   }
 
   return (
@@ -40,7 +46,7 @@ const InstantMetrics: React.FC<InstantMetricsProps> = ({ instant }) => {
             title={
               <Space>
                 {catConfig.icon}
-                <span>{catConfig.label}</span>
+                <span>{t(catConfig.labelKey)}</span>
                 <Tag color="blue">{metrics.length}</Tag>
               </Space>
             }
@@ -51,7 +57,7 @@ const InstantMetrics: React.FC<InstantMetricsProps> = ({ instant }) => {
                 const title = (
                   <Tooltip title={metric.name}>
                     <span style={{ cursor: 'help' }}>
-                      {metric.displayName}
+                      {metricName(metric)}
                       <InfoCircleOutlined style={{ marginLeft: 4, fontSize: 12, color: palette.textMuted }} />
                     </span>
                   </Tooltip>

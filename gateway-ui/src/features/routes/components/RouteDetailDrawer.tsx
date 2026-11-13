@@ -80,7 +80,7 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
             text={route.enabled ? t('common.enabled') : t('common.disabled')}
           />
           <Tag color="blue">
-            Order:
+            {t('routes.order')}:
             {' '}
             {route.order ?? 0}
           </Tag>

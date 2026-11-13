@@ -170,17 +170,17 @@ const TrafficTopologyPage: React.FC = () => {
     };
   }, []);
 
-  // Re-render the chart when data or any filter changes
+  // Re-render the chart when data, any filter or the UI language changes
   useEffect(() => {
     if (!chartInstance.current || !topology) return;
     chartInstance.current.resize();
-    const option = buildChartOption(topology, filters, chartWidth);
+    const option = buildChartOption(topology, filters, chartWidth, t);
     if (option) {
       chartInstance.current.setOption(option, { notMerge: true });
     } else {
       chartInstance.current.clear();
     }
-  }, [topology, filters, chartWidth, chartHeight]);
+  }, [topology, filters, chartWidth, chartHeight, t]);
 
   const navigateToRouteDetail = (routeId: string) => {
     setContextMenuNode(null);

@@ -81,5 +81,19 @@
   "diagnostic.metric.gatewayStatus5xxRate": "5xx Rate",
   "diagnostic.metric.adminJvmMaxMemoryMB": "Admin JVM Max (MB)",
   "diagnostic.metric.adminJvmUsedMemoryMB": "Admin JVM Used (MB)",
-  "diagnostic.metric.adminJvmMemoryUtilization": "Admin JVM Memory"
+  "diagnostic.metric.adminJvmMemoryUtilization": "Admin JVM Memory",
+  "diagnostic.score_label": "Score",
+  "diagnostic.health_line": "Health Line",
+  "diagnostic.warning_line": "Warning Line",
+  "diagnostic.error_rate_percent": "Error Rate (%)",
+  "diagnostic.heap_memory_percent": "Heap Memory (%)",
+  "diagnostic.last_1h": "Last 1 hour",
+  "diagnostic.last_6h": "Last 6 hours",
+  "diagnostic.last_12h": "Last 12 hours",
+  "diagnostic.last_24h": "Last 24 hours",
+  "diagnostic.last_3d": "Last 3 days",
+  "diagnostic.score_healthy": "(Healthy)",
+  "diagnostic.score_warning": "(Warning)",
+  "diagnostic.score_danger": "(Critical)",
+  "diagnostic.health_stable": "System health remains stable"
 }

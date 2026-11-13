@@ -6,9 +6,11 @@ import '../header-actions.css';
 const LanguageSwitcher: React.FC = () => {
   const { i18n, t } = useTranslation();
 
+  // Labels are language autonyms (intentionally not translated); descriptions
+  // follow the current UI language.
   const languages = [
-    { value: 'zh', label: '中文', description: 'Simplified Chinese' },
-    { value: 'en', label: 'English', description: '英语' },
+    { value: 'zh', label: '中文', description: t('common.language_zh_name') },
+    { value: 'en', label: 'English', description: t('common.language_en_name') },
   ];
 
   const handleChange = (value: string) => {

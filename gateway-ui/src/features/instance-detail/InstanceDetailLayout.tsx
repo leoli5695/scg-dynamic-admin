@@ -144,7 +144,7 @@ const InstanceDetailLayout: React.FC = () => {
         <Result
           status="warning"
           title={t('instance.not_found')}
-          subTitle="该实例可能已被删除或您没有访问权限"
+          subTitle={t('instance.not_found_hint')}
           extra={[
             <Button
               key="reload"
@@ -152,14 +152,14 @@ const InstanceDetailLayout: React.FC = () => {
               icon={<ReloadOutlined />}
               onClick={() => instanceRequest.run()}
             >
-              刷新页面
+              {t('common.refresh_page')}
             </Button>,
             <Button
               key="home"
               icon={<HomeOutlined />}
               onClick={() => navigate('/instances')}
             >
-              返回列表
+              {t('common.back_to_list')}
             </Button>,
           ]}
         />

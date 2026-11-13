@@ -10,6 +10,7 @@ import { PlusOutlined, DeleteOutlined, SyncOutlined, PlayCircleOutlined, UserOut
 import type { StrategyTypeField, StrategyTypeSchema, StrategyTypeSubSchema } from '../../../types/strategy';
 import type { StrategyFormValues } from '../utils';
 import { palette } from '../../../styles/palette';
+import { fieldLabel, optionLabel, fieldPlaceholder, fieldUnit, sectionText, ruleText, dimensionText } from './schemaLabels';
 
 /** i18next translate function subset used by schema renderers. */
 export type TFunc = (key: string, options?: Record<string, unknown>) => string;
@@ -39,7 +40,7 @@ export function DynamicConfigFields({ schema, form, t }: DynamicConfigFieldsProp
  * Render a single field based on its type.
  */
 function renderField(field: StrategyTypeField, _form: FormInstance, _t: TFunc): React.ReactNode {
-  const label = field.label || field.labelEn || field.name;
+  const label = fieldLabel(field);
   const colSpan = getFieldColSpan(field);
 
   switch (field.type) {
@@ -54,7 +55,7 @@ function renderField(field: StrategyTypeField, _form: FormInstance, _t: TFunc): 
             <InputNumber
               min={field.min}
               max={field.max}
-              addonAfter={field.unit}
+              addonAfter={fieldUnit(field)}
               style={{ width: '100%' }}
             />
           </Form.Item>
@@ -69,7 +70,7 @@ function renderField(field: StrategyTypeField, _form: FormInstance, _t: TFunc): 
             label={label}
             initialValue={field.default}
           >
-            <Input placeholder={field.placeholder} />
+            <Input placeholder={fieldPlaceholder(field)} />
           </Form.Item>
         </Col>
       );
@@ -82,7 +83,7 @@ function renderField(field: StrategyTypeField, _form: FormInstance, _t: TFunc): 
             label={label}
             initialValue={field.default}
           >
-            <Input.Password placeholder={field.placeholder || `your-${field.name}`} />
+            <Input.Password placeholder={fieldPlaceholder(field) || `your-${field.name}`} />
           </Form.Item>
         </Col>
       );
@@ -95,7 +96,7 @@ function renderField(field: StrategyTypeField, _form: FormInstance, _t: TFunc): 
             label={label}
             initialValue={field.default}
           >
-            <Input.TextArea rows={2} placeholder={field.placeholder} />
+            <Input.TextArea rows={2} placeholder={fieldPlaceholder(field)} />
           </Form.Item>
         </Col>
       );
@@ -111,7 +112,7 @@ function renderField(field: StrategyTypeField, _form: FormInstance, _t: TFunc): 
             <Select>
               {field.options?.map((opt) => (
                 <Select.Option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {optionLabel(opt)}
                 </Select.Option>
               ))}
             </Select>
@@ -203,7 +204,7 @@ export function AuthSubSchemaFields({ schema, form, t }: DynamicConfigFieldsProp
         if (field.name === 'basicUsername') {
           return (
             <Col span={12} key={field.name}>
-              <Form.Item name={field.name} label={field.label || field.name}>
+              <Form.Item name={field.name} label={fieldLabel(field)}>
                 <Input prefix={<UserOutlined />} placeholder={`your-${field.name}`} />
               </Form.Item>
             </Col>
@@ -212,8 +213,8 @@ export function AuthSubSchemaFields({ schema, form, t }: DynamicConfigFieldsProp
         if (field.name === 'secretKey' && authType !== 'HMAC') {
           return (
             <Col span={12} key={field.name}>
-              <Form.Item name={field.name} label={field.label || field.name}>
-                <Input.Password placeholder="your-secret-key" />
+              <Form.Item name={field.name} label={fieldLabel(field)}>
+                <Input.Password placeholder={t('strategy.config.secret_key_placeholder')} />
               </Form.Item>
             </Col>
           );
@@ -253,7 +254,7 @@ function getDimensionDefaults(
 export function MultiDimRateLimiterFields({ schema, form, t }: DynamicConfigFieldsProps) {
   const dimensionOptions = schema?.dimensionOptions || [];
   const subSchemas = schema?.subSchemas || {};
-  const dimensionLabel = schema?.dimensionLabel || '维度';
+  const dimensionLabel = dimensionText(schema ?? {}) || t('strategy.config.dimension');
 
   // Handler for adding a new dimension with defaults
   const handleAddDimension = (add: (value: StrategyFormValues) => void) => {
@@ -271,7 +272,7 @@ export function MultiDimRateLimiterFields({ schema, form, t }: DynamicConfigFiel
         </Row>
       )}
 
-      <Divider>{t('strategy.config.dimensions', { defaultValue: '限流维度配置' })}</Divider>
+      <Divider>{t('strategy.config.dimensions')}</Divider>
 
       {/* Dynamic dimension cards */}
       <Form.List name="dimensions">
@@ -313,7 +314,7 @@ export function MultiDimRateLimiterFields({ schema, form, t }: DynamicConfigFiel
                     >
                       {dimensionOptions.map((opt) => (
                         <Select.Option key={opt.value} value={opt.value}>
-                          {opt.label}
+                          {optionLabel(opt)}
                         </Select.Option>
                       ))}
                     </Select>
@@ -353,7 +354,7 @@ export function MultiDimRateLimiterFields({ schema, form, t }: DynamicConfigFiel
               block
               icon={<PlusOutlined />}
             >
-              {t('strategy.config.add_dimension', { defaultValue: '添加限流维度' })}
+              {t('strategy.config.add_dimension')}
             </Button>
           </>
         )}
@@ -372,7 +373,7 @@ function renderDimensionField(
   name: number,
   _t: TFunc,
 ): React.ReactNode {
-  const label = field.label || field.name;
+  const label = fieldLabel(field);
   const colSpan = getFieldColSpan(field);
 
   switch (field.type) {
@@ -399,7 +400,7 @@ function renderDimensionField(
             name={[name, field.name]}
             label={label}
           >
-            <Input placeholder={field.placeholder} />
+            <Input placeholder={fieldPlaceholder(field)} />
           </Form.Item>
         </Col>
       );
@@ -414,7 +415,7 @@ function renderDimensionField(
             <Select>
               {field.options?.map((opt) => (
                 <Select.Option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {optionLabel(opt)}
                 </Select.Option>
               ))}
             </Select>
@@ -475,7 +476,7 @@ function renderRuleField(
 ): React.ReactNode {
   if (hidden) return null;
 
-  const label = field.label || field.name;
+  const label = fieldLabel(field);
   const colSpan = getFieldColSpan(field);
 
   switch (field.type) {
@@ -489,7 +490,7 @@ function renderRuleField(
             <InputNumber
               min={field.min}
               max={field.max}
-              addonAfter={field.unit}
+              addonAfter={fieldUnit(field)}
               style={{ width: '100%' }}
             />
           </Form.Item>
@@ -503,7 +504,7 @@ function renderRuleField(
             name={[name, field.name]}
             label={label}
           >
-            <Input placeholder={field.placeholder} />
+            <Input placeholder={fieldPlaceholder(field)} />
           </Form.Item>
         </Col>
       );
@@ -518,7 +519,7 @@ function renderRuleField(
             <Select style={{ width: '100%' }}>
               {field.options?.map((opt) => (
                 <Select.Option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {optionLabel(opt)}
                 </Select.Option>
               ))}
             </Select>
@@ -546,7 +547,7 @@ function renderRuleField(
             name={[name, field.name]}
             label={label}
           >
-            <Input placeholder={field.placeholder} />
+            <Input placeholder={fieldPlaceholder(field)} />
           </Form.Item>
         </Col>
       );
@@ -577,7 +578,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
           title={
             <Space>
               <SyncOutlined />
-              <span>{subSchemas.protocolTransform.sectionLabel || '协议转换配置'}</span>
+              <span>{sectionText(subSchemas.protocolTransform) || t('strategy.config.protocol_transform')}</span>
             </Space>
           }
         >
@@ -587,7 +588,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => {
               const enabled = getFieldValue(['protocolTransform', 'enabled']);
-              if (!enabled) return <span style={{ color: palette.textMuted }}>启用后可配置协议转换选项</span>;
+              if (!enabled) return <span style={{ color: palette.textMuted }}>{t('strategy.config.protocol_transform_disabled_hint')}</span>;
               return (
                 <Row gutter={16}>
                   {subSchemas.protocolTransform.fields
@@ -612,7 +613,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
           title={
             <Space>
               <SyncOutlined />
-              <span>{subSchemas.fieldMapping.sectionLabel || '字段映射配置'}</span>
+              <span>{sectionText(subSchemas.fieldMapping) || t('strategy.config.field_mapping')}</span>
             </Space>
           }
         >
@@ -625,7 +626,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
                     size="small"
                     type="inner"
                     style={{ marginBottom: 8, background: palette.bgElevated }}
-                    title={`${subSchemas.fieldMapping.ruleLabel || '映射规则'} ${name + 1}`}
+                    title={`${ruleText(subSchemas.fieldMapping) || t('strategy.config.mapping_rule')} ${name + 1}`}
                     extra={
                       <Button
                         type="text"
@@ -649,7 +650,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
                   icon={<PlusOutlined />}
                   onClick={() => add(getRuleDefaults(subSchemas.fieldMapping.ruleFields || []))}
                 >
-                  {t('strategy.config.add_mapping_rule', { defaultValue: '添加映射规则' })}
+                  {t('strategy.config.add_mapping_rule')}
                 </Button>
               </>
             )}
@@ -665,7 +666,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
           title={
             <Space>
               <SyncOutlined />
-              <span>{subSchemas.dataMasking.sectionLabel || '数据脱敏配置'}</span>
+              <span>{sectionText(subSchemas.dataMasking) || t('strategy.config.data_masking')}</span>
             </Space>
           }
         >
@@ -678,7 +679,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
                     size="small"
                     type="inner"
                     style={{ marginBottom: 8, background: palette.bgElevated }}
-                    title={`${subSchemas.dataMasking.ruleLabel || '脱敏规则'} ${name + 1}`}
+                    title={`${ruleText(subSchemas.dataMasking) || t('strategy.config.masking_rule')} ${name + 1}`}
                     extra={
                       <Button
                         type="text"
@@ -717,7 +718,7 @@ export function RequestTransformFields({ schema, form, t }: DynamicConfigFieldsP
                   icon={<PlusOutlined />}
                   onClick={() => add(getRuleDefaults(subSchemas.dataMasking.ruleFields || []))}
                 >
-                  {t('strategy.config.add_masking_rule', { defaultValue: '添加脱敏规则' })}
+                  {t('strategy.config.add_masking_rule')}
                 </Button>
               </>
             )}
@@ -752,7 +753,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
           title={
             <Space>
               <SyncOutlined />
-              <span>{subSchemas.protocolTransform.sectionLabel || '协议转换配置'}</span>
+              <span>{sectionText(subSchemas.protocolTransform) || t('strategy.config.protocol_transform')}</span>
             </Space>
           }
         >
@@ -762,7 +763,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => {
               const enabled = getFieldValue(['protocolTransform', 'enabled']);
-              if (!enabled) return <span style={{ color: palette.textMuted }}>启用后可配置协议转换选项</span>;
+              if (!enabled) return <span style={{ color: palette.textMuted }}>{t('strategy.config.protocol_transform_disabled_hint')}</span>;
               return (
                 <Row gutter={16}>
                   {subSchemas.protocolTransform.fields
@@ -787,7 +788,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
           title={
             <Space>
               <SyncOutlined />
-              <span>{subSchemas.fieldMapping.sectionLabel || '字段映射配置'}</span>
+              <span>{sectionText(subSchemas.fieldMapping) || t('strategy.config.field_mapping')}</span>
             </Space>
           }
         >
@@ -800,7 +801,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
                     size="small"
                     type="inner"
                     style={{ marginBottom: 8, background: palette.bgElevated }}
-                    title={`${subSchemas.fieldMapping.ruleLabel || '映射规则'} ${name + 1}`}
+                    title={`${ruleText(subSchemas.fieldMapping) || t('strategy.config.mapping_rule')} ${name + 1}`}
                     extra={
                       <Button
                         type="text"
@@ -824,7 +825,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
                   icon={<PlusOutlined />}
                   onClick={() => add(getRuleDefaults(subSchemas.fieldMapping.ruleFields || []))}
                 >
-                  {t('strategy.config.add_mapping_rule', { defaultValue: '添加映射规则' })}
+                  {t('strategy.config.add_mapping_rule')}
                 </Button>
               </>
             )}
@@ -840,7 +841,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
           title={
             <Space>
               <SyncOutlined />
-              <span>{subSchemas.dataMasking.sectionLabel || '数据脱敏配置'}</span>
+              <span>{sectionText(subSchemas.dataMasking) || t('strategy.config.data_masking')}</span>
             </Space>
           }
         >
@@ -853,7 +854,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
                     size="small"
                     type="inner"
                     style={{ marginBottom: 8, background: palette.bgElevated }}
-                    title={`${subSchemas.dataMasking.ruleLabel || '脱敏规则'} ${name + 1}`}
+                    title={`${ruleText(subSchemas.dataMasking) || t('strategy.config.masking_rule')} ${name + 1}`}
                     extra={
                       <Button
                         type="text"
@@ -892,7 +893,7 @@ export function ResponseTransformFields({ schema, form, t }: DynamicConfigFields
                   icon={<PlusOutlined />}
                   onClick={() => add(getRuleDefaults(subSchemas.dataMasking.ruleFields || []))}
                 >
-                  {t('strategy.config.add_masking_rule', { defaultValue: '添加脱敏规则' })}
+                  {t('strategy.config.add_masking_rule')}
                 </Button>
               </>
             )}
@@ -912,7 +913,7 @@ function renderNestedField(
   _form: FormInstance,
   _t: TFunc,
 ): React.ReactNode {
-  const label = field.label || field.name;
+  const label = fieldLabel(field);
   const colSpan = getFieldColSpan(field);
 
   switch (field.type) {
@@ -927,7 +928,7 @@ function renderNestedField(
             <InputNumber
               min={field.min}
               max={field.max}
-              addonAfter={field.unit}
+              addonAfter={fieldUnit(field)}
               style={{ width: '100%' }}
             />
           </Form.Item>
@@ -942,7 +943,7 @@ function renderNestedField(
             label={label}
             initialValue={field.default}
           >
-            <Input placeholder={field.placeholder} />
+            <Input placeholder={fieldPlaceholder(field)} />
           </Form.Item>
         </Col>
       );
@@ -958,7 +959,7 @@ function renderNestedField(
             <Select style={{ width: '100%' }}>
               {field.options?.map((opt) => (
                 <Select.Option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {optionLabel(opt)}
                 </Select.Option>
               ))}
             </Select>
@@ -988,7 +989,7 @@ function renderNestedField(
             label={label}
             initialValue={field.default}
           >
-            <Input placeholder={field.placeholder} />
+            <Input placeholder={fieldPlaceholder(field)} />
           </Form.Item>
         </Col>
       );
@@ -1025,7 +1026,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                   title={
                     <Space>
                       <PlayCircleOutlined />
-                      <span>{subSchemas.staticMock.sectionLabel || '静态Mock配置'}</span>
+                      <span>{sectionText(subSchemas.staticMock) || t('strategy.config.static_mock')}</span>
                     </Space>
                   }
                 >
@@ -1047,7 +1048,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                   title={
                     <Space>
                       <PlayCircleOutlined />
-                      <span>{subSchemas.dynamicMock.sectionLabel || '动态Mock配置'}</span>
+                      <span>{sectionText(subSchemas.dynamicMock) || t('strategy.config.dynamic_mock')}</span>
                     </Space>
                   }
                 >
@@ -1060,7 +1061,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                             size="small"
                             type="inner"
                             style={{ marginBottom: 8, background: palette.bgElevated }}
-                            title={`${subSchemas.dynamicMock.ruleLabel || '条件规则'} ${name + 1}`}
+                            title={`${ruleText(subSchemas.dynamicMock) || t('strategy.config.condition_rule')} ${name + 1}`}
                             extra={
                               <Button
                                 type="text"
@@ -1084,7 +1085,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                           icon={<PlusOutlined />}
                           onClick={() => add(getRuleDefaults(subSchemas.dynamicMock.ruleFields || []))}
                         >
-                          {t('strategy.config.add_condition', { defaultValue: '添加条件规则' })}
+                          {t('strategy.config.add_condition')}
                         </Button>
                       </>
                     )}
@@ -1100,7 +1101,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                   title={
                     <Space>
                       <PlayCircleOutlined />
-                      <span>{subSchemas.templateMock.sectionLabel || '模板Mock配置'}</span>
+                      <span>{sectionText(subSchemas.templateMock) || t('strategy.config.template_mock')}</span>
                     </Space>
                   }
                 >
@@ -1122,7 +1123,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                   title={
                     <Space>
                       <SyncOutlined />
-                      <span>{subSchemas.delay.sectionLabel || '延迟模拟配置'}</span>
+                      <span>{sectionText(subSchemas.delay) || t('strategy.config.delay_simulation')}</span>
                     </Space>
                   }
                 >
@@ -1132,7 +1133,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                   <Form.Item noStyle shouldUpdate>
                     {({ getFieldValue }) => {
                       const enabled = getFieldValue(['delay', 'enabled']);
-                      if (!enabled) return <span style={{ color: palette.textMuted }}>启用后可配置延迟模拟</span>;
+                      if (!enabled) return <span style={{ color: palette.textMuted }}>{t('strategy.config.delay_simulation_disabled_hint')}</span>;
                       return (
                         <Row gutter={16}>
                           {subSchemas.delay.fields
@@ -1157,7 +1158,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                   title={
                     <Space>
                       <SyncOutlined />
-                      <span>{subSchemas.errorSimulation.sectionLabel || '错误模拟配置'}</span>
+                      <span>{sectionText(subSchemas.errorSimulation) || t('strategy.config.error_simulation')}</span>
                     </Space>
                   }
                 >
@@ -1167,7 +1168,7 @@ export function MockResponseFields({ schema, form, t }: DynamicConfigFieldsProps
                   <Form.Item noStyle shouldUpdate>
                     {({ getFieldValue }) => {
                       const enabled = getFieldValue(['errorSimulation', 'enabled']);
-                      if (!enabled) return <span style={{ color: palette.textMuted }}>启用后可配置错误模拟</span>;
+                      if (!enabled) return <span style={{ color: palette.textMuted }}>{t('strategy.config.error_simulation_disabled_hint')}</span>;
                       return (
                         <Row gutter={16}>
                           {subSchemas.errorSimulation.fields

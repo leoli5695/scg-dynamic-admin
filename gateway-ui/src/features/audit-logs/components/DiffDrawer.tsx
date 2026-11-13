@@ -34,6 +34,7 @@ interface DiffDrawerProps {
 const JsonValue: React.FC<{ value: unknown; maxHeight?: number; noneLabel: string }> = ({
   value, maxHeight = 200, noneLabel,
 }) => {
+  const { t } = useTranslation();
   const jsonStr = value ? JSON.stringify(value, null, 2) : null;
   if (!jsonStr) return <Text type="secondary">{noneLabel}</Text>;
   const isLarge = jsonStr.length > 500;
@@ -41,7 +42,7 @@ const JsonValue: React.FC<{ value: unknown; maxHeight?: number; noneLabel: strin
     <Collapse ghost size="small" items={[
       {
         key: '1',
-        label: <Text type="secondary">({jsonStr.length} chars)</Text>,
+        label: <Text type="secondary">{t('audit.json_chars', { count: jsonStr.length })}</Text>,
         children: (
           <pre style={{ margin: 0, fontSize: 11, maxHeight, overflow: 'auto', padding: 8, borderRadius: 4 }}>
             {jsonStr}

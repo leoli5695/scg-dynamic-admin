@@ -124,7 +124,7 @@ function Workbench({ route }: { route: RouteResponse }) {
       </Card>
       <Card title={t('routes.debug_response')} extra={busy && <Spin size="small" />}>
         <Space wrap>{meta && <Tag color={meta.status! >= 400 ? 'red' : 'green'}>HTTP {meta.status}</Tag>}{meta?.firstByteMs !== undefined && <Text type="secondary">{t('routes.debug_first_byte')}: {meta.firstByteMs}ms</Text>}{completion?.durationMs !== undefined && <Text type="secondary">{t('routes.debug_duration')}: {completion.durationMs}ms</Text>}</Space>
-        {traceId && <div className="route-debug-trace"><Text type="secondary">Trace ID: </Text><Text code copyable>{traceId}</Text></div>}
+        {traceId && <div className="route-debug-trace"><Text type="secondary">{t('access_log.trace_id')}: </Text><Text code copyable>{traceId}</Text></div>}
         {traceId && <Space wrap style={{ marginBottom: 16 }}>
           <Button type="primary" onClick={() => navigate(requestJourneyUrl(instanceId, traceId, route.id))}>{t('journey.inspect')}</Button>
           <Button onClick={() => navigate(routeConfigurationUrl(instanceId, matchedRoute || route.id))}>{t('journey.openConfiguration')}</Button>

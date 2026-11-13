@@ -3,9 +3,9 @@ import '../instance-detail/operations-ui.css';
  * Middleware detail page (opened in a new tab from the middleware drawer).
  * Reads serviceName / middlewareType / exporterUrl from the query string,
  * loads instant + trend metrics and supports optional auto-refresh.
- * Strings stay in Chinese to match the legacy page (it was never i18n-ed).
  */
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Button, Col, Empty, Row, Select, Space, Spin, Tabs, Tag, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
@@ -34,16 +34,18 @@ const TIME_RANGE_SECONDS: Record<string, number> = {
   '24h': 86400,
 };
 
-const REFRESH_OPTIONS = [
-  { value: 0, label: '不自动刷新' },
-  { value: 10, label: '每10秒' },
-  { value: 30, label: '每30秒' },
-  { value: 60, label: '每1分钟' },
-];
-
 const MiddlewareDetailPage: React.FC = () => {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // 自动刷新选项（在组件内构建，保证切换语言时即时刷新）
+  const REFRESH_OPTIONS = [
+    { value: 0, label: t('middleware.refresh_off') },
+    { value: 10, label: t('middleware.refresh_10s') },
+    { value: 30, label: t('middleware.refresh_30s') },
+    { value: 60, label: t('middleware.refresh_1m') },
+  ];
 
   // URL 参数
   const serviceName = searchParams.get('serviceName') || '';
@@ -71,7 +73,7 @@ const MiddlewareDetailPage: React.FC = () => {
         { signal },
       );
       if (!res) {
-        throw new Error('加载指标失败');
+        throw new Error(t('middleware.load_metrics_failed'));
       }
       return res;
     },
@@ -80,15 +82,15 @@ const MiddlewareDetailPage: React.FC = () => {
       paused: !ready || refreshInterval === 0,
       intervalMs: refreshInterval > 0 ? refreshInterval * 1000 : 60_000,
       deps: [serviceName, middlewareType, exporterUrl, timeRange],
-      onError: (err) => message.error(`加载指标失败: ${err.message}`),
+      onError: (err) => message.error(t('middleware.load_metrics_failed_error', { error: err.message })),
     },
   );
 
   const data = detailRequest.data;
 
   const trendItems = useMemo(
-    () => buildTrendItems(data?.trend?.timeSeries, data?.trend?.summary, middlewareType),
-    [data, middlewareType],
+    () => buildTrendItems(t, data?.trend?.timeSeries, data?.trend?.summary, middlewareType),
+    [data, middlewareType, t],
   );
 
   return (
@@ -98,7 +100,7 @@ const MiddlewareDetailPage: React.FC = () => {
         <Row align="middle" gutter={16}>
           <Col>
             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
-              返回
+              {t('common.back')}
             </Button>
           </Col>
           <Col>
@@ -124,7 +126,7 @@ const MiddlewareDetailPage: React.FC = () => {
                 onClick={detailRequest.run}
                 loading={detailRequest.loading}
               >
-                刷新
+                {t('middleware.refresh')}
               </Button>
             </Space>
           </Col>
@@ -134,9 +136,9 @@ const MiddlewareDetailPage: React.FC = () => {
       {/* 主内容 */}
       <Spin spinning={detailRequest.loading}>
         {!ready ? (
-          <Empty description="缺少必要参数，请从中间件列表页面进入" />
+          <Empty description={t('middleware.missing_params')} />
         ) : !data ? (
-          <Empty description="暂无数据" />
+          <Empty description={t('middleware.no_data')} />
         ) : (
           <>
             {/* 健康状态面板 */}
@@ -157,12 +159,12 @@ const MiddlewareDetailPage: React.FC = () => {
               items={[
                 {
                   key: 'instant',
-                  label: <Space><DashboardOutlined />即时指标</Space>,
+                  label: <Space><DashboardOutlined />{t('middleware.instant_metrics')}</Space>,
                   children: <InstantMetrics instant={data.instant} />,
                 },
                 {
                   key: 'trend',
-                  label: <Space><LineChartOutlined />时间趋势</Space>,
+                  label: <Space><LineChartOutlined />{t('middleware.time_trend')}</Space>,
                   children: (
                     <TrendCharts
                       trendItems={trendItems}
@@ -173,10 +175,10 @@ const MiddlewareDetailPage: React.FC = () => {
                 },
                 {
                   key: 'info',
-                  label: <Space><InfoCircleOutlined />指标说明</Space>,
+                  label: <Space><InfoCircleOutlined />{t('middleware.metrics_info')}</Space>,
                   children: data.supportedMetrics
                     ? <SupportedMetricsInfo info={data.supportedMetrics} />
-                    : <Empty description="暂无指标说明" />,
+                    : <Empty description={t('middleware.no_metrics_info')} />,
                 },
               ]}
             />

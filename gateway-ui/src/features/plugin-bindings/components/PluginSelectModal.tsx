@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { BUILTIN_JAR_PATH } from '../../../types/plugin';
 import type { Plugin } from '../../../types/plugin';
 import { getPluginDescription } from '../../plugins/utils';
-import { CATEGORY_LABELS, getCategoryDesign, getPluginIcon } from '../utils';
+import { getCategoryDesign, getCategoryLabel, getPluginIcon } from '../utils';
 import { palette, withAlpha } from '../../../styles/palette';
 
 const { Text } = Typography;
@@ -89,6 +89,7 @@ const PluginSelectModal: React.FC<PluginSelectModalProps> = ({
         ) : (
           Object.entries(pluginsByCategory).map(([category, categoryPlugins]) => {
             const design = getCategoryDesign(category);
+            const categoryLabel = getCategoryLabel(category, t);
             return (
               <div key={category} style={{ marginBottom: 24 }}>
                 <Divider style={{ margin: '0 0 16px 0' }}>
@@ -102,7 +103,7 @@ const PluginSelectModal: React.FC<PluginSelectModalProps> = ({
                       fontSize: 13,
                     }}
                   >
-                    {category} / {CATEGORY_LABELS[category] || category}
+                    {categoryLabel === category ? category : `${category} / ${categoryLabel}`}
                   </Tag>
                 </Divider>
                 <Row gutter={[16, 16]}>
@@ -206,7 +207,7 @@ const PluginSelectModal: React.FC<PluginSelectModalProps> = ({
                                 padding: '2px 8px',
                               }}
                             >
-                              {CATEGORY_LABELS[plugin.category] || plugin.category}
+                              {getCategoryLabel(plugin.category, t)}
                             </Tag>
                             {plugin.jarPath !== BUILTIN_JAR_PATH && (
                               <Tag

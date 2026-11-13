@@ -93,7 +93,7 @@ const AppShell: React.FC = () => {
         <div className="sidebar-header">
           <div className="sidebar-logo">
             <GatewayLogo className="logo-icon" style={{ width: 28, height: 28 }} />
-            {!collapsed && <span className="logo-text">API Gateway</span>}
+            {!collapsed && <span className="logo-text">{t('app.title')}</span>}
           </div>
         </div>
         <Menu
@@ -169,7 +169,7 @@ const AppShell: React.FC = () => {
               {' '}
               {new Date().getFullYear()}
               {' '}
-              leoli. All rights reserved.
+              {t('app.copyright')}
             </p>
           </footer>
         )}

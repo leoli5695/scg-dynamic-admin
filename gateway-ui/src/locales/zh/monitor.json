@@ -71,6 +71,7 @@
   "monitor.tab_cpu": "CPU",
   "monitor.tab_http": "HTTP 请求",
   "monitor.tab_routes": "路由",
+  "monitor.no_data": "暂无数据",
   "monitor.routes_no_data": "暂无路由指标数据",
   "monitor.routes_no_data_desc": "在选定时间范围内未找到路由级别指标，请确保网关正在接收请求。",
   "monitor.route_uri": "URI",

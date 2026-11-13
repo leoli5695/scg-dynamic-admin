@@ -3,6 +3,7 @@
  */
 import React from 'react';
 import { Input, InputNumber, Select, Switch } from 'antd';
+import { useTranslation } from 'react-i18next';
 import type { PluginConfigField } from '../../../types/plugin';
 
 interface ConfigFieldInputProps {
@@ -21,6 +22,8 @@ const ConfigFieldInput: React.FC<ConfigFieldInputProps> = ({
   onChange = () => {},
   ...accessibility
 }) => {
+  const { t } = useTranslation();
+
   switch (field.type) {
     case 'number':
       return (
@@ -63,7 +66,7 @@ const ConfigFieldInput: React.FC<ConfigFieldInputProps> = ({
             }
           }}
           rows={4}
-          placeholder="Enter JSON configuration"
+          placeholder={t('plugin_bindings.config_json_placeholder')}
         />
       );
     default:

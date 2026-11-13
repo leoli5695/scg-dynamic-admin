@@ -61,13 +61,13 @@ const FilterChainPage: React.FC = () => {
         const record = await getFilterChainTrace(instanceId, deepTraceId);
         if (active && record) setSelectedRecord(record);
       } catch (e) {
-        if (active) setError(e instanceof Error ? e.message : 'Trace not found');
+        if (active) setError(e instanceof Error ? e.message : t('filterChain.trace_not_found'));
       } finally {
         if (active) setLoading(false);
       }
     })();
     return () => { active = false; };
-  }, [instanceId, deepTraceId]);
+  }, [instanceId, deepTraceId, t]);
 
   // Auto refresh
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -134,7 +134,7 @@ const FilterChainPage: React.FC = () => {
         if (key === 'r') {
           e.preventDefault();
           loadData();
-          message.success('数据已刷新');
+          message.success(t('filterChain.data_refreshed'));
           return;
         }
         if (key === 'e') {
@@ -145,7 +145,7 @@ const FilterChainPage: React.FC = () => {
         if (key === 'a') {
           e.preventDefault();
           setAutoRefresh(!autoRefresh);
-          message.info(autoRefresh ? '自动刷新已关闭' : '自动刷新已开启');
+          message.info(autoRefresh ? t('filterChain.auto_refresh_disabled') : t('filterChain.auto_refresh_enabled'));
         }
         return;
       }
@@ -158,7 +158,7 @@ const FilterChainPage: React.FC = () => {
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [autoRefresh, loadData]);
+  }, [autoRefresh, loadData, t]);
 
   const searchTrace = async () => {
     if (!searchTraceId.trim()) return;
@@ -167,7 +167,7 @@ const FilterChainPage: React.FC = () => {
       const record = await getFilterChainTrace(instanceId, searchTraceId.trim());
       setSelectedRecord(record);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Trace not found');
+      setError(e instanceof Error ? e.message : t('filterChain.trace_not_found'));
     } finally {
       setLoading(false);
     }
@@ -177,10 +177,10 @@ const FilterChainPage: React.FC = () => {
     try {
       await clearFilterChainStats(instanceId);
       loadData();
-      message.success('统计数据已清空');
+      message.success(t('filterChain.stats_cleared'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to clear stats');
-      message.error('清空失败');
+      setError(e instanceof Error ? e.message : t('filterChain.clear_stats_failed'));
+      message.error(t('filterChain.clear_failed'));
     }
   };
 
@@ -203,7 +203,7 @@ const FilterChainPage: React.FC = () => {
       // Fallback: open in a new window for manual save
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
-      message.warning('请在新窗口中右键保存文件');
+      message.warning(t('filterChain.save_in_new_window'));
     }
   };
 
@@ -248,13 +248,13 @@ const FilterChainPage: React.FC = () => {
       const filename = `filter-chain-stats-${Date.now()}.json`;
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       downloadBlob(blob, filename);
-      message.success(`JSON文件已导出 (${filename})，请查看浏览器下载目录`);
+      message.success(t('filterChain.export_json_success', { filename }));
     } else {
       const filename = `filter-chain-stats-${Date.now()}.csv`;
       const csvContent = convertToCSV(filterStats);
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       downloadBlob(blob, filename);
-      message.success(`CSV文件已导出 (${filename})，请查看浏览器下载目录`);
+      message.success(t('filterChain.export_csv_success', { filename }));
     }
 
     setShowExportModal(false);
@@ -263,12 +263,12 @@ const FilterChainPage: React.FC = () => {
   // Export the waterfall chart as a PNG image
   const exportChartAsImage = async () => {
     if (!waterfallChartRef.current) {
-      message.error('瀑布图组件未加载，请先点击详情查看瀑布图');
+      message.error(t('filterChain.waterfall_not_loaded'));
       return;
     }
 
     try {
-      message.loading({ content: '正在生成图片...', key: 'exportImage' });
+      message.loading({ content: t('filterChain.generating_image'), key: 'exportImage' });
 
       const canvas = await html2canvas(waterfallChartRef.current, {
         backgroundColor: palette.bgBase,
@@ -301,10 +301,10 @@ const FilterChainPage: React.FC = () => {
 
       const filename = `filter-waterfall-chart-${Date.now()}.png`;
       downloadBlob(imageBlob, filename);
-      message.success({ content: `瀑布图已导出 (${filename})，请查看浏览器下载目录`, key: 'exportImage' });
+      message.success({ content: t('filterChain.export_image_success', { filename }), key: 'exportImage' });
       setShowExportModal(false);
     } catch (e) {
-      message.error({ content: '导出图片失败', key: 'exportImage' });
+      message.error({ content: t('filterChain.export_image_failed'), key: 'exportImage' });
       logger.error('Export image error:', e);
     }
   };
@@ -358,7 +358,7 @@ const FilterChainPage: React.FC = () => {
       },
     },
     {
-      title: '自身耗时',
+      title: t('filterChain.self_time'),
       dataIndex: 'avgSelfTimeMs',
       key: 'avgSelfTimeMs',
       width: 120,
@@ -370,7 +370,7 @@ const FilterChainPage: React.FC = () => {
       },
     },
     {
-      title: 'P95耗时',
+      title: t('filterChain.p95_latency'),
       dataIndex: 'selfP95Ms',
       key: 'selfP95Ms',
       width: 120,
@@ -382,7 +382,7 @@ const FilterChainPage: React.FC = () => {
       },
     },
     {
-      title: 'P99耗时',
+      title: t('filterChain.p99_latency'),
       dataIndex: 'selfP99Ms',
       key: 'selfP99Ms',
       width: 120,
@@ -391,14 +391,14 @@ const FilterChainPage: React.FC = () => {
         const value = parseFloat(ms);
         const color = value < 10 ? 'green' : value < 50 ? 'orange' : 'red';
         return (
-          <Tooltip title="99%请求的性能上限">
+          <Tooltip title={t('filterChain.p99_tooltip')}>
             <Tag color={color}>{value.toFixed(2)}ms</Tag>
           </Tooltip>
         );
       },
     },
     {
-      title: '最佳性能',
+      title: t('filterChain.best_performance'),
       dataIndex: 'minSelfTimeMicros',
       key: 'minSelfTimeMicros',
       width: 120,
@@ -486,7 +486,7 @@ const FilterChainPage: React.FC = () => {
       render: (order: number) => <Tag>{order}</Tag>,
     },
     {
-      title: '自身耗时',
+      title: t('filterChain.self_time'),
       dataIndex: 'selfTimeMs',
       key: 'selfTimeMs',
       width: 120,
@@ -507,7 +507,7 @@ const FilterChainPage: React.FC = () => {
       },
     },
     {
-      title: '下游耗时',
+      title: t('filterChain.downstream_time'),
       dataIndex: 'downstreamMs',
       key: 'downstreamMs',
       width: 120,
@@ -531,7 +531,7 @@ const FilterChainPage: React.FC = () => {
           : `${selfTime.toFixed(3)}ms`;
 
         return (
-          <Tooltip title={`自身: ${selfTimeDisplay} | 下游: ${downstreamTime.toFixed(2)}ms`}>
+          <Tooltip title={t('filterChain.duration_breakdown', { self: selfTimeDisplay, downstream: downstreamTime.toFixed(2) })}>
             <Text>
               {totalTime.toFixed(2)}ms
             </Text>
@@ -592,33 +592,33 @@ const FilterChainPage: React.FC = () => {
           {t('filterChain.title')}
         </Title>
         <Space>
-          <Tooltip title="Ctrl+A快捷键">
+          <Tooltip title={t('filterChain.shortcut_a_hint')}>
             <Space>
               <Switch
-                checkedChildren="自动"
-                unCheckedChildren="手动"
+                checkedChildren={t('filterChain.auto')}
+                unCheckedChildren={t('filterChain.manual')}
                 checked={autoRefresh}
                 onChange={setAutoRefresh}
               />
               {autoRefresh && (
                 <Select value={refreshInterval} onChange={setRefreshInterval} style={{ width: 80 }}>
-                  <Select.Option value={3000}>3秒</Select.Option>
-                  <Select.Option value={5000}>5秒</Select.Option>
-                  <Select.Option value={10000}>10秒</Select.Option>
-                  <Select.Option value={30000}>30秒</Select.Option>
+                  <Select.Option value={3000}>{t('filterChain.refresh_3s')}</Select.Option>
+                  <Select.Option value={5000}>{t('filterChain.refresh_5s')}</Select.Option>
+                  <Select.Option value={10000}>{t('filterChain.refresh_10s')}</Select.Option>
+                  <Select.Option value={30000}>{t('filterChain.refresh_30s')}</Select.Option>
                 </Select>
               )}
             </Space>
           </Tooltip>
 
-          <Tooltip title="性能阈值配置">
+          <Tooltip title={t('filterChain.performance_threshold_config')}>
             <Button icon={<SettingOutlined />} onClick={() => setShowThresholdModal(true)}>
-              阈值
+              {t('filterChain.threshold')}
             </Button>
           </Tooltip>
 
           <Button icon={<DownloadOutlined />} onClick={() => setShowExportModal(true)}>
-            导出
+            {t('filterChain.export')}
           </Button>
 
           <Input
@@ -630,7 +630,7 @@ const FilterChainPage: React.FC = () => {
             style={{ width: 250 }}
           />
 
-          <Tooltip title="Ctrl+R快捷键">
+          <Tooltip title={t('filterChain.shortcut_r_hint')}>
             <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>
               {t('common.refresh')}
             </Button>
@@ -652,12 +652,12 @@ const FilterChainPage: React.FC = () => {
 
       {/* Data source notice */}
       <Alert
-        title="数据来源说明"
+        title={t('filterChain.data_source_title')}
         description={(
           <Space orientation="vertical" size={0}>
-            <Text style={{ fontSize: 12 }}>• 数据来源：网关实例内存实时数据，不持久化到数据库</Text>
-            <Text style={{ fontSize: 12 }}>• 历史窗口：保留最近60分钟的性能快照（每分钟采集一次）</Text>
-            <Text style={{ fontSize: 12 }}>• 重启影响：网关实例重启后，统计数据和历史记录将清空</Text>
+            <Text style={{ fontSize: 12 }}>{t('filterChain.data_source_note')}</Text>
+            <Text style={{ fontSize: 12 }}>{t('filterChain.history_window_note')}</Text>
+            <Text style={{ fontSize: 12 }}>{t('filterChain.restart_impact_note')}</Text>
           </Space>
         )}
         type="info"
@@ -714,19 +714,19 @@ const FilterChainPage: React.FC = () => {
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={24} sm={12}>
           <Card
-            title="性能分布分析"
+            title={t('filterChain.performance_analysis')}
             size="small"
             style={{ background: palette.bgCard }}
             extra={(
               <Space>
-                <Tooltip title="历史趋势图">
+                <Tooltip title={t('filterChain.history_chart')}>
                   <Button
                     size="small"
                     icon={<ClockCircleOutlined />}
                     onClick={() => setShowHistoryChart(!showHistoryChart)}
                     type={showHistoryChart ? 'primary' : 'default'}
                   >
-                    历史趋势
+                    {t('filterChain.historical_trends')}
                   </Button>
                 </Tooltip>
               </Space>
@@ -735,7 +735,7 @@ const FilterChainPage: React.FC = () => {
             <Row gutter={16}>
               <Col span={8}>
                 <Statistic
-                  title="平均自身耗时"
+                  title={t('filterChain.avg_self_time')}
                   value={avgSelfTime}
                   suffix="ms"
                   styles={{
@@ -745,7 +745,7 @@ const FilterChainPage: React.FC = () => {
               </Col>
               <Col span={8}>
                 <Statistic
-                  title="P95耗时"
+                  title={t('filterChain.p95_latency')}
                   value={avgP95}
                   suffix="ms"
                   styles={{
@@ -755,7 +755,7 @@ const FilterChainPage: React.FC = () => {
               </Col>
               <Col span={8}>
                 <Statistic
-                  title="P99耗时"
+                  title={t('filterChain.p99_latency')}
                   value={avgP99}
                   suffix="ms"
                   styles={{
@@ -766,7 +766,7 @@ const FilterChainPage: React.FC = () => {
             </Row>
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${palette.borderSubtle}` }}>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                自身耗时 = Filter自身逻辑执行时间（不含下游服务）
+                {t('filterChain.self_time_desc')}
               </Text>
             </div>
           </Card>
@@ -774,7 +774,7 @@ const FilterChainPage: React.FC = () => {
 
         <Col xs={24} sm={12}>
           <Card
-            title="最慢Filter排名"
+            title={t('filterChain.slowest_filters')}
             size="small"
             style={{ background: palette.bgCard }}
           >
@@ -807,7 +807,7 @@ const FilterChainPage: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <Empty description="暂无数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty description={t('filterChain.no_data')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
             )}
           </Card>
         </Col>
@@ -882,7 +882,7 @@ const FilterChainPage: React.FC = () => {
           </Row>
 
           <Card
-            title="Filter执行瀑布图"
+            title={t('filterChain.waterfall_chart')}
             size="small"
             style={{ marginBottom: 16, background: palette.bgCard }}
             extra={(
@@ -892,7 +892,7 @@ const FilterChainPage: React.FC = () => {
                 icon={<PictureOutlined />}
                 onClick={exportChartAsImage}
               >
-                导出PNG
+                {t('filterChain.export_png')}
               </Button>
             )}
           >
@@ -911,16 +911,16 @@ const FilterChainPage: React.FC = () => {
 
       {/* Threshold configuration modal */}
       <Modal className="console-dialog"
-        title="性能阈值配置"
+        title={t('filterChain.performance_threshold_config')}
         open={showThresholdModal}
         onCancel={() => setShowThresholdModal(false)}
         onOk={() => {
           setShowThresholdModal(false);
-          message.success('阈值配置已保存');
+          message.success(t('filterChain.threshold_saved'));
         }}
       >
         <Form layout="vertical">
-          <Form.Item label="自身耗时阈值 (ms)">
+          <Form.Item label={t('filterChain.self_time_threshold')}>
             <InputNumber
               value={thresholds.selfTime}
               onChange={(v) => setThresholds({ ...thresholds, selfTime: v || 10 })}
@@ -928,10 +928,10 @@ const FilterChainPage: React.FC = () => {
               max={100}
               step={1}
             />
-            <Text type="secondary" style={{ marginLeft: 8 }}>超过此值将触发告警</Text>
+            <Text type="secondary" style={{ marginLeft: 8 }}>{t('filterChain.threshold_exceed_alert')}</Text>
           </Form.Item>
 
-          <Form.Item label="P95耗时阈值 (ms)">
+          <Form.Item label={t('filterChain.p95_threshold')}>
             <InputNumber
               value={thresholds.p95}
               onChange={(v) => setThresholds({ ...thresholds, p95: v || 20 })}
@@ -939,10 +939,10 @@ const FilterChainPage: React.FC = () => {
               max={200}
               step={5}
             />
-            <Text type="secondary" style={{ marginLeft: 8 }}>95%请求的性能阈值</Text>
+            <Text type="secondary" style={{ marginLeft: 8 }}>{t('filterChain.p95_threshold_hint')}</Text>
           </Form.Item>
 
-          <Form.Item label="P99耗时阈值 (ms)">
+          <Form.Item label={t('filterChain.p99_threshold')}>
             <InputNumber
               value={thresholds.p99}
               onChange={(v) => setThresholds({ ...thresholds, p99: v || 50 })}
@@ -950,10 +950,10 @@ const FilterChainPage: React.FC = () => {
               max={500}
               step={10}
             />
-            <Text type="secondary" style={{ marginLeft: 8 }}>99%请求的性能上限</Text>
+            <Text type="secondary" style={{ marginLeft: 8 }}>{t('filterChain.p99_tooltip')}</Text>
           </Form.Item>
 
-          <Form.Item label="成功率阈值 (%)">
+          <Form.Item label={t('filterChain.success_rate_threshold')}>
             <InputNumber
               value={thresholds.successRate}
               onChange={(v) => setThresholds({ ...thresholds, successRate: v || 95 })}
@@ -961,32 +961,32 @@ const FilterChainPage: React.FC = () => {
               max={100}
               step={1}
             />
-            <Text type="secondary" style={{ marginLeft: 8 }}>低于此值将触发告警</Text>
+            <Text type="secondary" style={{ marginLeft: 8 }}>{t('filterChain.threshold_below_alert')}</Text>
           </Form.Item>
         </Form>
       </Modal>
 
       {/* Export modal */}
       <Modal className="console-dialog"
-        title="导出数据"
+        title={t('filterChain.export_data')}
         open={showExportModal}
         onCancel={() => setShowExportModal(false)}
         footer={null}
       >
         <Space orientation="vertical" style={{ width: '100%' }}>
           <Button block icon={<DownloadOutlined />} onClick={() => exportData('json')}>
-            导出JSON文件 (完整数据)
+            {t('filterChain.export_json_full')}
           </Button>
           <Button block icon={<DownloadOutlined />} onClick={() => exportData('csv')}>
-            导出CSV文件 (表格数据)
+            {t('filterChain.export_csv_table')}
           </Button>
           <Button block icon={<PictureOutlined />} onClick={exportChartAsImage} style={{ borderColor: palette.primary }}>
-            导出瀑布图 (PNG图片)
+            {t('filterChain.export_waterfall_png')}
           </Button>
           <Divider />
           <Text type="secondary" style={{ fontSize: 12 }}>
-            • JSON/CSV：Filter统计数据、最近100条记录<br />
-            • PNG图片：需要先点击详情查看瀑布图后才能导出
+            {t('filterChain.export_note_json_csv')}<br />
+            {t('filterChain.export_note_png')}
           </Text>
         </Space>
       </Modal>
@@ -1001,12 +1001,12 @@ const FilterChainPage: React.FC = () => {
       >
         <Space>
           <ThunderboltOutlined />
-          <Text type="secondary">键盘快捷键：</Text>
-          <Tag>Ctrl+R 刷新</Tag>
-          <Tooltip title="Ctrl+E 在Windows上会被浏览器拦截，可用Alt+E替代">
-            <Tag color="orange">Ctrl+E / Alt+E 导出</Tag>
+          <Text type="secondary">{t('filterChain.shortcuts_label')}</Text>
+          <Tag>{t('filterChain.shortcut_refresh_tag')}</Tag>
+          <Tooltip title={t('filterChain.shortcut_e_blocked')}>
+            <Tag color="orange">{t('filterChain.shortcut_export_tag')}</Tag>
           </Tooltip>
-          <Tag>Ctrl+A 自动刷新</Tag>
+          <Tag>{t('filterChain.shortcut_auto_tag')}</Tag>
         </Space>
       </div>
     </div>

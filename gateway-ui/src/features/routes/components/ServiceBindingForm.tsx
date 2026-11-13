@@ -189,7 +189,7 @@ const ServiceBindingForm: React.FC<ServiceBindingFormProps> = ({
                         <InputNumber
                           min={1}
                           max={100}
-                          placeholder="Weight"
+                          placeholder={t('services.weight')}
                           size="middle"
                           style={{ width: 90, flexShrink: 0 }}
                           addonAfter="%"

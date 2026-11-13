@@ -43,9 +43,11 @@ export interface StrategyTypeField {
   min?: number;
   max?: number;
   unit?: string;
+  unitEn?: string;
   placeholder?: string;
+  placeholderEn?: string;
   required?: boolean;
-  options?: Array<{ value: string; label: string }>;
+  options?: Array<{ value: string; label: string; labelEn?: string }>;
   colSpan?: number;
 }
 
@@ -53,10 +55,13 @@ export interface StrategyTypeField {
 export interface StrategyTypeSubSchema {
   fields?: StrategyTypeField[];
   sectionLabel?: string;
+  sectionLabelEn?: string;
   sectionDescription?: string;
+  sectionDescriptionEn?: string;
   /** Multi-rule pattern (fieldMapping, dataMasking, tenantQuotas...). */
   multiRule?: boolean;
   ruleLabel?: string;
+  ruleLabelEn?: string;
   ruleKeyField?: string;
   ruleFields?: StrategyTypeField[];
 }
@@ -68,8 +73,9 @@ export interface StrategyTypeSchema {
   hasSubSchemas?: boolean;
   /** MULTI_DIM_RATE_LIMITER specifics. */
   multiDimension?: boolean;
-  dimensionOptions?: Array<{ value: string; label: string }>;
+  dimensionOptions?: Array<{ value: string; label: string; labelEn?: string }>;
   dimensionLabel?: string;
+  dimensionLabelEn?: string;
 }
 
 /**

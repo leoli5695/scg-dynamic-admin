@@ -42,18 +42,18 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
             <div className="feature-icon">{feature.icon}</div>
             <div className="feature-content">
               <div className="feature-header">
-                <Text strong>{feature.displayName}</Text>
+                <Text strong>{t(feature.displayNameKey)}</Text>
                 {feature.requiredEdition === 'BASIC' ? (
                   <Tag
                     color="success"
                     icon={<CheckCircleOutlined />}
                     style={{ backgroundColor: palette.successSolid, color: '#fff' }}
                   >
-                    免费
+                    {t('licenseUI.free')}
                   </Tag>
                 ) : feature.enabled ? (
                   <Tag color="success" icon={<CheckCircleOutlined />}>
-                    已授权
+                    {t('licenseUI.authorized')}
                   </Tag>
                 ) : feature.requiredEdition === 'ADVANCED' ? (
                   <Tag
@@ -61,7 +61,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
                     icon={<CloseCircleOutlined />}
                     style={{ backgroundColor: palette.primary, color: '#fff' }}
                   >
-                    高级版
+                    {t('licenseUI.edition.ADVANCED.label')}
                   </Tag>
                 ) : (
                   <Tag
@@ -69,24 +69,24 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
                     icon={<CloseCircleOutlined />}
                     style={{ backgroundColor: palette.accentSolid, color: '#fff' }}
                   >
-                    企业版
+                    {t('licenseUI.edition.ENTERPRISE.label')}
                   </Tag>
                 )}
               </div>
               <Text type="secondary" className="feature-desc">
-                {feature.description}
+                {t(feature.descriptionKey)}
               </Text>
             </div>
             <div className="feature-edition">
               <Tag color={EDITION_CONFIG[feature.requiredEdition].color}>
-                {EDITION_CONFIG[feature.requiredEdition].label}
+                {t(EDITION_CONFIG[feature.requiredEdition].labelKey)}
               </Tag>
             </div>
           </div>
         </List.Item>
       );
     },
-    [onFeatureClick],
+    [onFeatureClick, t],
   );
 
   return (
@@ -110,7 +110,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
             label: (
               <span>
                 <CheckCircleOutlined />
-                基础功能（免费）
+                {t('licenseUI.basic_features_free')}
               </span>
             ),
             children: (
@@ -126,7 +126,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
             label: (
               <span>
                 <CrownOutlined style={{ color: palette.primary }} />
-                高级功能
+                {t('licenseUI.advanced_features')}
               </span>
             ),
             children: (
@@ -142,7 +142,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
             label: (
               <span>
                 <CrownOutlined style={{ color: palette.warning }} />
-                企业功能
+                {t('licenseUI.enterprise_features')}
               </span>
             ),
             children: (

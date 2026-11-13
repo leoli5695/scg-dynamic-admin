@@ -24,6 +24,10 @@
   "plugin.category.security": "安全",
   "plugin.category.request_size": "请求大小",
   "plugin.category.other": "其他",
+  "plugin.category.traffic": "流量控制",
+  "plugin.category.resilience": "弹性容错",
+  "plugin.category.transform": "数据转换",
+  "plugin.category.observability": "可观测性",
   "plugin.AddRequestHeader.desc": "向下游请求添加 HTTP 头",
   "plugin.SetRequestHeader.desc": "设置 (替换) 下游请求的 HTTP 头",
   "plugin.RemoveRequestHeader.desc": "从下游请求中移除指定的 HTTP 头",
@@ -214,5 +218,6 @@
   "plugin_bindings.stats_global": "全局绑定",
   "plugin_bindings.stats_route": "路由绑定",
   "plugin_bindings.stats_enabled": "已启用",
-  "plugin_bindings.binding_scope": "绑定范围"
+  "plugin_bindings.binding_scope": "绑定范围",
+  "plugin_bindings.config_json_placeholder": "请输入 JSON 配置"
 }

@@ -19,28 +19,28 @@ const LoadBalancerSelect: React.FC<SelectProps> = (props) => {
       icon: <TrophyOutlined className="option-icon option-icon-weighted" />,
       labelIcon: <TrophyOutlined className="option-icon" />,
       title: t('services.weighted'),
-      desc: '平滑加权轮询，推荐',
+      desc: t('services.weighted_desc'),
     },
     {
       value: 'round-robin',
       icon: <SwapOutlined className="option-icon option-icon-roundrobin" />,
       labelIcon: <ReloadOutlined className="option-icon" />,
       title: t('services.round_robin'),
-      desc: '简单轮询分发',
+      desc: t('services.round_robin_desc'),
     },
     {
       value: 'random',
       icon: <AimOutlined className="option-icon option-icon-random" />,
       labelIcon: <ThunderboltOutlined className="option-icon" />,
       title: t('services.random'),
-      desc: '随机选择',
+      desc: t('services.random_desc'),
     },
     {
       value: 'consistent-hash',
       icon: <ForkOutlined className="option-icon option-icon-hash" />,
       labelIcon: <LinkOutlined className="option-icon" />,
       title: t('services.consistent_hash'),
-      desc: '基于哈希值，适合会话保持',
+      desc: t('services.consistent_hash_desc'),
     },
   ];
 

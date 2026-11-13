@@ -5,6 +5,7 @@ import '../instance-detail/operations-ui.css';
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Button,
@@ -46,6 +47,7 @@ const formatDate = (dateStr?: string | null) => {
 };
 
 const StressTestSharePage: React.FC = () => {
+  const { t } = useTranslation();
   const { shareId } = useParams<{ shareId: string }>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,9 @@ const StressTestSharePage: React.FC = () => {
       setTest(report.test);
       setMarkdown(report.markdown);
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : 'Share link not found or expired');
+      // Empty string = no server message; the translated fallback is rendered at display time
+      // so it follows the current UI language.
+      setError(e instanceof Error && e.message ? e.message : '');
     } finally {
       setLoading(false);
     }
@@ -104,7 +108,7 @@ const StressTestSharePage: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (error !== null) {
     return (
       <div style={{
         padding: '48px',
@@ -116,8 +120,8 @@ const StressTestSharePage: React.FC = () => {
       >
         <Alert
           type="error"
-          title="Report Not Available"
-          description={error}
+          title={t('stress_test.report_unavailable')}
+          description={error || t('stress_test.share_link_invalid')}
           showIcon
         />
       </div>
@@ -143,12 +147,12 @@ const StressTestSharePage: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <Title level={3} style={{ margin: 0, color: palette.textPrimary }}>
             <ThunderboltOutlined style={{ marginRight: '8px', color: palette.primary }} />
-            {test?.testName || 'Stress Test Report'}
+            {test?.testName || t('stress_test.report_title')}
           </Title>
           <Space>
             <Tag color={getStatusColor(test?.status || '')}>{test?.status}</Tag>
             <Button icon={<DownloadOutlined />} onClick={handleDownload}>
-              Download
+              {t('stress_test.download')}
             </Button>
           </Space>
         </div>
@@ -162,33 +166,33 @@ const StressTestSharePage: React.FC = () => {
             content: { background: 'transparent', color: palette.textPrimary },
           }}
         >
-          <Descriptions.Item label="Target URL">{test?.targetUrl}</Descriptions.Item>
-          <Descriptions.Item label="Method">{test?.method}</Descriptions.Item>
-          <Descriptions.Item label="Start Time">{formatDate(test?.startTime)}</Descriptions.Item>
-          <Descriptions.Item label="End Time">{formatDate(test?.endTime)}</Descriptions.Item>
-          <Descriptions.Item label="Concurrent Users">{test?.concurrentUsers}</Descriptions.Item>
-          <Descriptions.Item label="Duration">{test?.durationSeconds ? `${test.durationSeconds}s` : test?.totalRequests ? `${test.totalRequests} requests` : 'N/A'}</Descriptions.Item>
+          <Descriptions.Item label={t('stress_test.target_url')}>{test?.targetUrl}</Descriptions.Item>
+          <Descriptions.Item label={t('stress_test.method')}>{test?.method}</Descriptions.Item>
+          <Descriptions.Item label={t('stress_test.start_time')}>{formatDate(test?.startTime)}</Descriptions.Item>
+          <Descriptions.Item label={t('stress_test.end_time')}>{formatDate(test?.endTime)}</Descriptions.Item>
+          <Descriptions.Item label={t('stress_test.concurrent_users')}>{test?.concurrentUsers}</Descriptions.Item>
+          <Descriptions.Item label={t('stress_test.duration')}>{test?.durationSeconds ? `${test.durationSeconds}s` : test?.totalRequests ? t('stress_test.requests_value', { n: test.totalRequests }) : 'N/A'}</Descriptions.Item>
         </Descriptions>
 
         <Divider style={{ borderColor: 'rgba(145, 169, 222, 0.2)' }} />
 
-        <Title level={5} style={{ color: palette.textPrimary, marginBottom: '16px' }}>Test Results</Title>
+        <Title level={5} style={{ color: palette.textPrimary, marginBottom: '16px' }}>{t('stress_test.test_results')}</Title>
 
         <div className="console-report-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
           <Card size="small" style={{ background: 'rgba(10, 16, 32, 0.6)', border: 'none' }}>
             <div style={{ textAlign: 'center' }}>
-              <Text type="secondary">Total Requests</Text>
+              <Text type="secondary">{t('stress_test.total_requests')}</Text>
               <div style={{ fontSize: '24px', fontWeight: 'bold', color: palette.textPrimary }}>{test?.actualRequests}</div>
               <Space style={{ marginTop: '8px' }}>
-                <Tag color="success" icon={<CheckCircleOutlined />}>{test?.successfulRequests} success</Tag>
-                <Tag color="error" icon={<CloseCircleOutlined />}>{test?.failedRequests} failed</Tag>
+                <Tag color="success" icon={<CheckCircleOutlined />}>{test?.successfulRequests} {t('stress_test.success')}</Tag>
+                <Tag color="error" icon={<CloseCircleOutlined />}>{test?.failedRequests} {t('stress_test.failed')}</Tag>
               </Space>
             </div>
           </Card>
 
           <Card size="small" style={{ background: 'rgba(10, 16, 32, 0.6)', border: 'none' }}>
             <div style={{ textAlign: 'center' }}>
-              <Text type="secondary">Requests/Second</Text>
+              <Text type="secondary">{t('stress_test.req_per_sec')}</Text>
               <div style={{ fontSize: '24px', fontWeight: 'bold', color: palette.success }}>{test?.requestsPerSecond?.toFixed(2)}</div>
               <Text type="secondary" style={{ fontSize: '12px' }}>req/s</Text>
             </div>
@@ -196,7 +200,7 @@ const StressTestSharePage: React.FC = () => {
 
           <Card size="small" style={{ background: 'rgba(10, 16, 32, 0.6)', border: 'none' }}>
             <div style={{ textAlign: 'center' }}>
-              <Text type="secondary">Error Rate</Text>
+              <Text type="secondary">{t('stress_test.error_rate')}</Text>
               <div style={{ fontSize: '24px', fontWeight: 'bold', color: (test?.errorRate ?? 0) > 5 ? palette.error : palette.success }}>
                 {test?.errorRate?.toFixed(2)}%
               </div>
@@ -205,7 +209,7 @@ const StressTestSharePage: React.FC = () => {
 
           <Card size="small" style={{ background: 'rgba(10, 16, 32, 0.6)', border: 'none' }}>
             <div style={{ textAlign: 'center' }}>
-              <Text type="secondary">Avg Response Time</Text>
+              <Text type="secondary">{t('stress_test.avg_response_time')}</Text>
               <div style={{ fontSize: '24px', fontWeight: 'bold', color: palette.textPrimary }}>{test?.avgResponseTimeMs?.toFixed(2)}</div>
               <Text type="secondary" style={{ fontSize: '12px' }}>ms</Text>
             </div>
@@ -214,16 +218,16 @@ const StressTestSharePage: React.FC = () => {
 
         <Divider style={{ borderColor: 'rgba(145, 169, 222, 0.2)', margin: '24px 0' }} />
 
-        <Title level={5} style={{ color: palette.textPrimary, marginBottom: '16px' }}>Response Time Distribution</Title>
+        <Title level={5} style={{ color: palette.textPrimary, marginBottom: '16px' }}>{t('stress_test.response_time_dist')}</Title>
 
         <div className="console-report-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
           {[
-            { label: 'Min', value: test?.minResponseTimeMs },
+            { label: t('stress_test.min'), value: test?.minResponseTimeMs },
             { label: 'P50', value: test?.p50ResponseTimeMs },
             { label: 'P90', value: test?.p90ResponseTimeMs },
             { label: 'P95', value: test?.p95ResponseTimeMs },
             { label: 'P99', value: test?.p99ResponseTimeMs },
-            { label: 'Max', value: test?.maxResponseTimeMs },
+            { label: t('stress_test.max'), value: test?.maxResponseTimeMs },
           ].map((item) => (
             <div key={item.label} style={{ textAlign: 'center', padding: '12px', background: 'rgba(10, 16, 32, 0.6)', borderRadius: '8px' }}>
               <Text type="secondary">{item.label}</Text>
@@ -241,7 +245,7 @@ const StressTestSharePage: React.FC = () => {
           title={
             <Space>
               <ClockCircleOutlined style={{ color: palette.primary }} />
-              <Title level={4} style={{ margin: 0, color: palette.textPrimary }}>AI Analysis</Title>
+              <Title level={4} style={{ margin: 0, color: palette.textPrimary }}>{t('stress_test.ai_analysis')}</Title>
             </Space>
           }
           style={{
@@ -255,7 +259,7 @@ const StressTestSharePage: React.FC = () => {
 
       <div style={{ textAlign: 'center', marginTop: '24px', color: palette.textMuted }}>
         <Text type="secondary">
-          Generated by Gateway Admin • {new Date().toLocaleString()}
+          {t('stress_test.share_generated_by')} • {new Date().toLocaleString()}
         </Text>
       </div>
     </div>

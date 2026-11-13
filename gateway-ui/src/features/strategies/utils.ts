@@ -645,55 +645,52 @@ export function strategyToFormValues(strategy: StrategyDefinition): StrategyForm
 // Card display helpers
 // ============================================================
 
+/**
+ * Minimal translate signature: display helpers receive `t` from the caller so
+ * labels are resolved at render time (never frozen at module import).
+ */
+type TFunc = (key: string, options?: Record<string, unknown>) => string;
+
 /** Friendly quota names for MULTI_DIM_RATE_LIMITER config preview. */
-export function getQuotaDisplayName(key: string, config: StrategyConfig): string {
+export function getQuotaDisplayName(key: string, config: StrategyConfig, t: TFunc): string {
   const quotaNameMap: Record<string, string> = {
-    globalQuota: '全局限流',
-    ipQuota: 'IP限流',
-    userQuota: '用户限流',
+    globalQuota: t('strategy.config.quota_global'),
+    ipQuota: t('strategy.config.quota_ip'),
+    userQuota: t('strategy.config.quota_user'),
   };
   if (key === 'tenantQuota') {
-    return config.keySource === 'header' ? 'Header限流' : '客户端限流';
+    return config.keySource === 'header'
+      ? t('strategy.config.quota_header')
+      : t('strategy.config.quota_client');
   }
   return quotaNameMap[key] || key;
 }
 
 /** Friendly rejectStrategy names for MULTI_DIM_RATE_LIMITER. */
-export function getRejectStrategyDisplayName(strategy: string): string {
+export function getRejectStrategyDisplayName(strategy: string, t: TFunc): string {
   const strategyNameMap: Record<string, string> = {
-    FIRST_HIT: '首次拒绝',
-    LATEST_HIT: '最后拒绝',
-    RANDOM: '随机拒绝',
-    ALL_HIT: '全部拒绝',
+    FIRST_HIT: t('strategy.config.reject_first_hit'),
+    LATEST_HIT: t('strategy.config.reject_latest_hit'),
+    RANDOM: t('strategy.config.reject_random'),
+    ALL_HIT: t('strategy.config.reject_all_hit'),
   };
   return strategyNameMap[strategy] || strategy;
 }
 
 /** Format headerNames object for the config preview tooltip. */
-export function formatHeaderNames(headerNames: Record<string, string>): string {
+export function formatHeaderNames(headerNames: Record<string, string>, t: TFunc): string {
   const parts: string[] = [];
-  if (headerNames.tenantIdHeader) parts.push(`租户Header: ${headerNames.tenantIdHeader}`);
-  if (headerNames.userIdHeader) parts.push(`用户Header: ${headerNames.userIdHeader}`);
-  if (headerNames.apiKeyHeader) parts.push(`API Key Header: ${headerNames.apiKeyHeader}`);
+  if (headerNames.tenantIdHeader) parts.push(t('strategy.config.header_tenant', { value: headerNames.tenantIdHeader }));
+  if (headerNames.userIdHeader) parts.push(t('strategy.config.header_user', { value: headerNames.userIdHeader }));
+  if (headerNames.apiKeyHeader) parts.push(t('strategy.config.header_api_key', { value: headerNames.apiKeyHeader }));
   return parts.join(', ');
 }
 
 /** Format windowSizeMs for the config preview tooltip. */
-export function formatWindowSize(windowSizeMs: number): string {
-  if (windowSizeMs >= 1000) return `${windowSizeMs / 1000}秒`;
-  return `${windowSizeMs}毫秒`;
+export function formatWindowSize(windowSizeMs: number, t: TFunc): string {
+  if (windowSizeMs >= 1000) return t('strategy.config.window_seconds', { value: windowSizeMs / 1000 });
+  return t('strategy.config.window_ms', { value: windowSizeMs });
 }
-
-/** Category labels for the type selection modal. */
-export const CATEGORY_LABELS: Record<string, string> = {
-  traffic: '流量控制',
-  security: '安全防护',
-  resilience: '弹性容错',
-  transform: '数据转换',
-  observability: '可观测性',
-  misc: '其他',
-  ai: 'AI 能力',
-};
 
 /** CSS class mapping per strategy type category (StrategiesPage.premium.css). */
 export function getStrategyTypeTagClass(category?: string): string {

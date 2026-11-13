@@ -31,23 +31,33 @@ export interface CategoryDesign {
   accentColor: string;
 }
 
-/** Short English labels shown next to raw category names. */
-export const CATEGORY_LABELS: Record<string, string> = {
-  '流量控制': 'Traffic Control',
-  '安全防护': 'Security',
-  '弹性容错': 'Resilience',
-  '数据转换': 'Transform',
-  '可观测性': 'Observability',
-  '其他': 'Misc',
-  'Request Headers': 'Headers',
-  'Request Parameters': 'Params',
-  'Response Headers': 'Response',
-  'Path': 'Path',
-  'Path Modification': 'Path Mod',
-  'Status Code': 'Status',
-  'Security': 'Security',
-  'Request Size': 'Size',
-  'Other': 'Other',
+/**
+ * Raw backend category name → i18n key. The keys are data (category values stored
+ * by the backend, in Chinese or English) and must stay verbatim; only the labels
+ * rendered from them are localized.
+ */
+export const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  '流量控制': 'plugin.category.traffic',
+  '安全防护': 'plugin.category.security',
+  '弹性容错': 'plugin.category.resilience',
+  '数据转换': 'plugin.category.transform',
+  '可观测性': 'plugin.category.observability',
+  '其他': 'plugin.category.other',
+  'Request Headers': 'plugin.category.request_headers',
+  'Request Parameters': 'plugin.category.request_params',
+  'Response Headers': 'plugin.category.response_headers',
+  'Path': 'plugin.category.path',
+  'Path Modification': 'plugin.category.path_modification',
+  'Status Code': 'plugin.category.status_code',
+  'Security': 'plugin.category.security',
+  'Request Size': 'plugin.category.request_size',
+  'Other': 'plugin.category.other',
+};
+
+/** Localized category label; unknown categories fall back to the raw name. */
+export const getCategoryLabel = (category: string, t: (key: string) => string): string => {
+  const key = CATEGORY_LABEL_KEYS[category];
+  return key ? t(key) : category;
 };
 
 /**

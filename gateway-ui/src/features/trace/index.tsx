@@ -29,7 +29,7 @@ import {
 import type { RequestTrace, TraceStats } from '../../types/trace';
 import { useInstanceDetail } from '../instance-detail/InstanceDetailContext';
 import {
-  ALL_COLUMNS, DEFAULT_VISIBLE_COLUMNS, TIME_RANGE_OPTIONS,
+  ALL_COLUMNS, COLUMN_LABEL_KEYS, DEFAULT_VISIBLE_COLUMNS, TIME_RANGE_OPTIONS,
   exportTraces, getMethodColor, getStatusColor,
 } from './utils';
 import TraceDetailDrawer from './components/TraceDetailDrawer';
@@ -220,7 +220,7 @@ const TracePage: React.FC = () => {
 
   const handleExport = (format: 'json' | 'csv') => {
     exportTraces(filteredTraces, format);
-    message.success(`Exported ${filteredTraces.length} traces as ${format.toUpperCase()}`);
+    message.success(t('trace.exported', { count: filteredTraces.length, format: format.toUpperCase() }));
   };
 
   const handleViewDetail = useCallback((record: RequestTrace) => {
@@ -231,7 +231,7 @@ const TracePage: React.FC = () => {
   const columns = useMemo<ColumnsType<RequestTrace>>(() => {
     const all: ColumnsType<RequestTrace> = [
     {
-      title: t('trace.trace_id'),
+      title: t(COLUMN_LABEL_KEYS.traceId),
       dataIndex: 'traceId',
       key: 'traceId',
       width: 130,
@@ -245,7 +245,7 @@ const TracePage: React.FC = () => {
       ),
     },
     {
-      title: t('trace.method'),
+      title: t(COLUMN_LABEL_KEYS.method),
       dataIndex: 'method',
       key: 'method',
       width: 50,
@@ -254,7 +254,7 @@ const TracePage: React.FC = () => {
       ),
     },
     {
-      title: t('trace.path'),
+      title: t(COLUMN_LABEL_KEYS.path),
       dataIndex: 'path',
       key: 'path',
       width: 150,
@@ -266,7 +266,7 @@ const TracePage: React.FC = () => {
       ),
     },
     {
-      title: t('trace.status'),
+      title: t(COLUMN_LABEL_KEYS.statusCode),
       dataIndex: 'statusCode',
       key: 'statusCode',
       width: 50,
@@ -275,7 +275,7 @@ const TracePage: React.FC = () => {
       ),
     },
     {
-      title: t('trace.latency'),
+      title: t(COLUMN_LABEL_KEYS.latencyMs),
       dataIndex: 'latencyMs',
       key: 'latencyMs',
       width: 55,
@@ -286,7 +286,7 @@ const TracePage: React.FC = () => {
       },
     },
     {
-      title: t('trace.client_ip'),
+      title: t(COLUMN_LABEL_KEYS.clientIp),
       dataIndex: 'clientIp',
       key: 'clientIp',
       width: 90,
@@ -294,7 +294,7 @@ const TracePage: React.FC = () => {
       render: (ip: string) => <Text className="text-xs-sm">{ip || '-'}</Text>,
     },
     {
-      title: t('trace.time'),
+      title: t(COLUMN_LABEL_KEYS.traceTime),
       dataIndex: 'traceTime',
       key: 'traceTime',
       width: 110,
@@ -304,7 +304,7 @@ const TracePage: React.FC = () => {
       ),
     },
     {
-      title: t('trace.replay_count'),
+      title: t(COLUMN_LABEL_KEYS.replayCount),
       dataIndex: 'replayCount',
       key: 'replayCount',
       width: 60,
@@ -390,7 +390,7 @@ const TracePage: React.FC = () => {
             <Segmented
               options={[
                 ...TIME_RANGE_OPTIONS,
-                { label: 'Custom', value: 'custom' },
+                { label: t('trace.time_range_custom'), value: 'custom' },
               ]}
               value={customTimeRange ? 'custom' : timeRange}
               onChange={(val) => handleTimeRangeChange(val as number | 'custom')}
@@ -432,7 +432,7 @@ const TracePage: React.FC = () => {
                 value={filters.method}
                 onChange={(v) => setFilters({ ...filters, method: v || '' })}
                 options={[
-                  { value: '', label: 'All' },
+                  { value: '', label: t('common.all') },
                   { value: 'GET', label: 'GET' },
                   { value: 'POST', label: 'POST' },
                   { value: 'PUT', label: 'PUT' },
@@ -482,7 +482,7 @@ const TracePage: React.FC = () => {
                           }}
                           disabled={col === 'actions'}
                         />
-                        <Text className="text-xs-sm">{t(`trace.${col}`)}</Text>
+                        <Text className="text-xs-sm">{t(COLUMN_LABEL_KEYS[col])}</Text>
                       </label>
                     ))}
                   </div>
@@ -541,7 +541,7 @@ const TracePage: React.FC = () => {
               pageSize,
               total,
               showSizeChanger: true,
-              showTotal: (count) => `${count} items`,
+              showTotal: (count) => t('trace.pagination_total', { count }),
               onChange: (nextPage, nextSize) => { setPage(nextPage - 1); setPageSize(nextSize); },
             }}
             rowClassName={getRowClassName}

@@ -49,5 +49,19 @@
   "topology.menu_service_detail": "服务详情",
   "topology.menu_service_detail_new_tab": "在新标签页打开",
   "topology.menu_focus": "聚焦节点",
-  "topology.exit_focus": "显示完整拓扑"
+  "topology.exit_focus": "显示完整拓扑",
+  "topology.tooltip_instance_id": "实例ID",
+  "topology.tooltip_listen_uri": "监听地址",
+  "topology.tooltip_run_status": "运行状态",
+  "topology.tooltip_route_id": "路由 ID",
+  "topology.tooltip_route_status": "路由状态",
+  "topology.tooltip_health_status": "健康状态",
+  "topology.tooltip_service_id": "服务 ID",
+  "topology.tooltip_service_type": "服务类型",
+  "topology.tooltip_instance_status": "实例状态",
+  "topology.tooltip_healthy_count": "{{healthy}}/{{total}} 健康",
+  "topology.tooltip_instance_list": "实例列表",
+  "topology.tooltip_weight": "(权重:{{weight}})",
+  "topology.tooltip_traffic_metrics": "流量指标",
+  "topology.edge_title": "流量连接"
 }

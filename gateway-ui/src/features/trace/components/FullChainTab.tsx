@@ -176,30 +176,30 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
           style={{ marginBottom: 12 }}
           title={(
             <Space>
-              <span>采样配置提示</span>
+              <span>{t('trace.sampling_config_hint')}</span>
               {traceConfig.gateway?.reported ? (
                 <>
                   <Tag color="blue">
                     {traceConfig.gateway.captureAll
-                      ? `正常请求 ${traceConfig.gateway.samplingRate}% 采样`
-                      : '正常请求不捕获'}
+                      ? t('trace.sampling_normal_rate', { rate: traceConfig.gateway.samplingRate })
+                      : t('trace.sampling_normal_off')}
                   </Tag>
                   <Tag color="green">
                     {traceConfig.gateway.captureErrors === false
-                      ? '错误捕获已关闭'
-                      : `错误请求 ${traceConfig.gateway.samplingRateForErrors}% 采样`}
+                      ? t('trace.sampling_error_off')
+                      : t('trace.sampling_error_rate', { rate: traceConfig.gateway.samplingRateForErrors })}
                   </Tag>
                   {traceConfig.gateway.captureSlow !== false && (
-                    <Tag>慢请求阈值 {traceConfig.gateway.slowThresholdMs}ms</Tag>
+                    <Tag>{t('trace.sampling_slow_threshold', { ms: traceConfig.gateway.slowThresholdMs })}</Tag>
                   )}
-                  {traceConfig.gateway.stale && <Tag color="orange">上报已过期</Tag>}
+                  {traceConfig.gateway.stale && <Tag color="orange">{t('trace.sampling_stale')}</Tag>}
                 </>
               ) : (
-                <Tag color="orange">网关尚未上报配置</Tag>
+                <Tag color="orange">{t('trace.sampling_not_reported')}</Tag>
               )}
             </Space>
           )}
-          description={traceConfig.note || '部分请求可能因采样未被记录'}
+          description={traceConfig.note || t('trace.sampling_note_default')}
         />
       )}
       <Space className="mb-4">
@@ -218,7 +218,7 @@ const FullChainTab: React.FC<FullChainTabProps> = ({ traceConfig }) => {
           pageSize: PAGE_SIZE,
           total: list.data?.totalElements ?? 0,
           onChange: (p) => setPage(p - 1),
-          showTotal: (total) => `${total} items`,
+          showTotal: (total) => t('trace.pagination_total', { count: total }),
         }}
         columns={columns}
       />

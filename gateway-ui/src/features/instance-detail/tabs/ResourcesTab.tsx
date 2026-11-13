@@ -73,7 +73,8 @@ const ResourcesTab: React.FC = () => {
                             {node.allocatable.cpu}
                           </Text>
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            Memory:
+                            {t('common.memory')}
+                            :
                             {' '}
                             {node.allocatable.memory}
                           </Text>

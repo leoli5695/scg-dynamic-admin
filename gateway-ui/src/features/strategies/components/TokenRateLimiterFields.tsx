@@ -15,6 +15,7 @@ import {
 } from '@ant-design/icons';
 import type { StrategyTypeField, StrategyTypeSchema } from '../../../types/strategy';
 import type { TFunc } from './DynamicConfigFields';
+import { fieldLabel, fieldPlaceholder, fieldUnit, optionLabel, sectionText, sectionDesc, ruleText } from './schemaLabels';
 import { palette } from '../../../styles/palette';
 
 interface TokenRateLimiterFieldsProps {
@@ -37,7 +38,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
 
   // Helper function to render a single field
   const renderField = (field: StrategyTypeField): React.ReactNode => {
-    const label = field.label || field.name;
+    const label = fieldLabel(field);
     const colSpan = getFieldColSpan(field);
 
     switch (field.type) {
@@ -45,7 +46,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
         return (
           <Col span={colSpan} key={field.name}>
             <Form.Item name={field.name} label={label} initialValue={field.default}>
-              <InputNumber min={field.min} max={field.max} addonAfter={field.unit} style={{ width: '100%' }} />
+              <InputNumber min={field.min} max={field.max} addonAfter={fieldUnit(field)} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
         );
@@ -54,7 +55,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
         return (
           <Col span={colSpan} key={field.name}>
             <Form.Item name={field.name} label={label} initialValue={field.default}>
-              <Input placeholder={field.placeholder} />
+              <Input placeholder={fieldPlaceholder(field)} />
             </Form.Item>
           </Col>
         );
@@ -75,7 +76,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <Select>
                 {field.options?.map((opt) => (
                   <Select.Option key={opt.value} value={opt.value}>
-                    {opt.label || opt.value}
+                    {optionLabel(opt) || opt.value}
                   </Select.Option>
                 ))}
               </Select>
@@ -90,7 +91,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
 
   // Helper function to render a field inside a Form.List rule
   const renderRuleField = (field: StrategyTypeField, name: number): React.ReactNode => {
-    const label = field.label || field.name;
+    const label = fieldLabel(field);
     const colSpan = getFieldColSpan(field);
 
     switch (field.type) {
@@ -98,7 +99,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
         return (
           <Col span={colSpan} key={field.name}>
             <Form.Item name={[name, field.name]} label={label}>
-              <InputNumber min={field.min} max={field.max} addonAfter={field.unit} style={{ width: '100%' }} />
+              <InputNumber min={field.min} max={field.max} addonAfter={fieldUnit(field)} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
         );
@@ -107,7 +108,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
         return (
           <Col span={colSpan} key={field.name}>
             <Form.Item name={[name, field.name]} label={label}>
-              <Input placeholder={field.placeholder} />
+              <Input placeholder={fieldPlaceholder(field)} />
             </Form.Item>
           </Col>
         );
@@ -128,7 +129,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
               <Select>
                 {field.options?.map((opt) => (
                   <Select.Option key={opt.value} value={opt.value}>
-                    {opt.label || opt.value}
+                    {optionLabel(opt) || opt.value}
                   </Select.Option>
                 ))}
               </Select>
@@ -151,9 +152,9 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
           title={
             <Space>
               <RobotOutlined />
-              <span>{subSchemas.tenantQuotas.sectionLabel || '租户配额配置'}</span>
-              {subSchemas.tenantQuotas.sectionDescription && (
-                <Tooltip title={subSchemas.tenantQuotas.sectionDescription}>
+              <span>{sectionText(subSchemas.tenantQuotas) || t('strategy.config.tenant_quotas')}</span>
+              {sectionDesc(subSchemas.tenantQuotas) && (
+                <Tooltip title={sectionDesc(subSchemas.tenantQuotas)}>
                   <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
@@ -171,12 +172,12 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
                     style={{ marginBottom: 8, background: palette.bgElevated }}
                     title={
                       <Space>
-                        <span>{subSchemas.tenantQuotas.ruleLabel || '租户'} {name + 1}</span>
+                        <span>{ruleText(subSchemas.tenantQuotas) || t('strategy.config.tenant')} {name + 1}</span>
                         <Form.Item
                           name={[name, 'tenantId']}
                           style={{ marginBottom: 0, marginLeft: 8 }}
                         >
-                          <Input placeholder="tenant-001" style={{ width: 150 }} addonBefore={<UserOutlined />} />
+                          <Input placeholder={t('strategy.config.tenant_id_placeholder')} style={{ width: 150 }} addonBefore={<UserOutlined />} />
                         </Form.Item>
                       </Space>
                     }
@@ -207,7 +208,7 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
                     })
                   }
                 >
-                  {t('strategy.config.add_tenant_quota', { defaultValue: '添加租户配额' })}
+                  {t('strategy.config.add_tenant_quota')}
                 </Button>
               </>
             )}
@@ -222,9 +223,9 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
           style={{ marginBottom: 16 }}
           title={
             <Space>
-              <span>{subSchemas.defaultQuotas.sectionLabel || '默认配额设置'}</span>
-              {subSchemas.defaultQuotas.sectionDescription && (
-                <Tooltip title={subSchemas.defaultQuotas.sectionDescription}>
+              <span>{sectionText(subSchemas.defaultQuotas) || t('strategy.config.default_quotas')}</span>
+              {sectionDesc(subSchemas.defaultQuotas) && (
+                <Tooltip title={sectionDesc(subSchemas.defaultQuotas)}>
                   <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
@@ -247,9 +248,9 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
           title={
             <Space>
               <PlayCircleOutlined />
-              <span>{subSchemas.responseFormat.sectionLabel || '响应格式配置'}</span>
-              {subSchemas.responseFormat.sectionDescription && (
-                <Tooltip title={subSchemas.responseFormat.sectionDescription}>
+              <span>{sectionText(subSchemas.responseFormat) || t('strategy.config.response_format')}</span>
+              {sectionDesc(subSchemas.responseFormat) && (
+                <Tooltip title={sectionDesc(subSchemas.responseFormat)}>
                   <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
@@ -272,9 +273,9 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
           title={
             <Space>
               <UserOutlined />
-              <span>{subSchemas.tenantIdExtraction.sectionLabel || '租户识别配置'}</span>
-              {subSchemas.tenantIdExtraction.sectionDescription && (
-                <Tooltip title={subSchemas.tenantIdExtraction.sectionDescription}>
+              <span>{sectionText(subSchemas.tenantIdExtraction) || t('strategy.config.tenant_id_extraction')}</span>
+              {sectionDesc(subSchemas.tenantIdExtraction) && (
+                <Tooltip title={sectionDesc(subSchemas.tenantIdExtraction)}>
                   <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
@@ -297,9 +298,9 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
           title={
             <Space>
               <SyncOutlined />
-              <span>{subSchemas.alert.sectionLabel || '告警配置'}</span>
-              {subSchemas.alert.sectionDescription && (
-                <Tooltip title={subSchemas.alert.sectionDescription}>
+              <span>{sectionText(subSchemas.alert) || t('strategy.config.alert')}</span>
+              {sectionDesc(subSchemas.alert) && (
+                <Tooltip title={sectionDesc(subSchemas.alert)}>
                   <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
@@ -322,9 +323,9 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
           title={
             <Space>
               <ApiOutlined />
-              <span>{subSchemas.sseHandling.sectionLabel || 'SSE流处理配置'}</span>
-              {subSchemas.sseHandling.sectionDescription && (
-                <Tooltip title={subSchemas.sseHandling.sectionDescription}>
+              <span>{sectionText(subSchemas.sseHandling) || t('strategy.config.sse_handling')}</span>
+              {sectionDesc(subSchemas.sseHandling) && (
+                <Tooltip title={sectionDesc(subSchemas.sseHandling)}>
                   <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
@@ -347,9 +348,9 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
           title={
             <Space>
               <ThunderboltOutlined />
-              <span>{subSchemas.preDeduct.sectionLabel || '预扣与退款策略'}</span>
-              {subSchemas.preDeduct.sectionDescription && (
-                <Tooltip title={subSchemas.preDeduct.sectionDescription}>
+              <span>{sectionText(subSchemas.preDeduct) || t('strategy.config.pre_deduct')}</span>
+              {sectionDesc(subSchemas.preDeduct) && (
+                <Tooltip title={sectionDesc(subSchemas.preDeduct)}>
                   <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}
@@ -372,9 +373,9 @@ export function TokenRateLimiterFields({ schema, t }: TokenRateLimiterFieldsProp
           title={
             <Space>
               <ThunderboltOutlined />
-              <span>{subSchemas.windowLimit.sectionLabel || '窗口Token限流'}</span>
-              {subSchemas.windowLimit.sectionDescription && (
-                <Tooltip title={subSchemas.windowLimit.sectionDescription}>
+              <span>{sectionText(subSchemas.windowLimit) || t('strategy.config.window_limit')}</span>
+              {sectionDesc(subSchemas.windowLimit) && (
+                <Tooltip title={sectionDesc(subSchemas.windowLimit)}>
                   <InfoCircleOutlined style={{ color: palette.textMuted }} />
                 </Tooltip>
               )}

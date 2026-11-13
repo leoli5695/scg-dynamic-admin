@@ -40,6 +40,7 @@
   "auth_policy.api_key_header_format": "API Key Header格式",
   "auth_policy.basic_header_format": "Basic Auth Header格式",
   "auth_policy.credentials": "凭证",
+  "auth_policy.credentials_base64": "（Base64：{{value}}）",
   "auth_policy.curl_alternative": "备用Curl命令",
   "auth_policy.oauth2_get_token": "步骤1: 获取访问令牌",
   "auth_policy.oauth2_use_token": "步骤2: 在请求中使用令牌",

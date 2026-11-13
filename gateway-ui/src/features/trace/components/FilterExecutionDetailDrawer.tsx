@@ -167,7 +167,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
         <Row gutter={16}>
           <Col span={12}>
             <div style={{ marginBottom: 8 }}>
-              <span style={{ fontSize: 12 }}>{t('filter_detail.self_time')} (Filter自身逻辑)</span>
+              <span style={{ fontSize: 12 }}>{t('filter_detail.self_time')} {t('filter_detail.self_time_hint')}</span>
               <Progress
                 percent={Math.min(100, (execution.selfTimeMs / execution.totalTimeMs) * 100)}
                 strokeColor={getHealthColor(healthStatus)}
@@ -177,7 +177,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
           </Col>
           <Col span={12}>
             <div style={{ marginBottom: 8 }}>
-              <span style={{ fontSize: 12 }}>{t('filter_detail.downstream_time')} (下游链耗时)</span>
+              <span style={{ fontSize: 12 }}>{t('filter_detail.downstream_time')} {t('filter_detail.downstream_time_hint')}</span>
               <Progress
                 percent={Math.min(100, (execution.downstreamMs / execution.totalTimeMs) * 100)}
                 strokeColor={palette.primary}

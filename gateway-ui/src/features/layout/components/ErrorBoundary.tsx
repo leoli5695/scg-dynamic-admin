@@ -1,8 +1,9 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Result, Button } from 'antd';
 import { ReloadOutlined, HomeOutlined } from '@ant-design/icons';
+import { withTranslation, WithTranslation } from 'react-i18next';
 
-interface Props {
+interface Props extends WithTranslation {
   children: ReactNode;
   fallback?: ReactNode;
 }
@@ -62,8 +63,8 @@ class ErrorBoundary extends Component<Props, State> {
         }}>
           <Result
             status="error"
-            title="页面加载失败"
-            subTitle={this.state.error?.message || '组件渲染时发生错误，请尝试刷新页面'}
+            title={this.props.t('common.page_load_failed')}
+            subTitle={this.state.error?.message || this.props.t('common.render_error_hint')}
             extra={[
               <Button
                 key="reload"
@@ -71,14 +72,14 @@ class ErrorBoundary extends Component<Props, State> {
                 icon={<ReloadOutlined />}
                 onClick={this.handleReload}
               >
-                刷新页面
+                {this.props.t('common.refresh_page')}
               </Button>,
               <Button
                 key="home"
                 icon={<HomeOutlined />}
                 onClick={this.handleGoHome}
               >
-                返回列表
+                {this.props.t('common.back_to_list')}
               </Button>,
             ]}
           />
@@ -90,4 +91,4 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-export default ErrorBoundary;
+export default withTranslation()(ErrorBoundary);

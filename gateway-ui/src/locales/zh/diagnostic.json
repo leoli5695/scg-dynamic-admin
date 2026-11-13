@@ -81,5 +81,19 @@
   "diagnostic.metric.gatewayStatus5xxRate": "5xx响应率",
   "diagnostic.metric.adminJvmMaxMemoryMB": "Admin JVM最大(MB)",
   "diagnostic.metric.adminJvmUsedMemoryMB": "Admin JVM已用(MB)",
-  "diagnostic.metric.adminJvmMemoryUtilization": "Admin JVM内存"
+  "diagnostic.metric.adminJvmMemoryUtilization": "Admin JVM内存",
+  "diagnostic.score_label": "评分",
+  "diagnostic.health_line": "健康线",
+  "diagnostic.warning_line": "警告线",
+  "diagnostic.error_rate_percent": "错误率(%)",
+  "diagnostic.heap_memory_percent": "堆内存(%)",
+  "diagnostic.last_1h": "最近1小时",
+  "diagnostic.last_6h": "最近6小时",
+  "diagnostic.last_12h": "最近12小时",
+  "diagnostic.last_24h": "最近24小时",
+  "diagnostic.last_3d": "最近3天",
+  "diagnostic.score_healthy": "(健康)",
+  "diagnostic.score_warning": "(警告)",
+  "diagnostic.score_danger": "(危险)",
+  "diagnostic.health_stable": "系统健康度保持稳定"
 }

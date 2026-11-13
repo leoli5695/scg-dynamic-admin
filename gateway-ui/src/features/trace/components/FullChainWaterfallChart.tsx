@@ -241,13 +241,13 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
           <Tooltip title={
             <div>
               <div><strong>{span.operation}</strong></div>
-              {span.spanId && <div>Span ID: {span.spanId}</div>}
-              {span.parentSpanId && <div>Parent: {span.parentSpanId}</div>}
-              <div>耗时: {span.durationMs}ms</div>
-              <div>类型: {span.spanType || 'SERVICE'}</div>
-              {span.kind && <div>Kind: {span.kind}</div>}
-              {tagSummary && <div>Tags: {tagSummary}</div>}
-              {span.errorMessage && <div style={{ color: '#ffa39e' }}>错误: {span.errorMessage}</div>}
+              {span.spanId && <div>{t('trace.span_id')}: {span.spanId}</div>}
+              {span.parentSpanId && <div>{t('trace.parent_span')}: {span.parentSpanId}</div>}
+              <div>{t('trace.duration')}: {span.durationMs}ms</div>
+              <div>{t('trace.span_type')}: {span.spanType || 'SERVICE'}</div>
+              {span.kind && <div>{t('trace.span_kind')}: {span.kind}</div>}
+              {tagSummary && <div>{t('trace.span_tags')}: {tagSummary}</div>}
+              {span.errorMessage && <div style={{ color: '#ffa39e' }}>{t('trace.error')}: {span.errorMessage}</div>}
             </div>
           }>
             <div style={{
@@ -347,11 +347,11 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
           <Tooltip title={
             <div>
               <div><strong>{exec.filterName}</strong></div>
-              <div>自身耗时: {exec.selfTimeMs.toFixed(2)}ms</div>
-              <div>总耗时: {exec.totalTimeMs.toFixed(2)}ms</div>
-              <div>下游耗时: {exec.downstreamMs.toFixed(2)}ms</div>
-              {exec.timePercentage && <div>占比: {exec.timePercentage.toFixed(1)}%</div>}
-              {exec.errorMessage && <div style={{ color: '#ffa39e' }}>错误: {exec.errorMessage}</div>}
+              <div>{t('trace.self_time')}: {exec.selfTimeMs.toFixed(2)}ms</div>
+              <div>{t('trace.total_latency')}: {exec.totalTimeMs.toFixed(2)}ms</div>
+              <div>{t('trace.downstream_time')}: {exec.downstreamMs.toFixed(2)}ms</div>
+              {exec.timePercentage && <div>{t('trace.filter_percentage')}: {exec.timePercentage.toFixed(1)}%</div>}
+              {exec.errorMessage && <div style={{ color: '#ffa39e' }}>{t('trace.error')}: {exec.errorMessage}</div>}
             </div>
           }>
             <div style={{
@@ -425,12 +425,12 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
         <span>
           <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.primary, marginRight: 4, borderRadius: 2 }}></span>
           <FilterOutlined style={{ fontSize: 10, marginRight: 2 }} />
-          Filter
+          {t('trace.legend_filter')}
         </span>
         <span>
           <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.successSolid, marginRight: 4, borderRadius: 2 }}></span>
           <CloudServerOutlined style={{ fontSize: 10, marginRight: 2 }} />
-          Service
+          {t('trace.service')}
         </span>
         <span>
           <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.warningSolid, marginRight: 4, borderRadius: 2 }}></span>
@@ -449,11 +449,11 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
         </span>
         <span>
           <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.errorSolid, marginRight: 4, borderRadius: 2 }}></span>
-          Error
+          {t('trace.legend_error')}
         </span>
         <span style={{ marginLeft: 8 }}>
           <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.successSolid, marginRight: 4, borderRadius: 2, opacity: 0.5 }}></span>
-          下游耗时
+          {t('trace.downstream_time')}
         </span>
       </div>
 
@@ -486,7 +486,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
             borderRadius: 4
           }}>
             <ApiOutlined style={{ color: palette.primary, marginRight: 8 }} />
-            <Text strong style={{ fontSize: 12 }}>Gateway Filters</Text>
+            <Text strong style={{ fontSize: 12 }}>{t('trace.filter_section')}</Text>
             <Badge
               count={filterExecutions.length}
               style={{ marginLeft: 8, backgroundColor: palette.primary }}
@@ -494,7 +494,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
             />
             {gatewayTotalDurationMs > 0 && (
               <Text type="secondary" style={{ marginLeft: 12, fontSize: 11 }}>
-                总耗时: {gatewayTotalDurationMs}ms
+                {t('trace.total_latency')}: {gatewayTotalDurationMs}ms
               </Text>
             )}
           </div>
@@ -515,7 +515,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
           }}>
             <CloudServerOutlined style={{ color: palette.success, marginRight: 8 }} />
             <Text strong style={{ fontSize: 12 }}>
-              {serviceName ? `Service: ${serviceName}` : 'Service Spans'}
+              {serviceName ? `${t('trace.service')}: ${serviceName}` : t('trace.service_section')}
             </Text>
             <Badge
               count={processedSpans.length}
@@ -524,10 +524,10 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
             />
             {/* 层级深度提示 */}
             {showHierarchy && (
-              <Tooltip title="基于 spanId/parentSpanId 计算的层级深度">
+              <Tooltip title={t('trace.hierarchy_depth_tip')}>
                 <Tag color="default" style={{ marginLeft: 8, fontSize: 10 }}>
                   <BranchesOutlined style={{ marginRight: 4 }} />
-                  层级视图
+                  {t('trace.hierarchy_view')}
                 </Tag>
               </Tooltip>
             )}

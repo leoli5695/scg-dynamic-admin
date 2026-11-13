@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, Typography } from 'antd';
 import { ResponsiveLine } from '@nivo/line';
+import { useTranslation } from 'react-i18next';
 import type { HistoryPoint } from '../../../types/monitor';
 import { chartColors as seriesColors, palette, withAlpha } from '../../../styles/palette';
 import { nivoTheme } from '../../../styles/chartTheme';
@@ -31,13 +32,14 @@ interface MetricChartProps {
 const MetricChart: React.FC<MetricChartProps> = ({
   title, data, colorKey, unit, yAxisLabel = '', valueTransform,
 }) => {
+  const { t } = useTranslation();
   const color = chartColors[colorKey] || chartColors.blue;
 
   if (!data || data.length === 0) {
     return (
       <Card styles={{ body: { padding: '16px' } }}>
         <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Text type="secondary">No data available</Text>
+          <Text type="secondary">{t('monitor.no_data')}</Text>
         </div>
       </Card>
     );

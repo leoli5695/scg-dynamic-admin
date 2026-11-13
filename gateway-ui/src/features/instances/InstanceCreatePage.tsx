@@ -101,7 +101,7 @@ const InstanceCreatePage: React.FC = () => {
       },
       onError: (error) => {
         if (error.status === 0) return;
-        message.warning('Failed to load local images from cluster');
+        message.warning(t('instance.load_images_failed'));
       },
     },
   );
@@ -443,13 +443,13 @@ const InstanceCreatePage: React.FC = () => {
                       label={t('instance.image')}
                       tooltip={
                         selectedImagePullPolicy === 'Never'
-                          ? 'Select from local images available on cluster nodes'
+                          ? t('instance.image_tooltip_local')
                           : t('instance.image_tooltip')
                       }
                     >
                       {selectedImagePullPolicy === 'Never' ? (
                         loadingImages ? (
-                          <Spin description="Loading images..." />
+                          <Spin description={t('instance.loading_images')} />
                         ) : localImages.length > 0 ? (
                           <Space orientation="vertical" style={{ width: '100%' }} size="small">
                             <Select
@@ -457,12 +457,13 @@ const InstanceCreatePage: React.FC = () => {
                               onChange={setSelectedImageNamespace}
                               size="large"
                               style={{ width: '100%' }}
-                              placeholder="Filter by namespace"
+                              placeholder={t('instance.filter_by_namespace')}
                             >
                               <Option value="all">
-                                All Namespaces (
+                                {t('instance.all_namespaces')}
+                                {' ('}
                                 {localImages.length}
-                                )
+                                {')'}
                               </Option>
                               {namespaces.map((ns) => {
                                 const count = localImages.filter((img) => img.namespace === ns).length;
@@ -480,7 +481,7 @@ const InstanceCreatePage: React.FC = () => {
                             <Select
                               showSearch
                               size="large"
-                              placeholder={selectedImageNamespace ? `Select from ${selectedImageNamespace}` : 'Select local image'}
+                              placeholder={selectedImageNamespace ? t('instance.select_image_from_namespace', { ns: selectedImageNamespace }) : t('instance.select_local_image')}
                               optionFilterProp="children"
                               loading={loadingImages}
                               allowClear
@@ -501,7 +502,7 @@ const InstanceCreatePage: React.FC = () => {
                         ) : (
                           <Input
                             size="large"
-                            placeholder="No local images found. Enter manually."
+                            placeholder={t('instance.no_local_images_manual')}
                             style={{ width: '100%' }}
                           />
                         )

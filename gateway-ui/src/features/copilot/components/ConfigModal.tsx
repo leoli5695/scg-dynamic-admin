@@ -150,7 +150,7 @@ const ConfigModal: React.FC<ConfigModalProps> = ({
                       />
                     </Form.Item>
 
-                    <Form.Item label="API Key">
+                    <Form.Item label={t('services.api_key')}>
                       <Input.Password
                         value={apiKey}
                         onChange={(e) => onApiKeyChange(e.target.value)}

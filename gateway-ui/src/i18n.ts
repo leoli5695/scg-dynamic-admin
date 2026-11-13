@@ -30,6 +30,7 @@ import zhStressTest from './locales/zh/stressTest.json';
 import zhK8s from './locales/zh/k8s.json';
 import zhMisc from './locales/zh/misc.json';
 import zhQuickActions from './locales/zh/quickActions.json';
+import zhLicense from './locales/zh/license.json';
 import enCommon from './locales/en/common.json';
 import enMenu from './locales/en/menu.json';
 import enLogin from './locales/en/login.json';
@@ -58,6 +59,7 @@ import enStressTest from './locales/en/stressTest.json';
 import enK8s from './locales/en/k8s.json';
 import enMisc from './locales/en/misc.json';
 import enQuickActions from './locales/en/quickActions.json';
+import enLicense from './locales/en/license.json';
 
 /** Merge domain packs into one flat resource (keys stay flat, e.g. "routes.title"). */
 const merge = (...packs: Record<string, string>[]): Record<string, string> =>
@@ -69,7 +71,7 @@ const resources = {
       enCommon, enMenu, enLogin, enInstance, enRoutes, enServices, enStrategy,
       enAuthPolicy, enCert, enPlugins, enMiddleware, enMonitor, enAlert, enTrace,
       enAccessLog, enAudit, enDiagnostic, enTopology, enFilterChain, enReplay,
-      enCopilot, enStressTest, enK8s, enMisc, enQuickActions, enJwtRevocation, enTokenUsage, enJourney,
+      enCopilot, enStressTest, enK8s, enMisc, enQuickActions, enJwtRevocation, enTokenUsage, enJourney, enLicense,
     ),
   },
   zh: {
@@ -77,7 +79,7 @@ const resources = {
       zhCommon, zhMenu, zhLogin, zhInstance, zhRoutes, zhServices, zhStrategy,
       zhAuthPolicy, zhCert, zhPlugins, zhMiddleware, zhMonitor, zhAlert, zhTrace,
       zhAccessLog, zhAudit, zhDiagnostic, zhTopology, zhFilterChain, zhReplay,
-      zhCopilot, zhStressTest, zhK8s, zhMisc, zhQuickActions, zhJwtRevocation, zhTokenUsage, zhJourney,
+      zhCopilot, zhStressTest, zhK8s, zhMisc, zhQuickActions, zhJwtRevocation, zhTokenUsage, zhJourney, zhLicense,
     ),
   },
 };

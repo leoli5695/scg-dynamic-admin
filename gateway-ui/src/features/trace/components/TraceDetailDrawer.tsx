@@ -79,7 +79,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
       headers: parseHeaders(selectedTrace.requestHeaders),
       body: selectedTrace.requestBody,
     }, null, 2));
-    message.success('Request copied to clipboard');
+    message.success(t('trace.request_copied'));
   };
 
   const copyResponse = () => {
@@ -91,7 +91,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
       latencyMs: selectedTrace.latencyMs,
       errorMessage: selectedTrace.errorMessage,
     }, null, 2));
-    message.success('Response copied to clipboard');
+    message.success(t('trace.response_copied'));
   };
 
   const filterColumns = useMemo<ColumnsType<FilterChainExecution>>(() => [
@@ -196,7 +196,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
       )}
       {selectedTrace && (
         <div>
-          {detail.loading && <div style={{ textAlign: 'center', padding: 20 }}>Loading...</div>}
+          {detail.loading && <div style={{ textAlign: 'center', padding: 20 }}>{t('common.loading')}</div>}
 
           {/* Summary Bar */}
           <Card size="small" className="mb-4">
@@ -280,8 +280,8 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
             <Col span={12}>
               <Card
                 size="small"
-                title={<Text strong>Request</Text>}
-                extra={<Button size="small" icon={<CopyOutlined />} onClick={copyRequest}>Copy</Button>}
+                title={<Text strong>{t('trace.request')}</Text>}
+                extra={<Button size="small" icon={<CopyOutlined />} onClick={copyRequest}>{t('common.copy')}</Button>}
                 className="mb-4"
               >
                 <Collapse
@@ -291,7 +291,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
                   items={[
                     {
                       key: 'headers',
-                      label: `Headers (${getHeadersCount(selectedTrace.requestHeaders)})`,
+                      label: `${t('trace.request_headers')} (${getHeadersCount(selectedTrace.requestHeaders)})`,
                       children: (
                         <pre style={{
                           ...preStyle,
@@ -307,7 +307,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
                     },
                     {
                       key: 'body',
-                      label: `Body (${selectedTrace.requestBody?.length || 0} bytes)`,
+                      label: `${t('trace.request_body')} (${selectedTrace.requestBody?.length || 0} ${t('trace.bytes')})`,
                       extra: isBodyLarge(selectedTrace.requestBody) && (
                         <Button
                           size="small"
@@ -329,8 +329,8 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
             <Col span={12}>
               <Card
                 size="small"
-                title={<Text strong>Response</Text>}
-                extra={<Button size="small" icon={<CopyOutlined />} onClick={copyResponse}>Copy</Button>}
+                title={<Text strong>{t('trace.response')}</Text>}
+                extra={<Button size="small" icon={<CopyOutlined />} onClick={copyResponse}>{t('common.copy')}</Button>}
                 className="mb-4"
               >
                 <Collapse
@@ -340,7 +340,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
                   items={[
                     {
                       key: 'headers',
-                      label: `Headers (${getHeadersCount(selectedTrace.responseHeaders)})`,
+                      label: `${t('trace.response_headers')} (${getHeadersCount(selectedTrace.responseHeaders)})`,
                       children: (
                         <pre style={preStyle}>
                           {formatJson(selectedTrace.responseHeaders)}
@@ -349,7 +349,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
                     },
                     {
                       key: 'body',
-                      label: `Body (${selectedTrace.responseBody?.length || 0} bytes)`,
+                      label: `${t('trace.response_body')} (${selectedTrace.responseBody?.length || 0} ${t('trace.bytes')})`,
                       extra: isBodyLarge(selectedTrace.responseBody) && (
                         <Button
                           size="small"

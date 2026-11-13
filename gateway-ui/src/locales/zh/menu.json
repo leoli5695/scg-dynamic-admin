@@ -32,6 +32,7 @@
   "app.title": "API 网关",
   "app.subtitle": "统一管理平台",
   "app.console_title": "API 网关控制台",
+  "app.copyright": "leoli. 保留所有权利。",
   "menu.token_usage": "用量",
   "menu.platform": "平台管理",
   "menu.feature_settings": "功能开关",

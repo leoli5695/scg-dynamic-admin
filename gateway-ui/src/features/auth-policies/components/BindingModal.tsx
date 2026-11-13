@@ -93,7 +93,7 @@ const BindingModal: React.FC<BindingModalProps> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Tag color="blue">{getRouteName(binding.routeId)}</Tag>
-                  <Text type="secondary">Priority: {binding.priority ?? 100}</Text>
+                  <Text type="secondary">{t('auth_policy.binding_priority')}: {binding.priority ?? 100}</Text>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Switch

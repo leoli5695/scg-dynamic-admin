@@ -167,7 +167,6 @@ const StrategiesPage: React.FC = () => {
         t('strategy.global_strategy_exists_warning', {
           type: typeLabel(type),
           name: existing.strategyName,
-          defaultValue: `已存在全局${typeLabel(type)}策略 "${existing.strategyName}"，只能创建路由级别的策略`,
         }),
       );
     }
@@ -183,7 +182,6 @@ const StrategiesPage: React.FC = () => {
         t('strategy.global_strategy_exists_error', {
           type: typeLabel(getStrategyType(body.strategyType)),
           name: existing.strategyName,
-          defaultValue: `已存在全局${typeLabel(getStrategyType(body.strategyType))}策略 "${existing.strategyName}"，每个类型只允许创建一个全局策略`,
         }),
       );
       return;

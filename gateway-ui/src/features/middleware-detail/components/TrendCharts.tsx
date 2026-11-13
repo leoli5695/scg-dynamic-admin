@@ -3,6 +3,7 @@
  * Console API special case (no history, realtime consumer group lag table).
  */
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert, Card, Col, Descriptions, Empty, Row, Space, Table, Tag
 } from 'antd';
@@ -19,6 +20,7 @@ interface TrendChartsProps {
 }
 
 const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, trend }) => {
+  const { t } = useTranslation();
   // RocketMQ Console API 特殊处理：不支持历史数据，显示实时消费组信息
   if (middlewareType.toLowerCase() === 'rocketmq' && trend?.note) {
     const consumerGroups = trend.consumerGroups ?? [];
@@ -27,8 +29,8 @@ const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, t
         <Alert
           type="info"
           showIcon
-          title="RocketMQ Console API 不支持历史趋势数据"
-          description="Console API 仅提供实时数据，无法获取历史时间序列。下方显示当前各消费组的实时堆积情况。"
+          title={t('middleware.rocketmq_no_history_title')}
+          description={t('middleware.rocketmq_no_history_desc')}
           style={{ marginBottom: 16 }}
         />
         {consumerGroups.length > 0 ? (
@@ -38,9 +40,9 @@ const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, t
             pagination={false}
             size="small"
             columns={[
-              { title: '消费组', dataIndex: 'group', key: 'group' },
+              { title: t('middleware.consumer_group'), dataIndex: 'group', key: 'group' },
               {
-                title: '消息堆积',
+                title: t('middleware.message_lag'),
                 dataIndex: 'diffTotal',
                 key: 'diffTotal',
                 render: (val: number) => (
@@ -50,23 +52,23 @@ const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, t
                 ),
               },
               {
-                title: '消费 TPS',
+                title: t('middleware.consume_tps'),
                 dataIndex: 'consumeTps',
                 key: 'consumeTps',
                 render: (val?: number) => (val ? `${val.toFixed(2)}/s` : '-'),
               },
-              { title: '消费者数', dataIndex: 'count', key: 'count' },
+              { title: t('middleware.consumer_count'), dataIndex: 'count', key: 'count' },
             ]}
           />
         ) : (
-          <Empty description="暂无消费组数据" />
+          <Empty description={t('middleware.no_consumer_groups')} />
         )}
       </div>
     );
   }
 
   if (trendItems.length === 0) {
-    return <Empty description="暂无趋势数据" />;
+    return <Empty description={t('middleware.no_trend_data')} />;
   }
 
   return (
@@ -80,7 +82,7 @@ const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, t
                 <span>{item.label}</span>
                 {item.summary?.avg ? (
                   <Tag color={palette.primary}>
-                    平均: {formatMetricValue(item.summary.avg, item.unit)}
+                    {t('middleware.summary_avg')}: {formatMetricValue(item.summary.avg, item.unit)}
                   </Tag>
                 ) : null}
               </Space>
@@ -88,16 +90,16 @@ const TrendCharts: React.FC<TrendChartsProps> = ({ trendItems, middlewareType, t
             size="small"
           >
             <ReactECharts
-              option={buildTrendChartOption(item.seriesName, item.data, item.unit)}
+              option={buildTrendChartOption(t, item.seriesName, item.data, item.unit)}
               style={{ height: 200 }}
               notMerge
             />
             {item.summary && (
               <Descriptions column={4} size="small" style={{ marginTop: 8 }}>
-                <Descriptions.Item label="最小">{formatMetricValue(item.summary.min, item.unit)}</Descriptions.Item>
-                <Descriptions.Item label="最大">{formatMetricValue(item.summary.max, item.unit)}</Descriptions.Item>
-                <Descriptions.Item label="平均">{formatMetricValue(item.summary.avg, item.unit)}</Descriptions.Item>
-                <Descriptions.Item label="当前">{formatMetricValue(item.summary.last, item.unit)}</Descriptions.Item>
+                <Descriptions.Item label={t('middleware.summary_min')}>{formatMetricValue(item.summary.min, item.unit)}</Descriptions.Item>
+                <Descriptions.Item label={t('middleware.summary_max')}>{formatMetricValue(item.summary.max, item.unit)}</Descriptions.Item>
+                <Descriptions.Item label={t('middleware.summary_avg')}>{formatMetricValue(item.summary.avg, item.unit)}</Descriptions.Item>
+                <Descriptions.Item label={t('middleware.summary_last')}>{formatMetricValue(item.summary.last, item.unit)}</Descriptions.Item>
               </Descriptions>
             )}
           </Card>

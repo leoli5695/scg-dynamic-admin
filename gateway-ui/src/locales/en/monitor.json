@@ -71,6 +71,7 @@
   "monitor.tab_cpu": "CPU",
   "monitor.tab_http": "HTTP Requests",
   "monitor.tab_routes": "Routes",
+  "monitor.no_data": "No data available",
   "monitor.routes_no_data": "No route metrics available",
   "monitor.routes_no_data_desc": "No route-level metrics found in the selected time range. Make sure the gateway is receiving requests.",
   "monitor.route_uri": "URI",

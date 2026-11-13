@@ -25,7 +25,7 @@ const AnalysisModal: React.FC<Props> = ({ open, testId, loading, content, onClos
       title={
         <Space>
           <RobotOutlined style={{ color: palette.success }} />
-          {t('stress_test.ai_analysis_title')} - Test #{testId}
+          {t('stress_test.ai_analysis_title')} - {t('stress_test.test_number', { id: testId ?? '' })}
         </Space>
       }
       open={open}

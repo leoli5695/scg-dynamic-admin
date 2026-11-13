@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert, Divider, Drawer, List, Space, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, RocketOutlined } from '@ant-design/icons';
 import { EDITION_CONFIG, type LicenseFeatureDef } from '../constants/featureCatalog';
+import { useTranslation } from 'react-i18next';
 import { palette } from '../../../styles/palette';
 
 const { Title, Paragraph, Text } = Typography;
@@ -11,97 +12,107 @@ interface FeatureDetailDrawerProps {
   onClose: () => void;
 }
 
-export const FeatureDetailDrawer: React.FC<FeatureDetailDrawerProps> = ({ feature, onClose }) => (
-  <Drawer
-    title={
-      <Space>
-        {feature?.icon}
-        <span>{feature?.displayName}</span>
-      </Space>
-    }
-    placement="right"
-    size={480}
-    open={!!feature}
-    onClose={onClose}
-    destroyOnHidden
-  >
-    {feature && (
-      <div className="feature-detail-drawer">
-        {/* Edition & Status */}
-        <div className="feature-detail-header">
-          <Space size="middle">
-            <Tag color={EDITION_CONFIG[feature.requiredEdition].color}>
-              {EDITION_CONFIG[feature.requiredEdition].label}
-            </Tag>
-            {feature.requiredEdition === 'BASIC' ? (
-              <Tag color="success" style={{ backgroundColor: palette.successSolid, color: '#fff' }}>免费使用</Tag>
-            ) : feature.enabled ? (
-              <Tag color="success">已授权</Tag>
-            ) : feature.requiredEdition === 'ADVANCED' ? (
-              <Tag color="processing" style={{ backgroundColor: palette.primary, color: '#fff' }}>需要高级版</Tag>
-            ) : (
-              <Tag color="purple" style={{ backgroundColor: palette.accentSolid, color: '#fff' }}>需要企业版</Tag>
-            )}
-          </Space>
-        </div>
+export const FeatureDetailDrawer: React.FC<FeatureDetailDrawerProps> = ({ feature, onClose }) => {
+  const { t } = useTranslation();
 
-        <Divider />
-
-        {/* Description */}
-        <div className="feature-detail-section">
-          <Title level={5}>功能介绍</Title>
-          <Paragraph>{feature.detailedDescription || feature.description}</Paragraph>
-        </div>
-
-        {/* Benefits */}
-        {feature.benefits && feature.benefits.length > 0 && (
-          <div className="feature-detail-section">
-            <Title level={5}>核心优势</Title>
-            <List
-              size="small"
-              dataSource={feature.benefits}
-              renderItem={(item) => (
-                <List.Item style={{ padding: '8px 0', border: 'none' }}>
-                  <Space>
-                    <CheckCircleOutlined style={{ color: palette.success }} />
-                    <Text>{item}</Text>
-                  </Space>
-                </List.Item>
+  return (
+    <Drawer
+      title={
+        <Space>
+          {feature?.icon}
+          <span>{feature ? t(feature.displayNameKey) : null}</span>
+        </Space>
+      }
+      placement="right"
+      size={480}
+      open={!!feature}
+      onClose={onClose}
+      destroyOnHidden
+    >
+      {feature && (
+        <div className="feature-detail-drawer">
+          {/* Edition & Status */}
+          <div className="feature-detail-header">
+            <Space size="middle">
+              <Tag color={EDITION_CONFIG[feature.requiredEdition].color}>
+                {t(EDITION_CONFIG[feature.requiredEdition].labelKey)}
+              </Tag>
+              {feature.requiredEdition === 'BASIC' ? (
+                <Tag color="success" style={{ backgroundColor: palette.successSolid, color: '#fff' }}>{t('licenseUI.free_to_use')}</Tag>
+              ) : feature.enabled ? (
+                <Tag color="success">{t('licenseUI.authorized')}</Tag>
+              ) : feature.requiredEdition === 'ADVANCED' ? (
+                <Tag color="processing" style={{ backgroundColor: palette.primary, color: '#fff' }}>{t('licenseUI.requires_advanced')}</Tag>
+              ) : (
+                <Tag color="purple" style={{ backgroundColor: palette.accentSolid, color: '#fff' }}>{t('licenseUI.requires_enterprise')}</Tag>
               )}
-            />
+            </Space>
           </div>
-        )}
 
-        {/* Use Cases */}
-        {feature.useCases && feature.useCases.length > 0 && (
+          <Divider />
+
+          {/* Description */}
           <div className="feature-detail-section">
-            <Title level={5}>应用场景</Title>
-            <List
-              size="small"
-              dataSource={feature.useCases}
-              renderItem={(item) => (
-                <List.Item style={{ padding: '8px 0', border: 'none' }}>
-                  <Space>
-                    <RocketOutlined style={{ color: palette.primary }} />
-                    <Text>{item}</Text>
-                  </Space>
-                </List.Item>
-              )}
-            />
+            <Title level={5}>{t('licenseUI.feature_intro')}</Title>
+            <Paragraph>
+              {feature.detailedDescriptionKey
+                ? t(feature.detailedDescriptionKey)
+                : t(feature.descriptionKey)}
+            </Paragraph>
           </div>
-        )}
 
-        {/* Upgrade Hint */}
-        {feature.requiredEdition !== 'BASIC' && !feature.enabled && (
-          <Alert
-            type="info"
-            title="升级提示"
-            description={`此功能需要 ${EDITION_CONFIG[feature.requiredEdition].label} 才可使用，请联系商务获取 License Code。`}
-            showIcon
-            style={{ marginTop: 16 }}
-          />
-        )}
-      </div>
-    )}
-  </Drawer>
-);
+          {/* Benefits */}
+          {feature.benefitKeys && feature.benefitKeys.length > 0 && (
+            <div className="feature-detail-section">
+              <Title level={5}>{t('licenseUI.key_benefits')}</Title>
+              <List
+                size="small"
+                dataSource={feature.benefitKeys}
+                renderItem={(item) => (
+                  <List.Item style={{ padding: '8px 0', border: 'none' }}>
+                    <Space>
+                      <CheckCircleOutlined style={{ color: palette.success }} />
+                      <Text>{t(item)}</Text>
+                    </Space>
+                  </List.Item>
+                )}
+              />
+            </div>
+          )}
+
+          {/* Use Cases */}
+          {feature.useCaseKeys && feature.useCaseKeys.length > 0 && (
+            <div className="feature-detail-section">
+              <Title level={5}>{t('licenseUI.use_cases')}</Title>
+              <List
+                size="small"
+                dataSource={feature.useCaseKeys}
+                renderItem={(item) => (
+                  <List.Item style={{ padding: '8px 0', border: 'none' }}>
+                    <Space>
+                      <RocketOutlined style={{ color: palette.primary }} />
+                      <Text>{t(item)}</Text>
+                    </Space>
+                  </List.Item>
+                )}
+              />
+            </div>
+          )}
+
+          {/* Upgrade Hint */}
+          {feature.requiredEdition !== 'BASIC' && !feature.enabled && (
+            <Alert
+              type="info"
+              title={t('licenseUI.upgrade_hint_title')}
+              description={t('licenseUI.upgrade_hint', {
+                edition: t(EDITION_CONFIG[feature.requiredEdition].labelKey),
+              })}
+              showIcon
+              style={{ marginTop: 16 }}
+            />
+          )}
+        </div>
+      )}
+    </Drawer>
+  );
+};

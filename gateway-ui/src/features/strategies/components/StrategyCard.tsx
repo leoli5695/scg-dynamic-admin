@@ -35,18 +35,19 @@ function formatConfigEntry(
   value: unknown,
   strategyType: string,
   config: StrategyConfig,
+  t: (key: string, options?: Record<string, unknown>) => string,
 ): { displayKey: string; displayValue: string } {
   let displayKey = key;
   let displayValue: string;
 
   if (strategyType === 'MULTI_DIM_RATE_LIMITER') {
-    displayKey = getQuotaDisplayName(key, config);
+    displayKey = getQuotaDisplayName(key, config, t);
     const keyNameMap: Record<string, string> = {
-      rejectStrategy: '拒绝策略',
-      headerNames: 'Header配置',
-      keyPrefix: '键前缀',
-      windowSizeMs: '时间窗口',
-      keySource: '键来源',
+      rejectStrategy: t('strategy.config.reject_strategy'),
+      headerNames: t('strategy.config.header_names'),
+      keyPrefix: t('strategy.config.key_prefix'),
+      windowSizeMs: t('strategy.config.window_size'),
+      keySource: t('strategy.config.key_source'),
     };
     displayKey = keyNameMap[key] || displayKey;
 
@@ -54,18 +55,18 @@ function formatConfigEntry(
       const quota = value as Record<string, unknown>;
       displayValue = quota.enabled
         ? `${Number(quota.qps) || 100} QPS, burst: ${Number(quota.burstCapacity) || 200}`
-        : '未启用';
+        : t('strategy.config.quota_disabled');
     } else if (key === 'rejectStrategy') {
-      displayValue = getRejectStrategyDisplayName(String(value));
+      displayValue = getRejectStrategyDisplayName(String(value), t);
     } else if (key === 'headerNames' && typeof value === 'object' && value !== null) {
-      displayValue = formatHeaderNames(value as Record<string, string>);
+      displayValue = formatHeaderNames(value as Record<string, string>, t);
     } else if (key === 'windowSizeMs') {
-      displayValue = formatWindowSize(Number(value));
+      displayValue = formatWindowSize(Number(value), t);
     } else if (key === 'keySource') {
       const keySourceMap: Record<string, string> = {
-        combined: '组合键',
+        combined: t('strategy.config.key_source_combined'),
         ip: 'IP',
-        user: '用户',
+        user: t('strategy.config.key_source_user'),
         header: 'Header',
       };
       displayValue = keySourceMap[String(value)] || String(value);
@@ -154,7 +155,7 @@ const StrategyCard = memo(({ strategy, typeInfo, typeLabel, onEdit, onToggle, on
 
       <div className="strategy-config">
         {entries.slice(0, 2).map(([key, value]) => {
-          const { displayKey, displayValue } = formatConfigEntry(key, value, strategy.strategyType, config);
+          const { displayKey, displayValue } = formatConfigEntry(key, value, strategy.strategyType, config, t);
           const shortValue = displayValue.substring(0, 25);
           return (
             <div key={key} className="config-item">
@@ -170,7 +171,7 @@ const StrategyCard = memo(({ strategy, typeInfo, typeLabel, onEdit, onToggle, on
             title={
               <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                 {entries.slice(2).map(([key, value]) => {
-                  const { displayKey, displayValue } = formatConfigEntry(key, value, strategy.strategyType, config);
+                  const { displayKey, displayValue } = formatConfigEntry(key, value, strategy.strategyType, config, t);
                   return (
                     <div key={key} style={{ marginBottom: '4px', fontSize: '12px' }}>
                       <span style={{ color: palette.textMuted }}>{displayKey}: </span>
@@ -184,7 +185,7 @@ const StrategyCard = memo(({ strategy, typeInfo, typeLabel, onEdit, onToggle, on
             mouseEnterDelay={0.3}
           >
             <Text type="secondary" style={{ fontSize: '11px', marginTop: '2px', cursor: 'pointer' }}>
-              +{entries.length - 2} more
+              {t('strategy.more_config_entries', { count: entries.length - 2 })}
             </Text>
           </Tooltip>
         )}

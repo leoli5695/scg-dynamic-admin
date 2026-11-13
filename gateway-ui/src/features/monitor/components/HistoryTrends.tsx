@@ -64,13 +64,13 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
             <MetricChart title={t('monitor.gc_time_history')} data={history.gcTime} colorKey="magenta" unit="s" yAxisLabel="s" />
           </Col>
           <Col xs={24} lg={12}>
-            <MetricChart title={t('monitor.gc_count_history')} data={history.gcCount} colorKey="red" unit="次" yAxisLabel="次" />
+            <MetricChart title={t('monitor.gc_count_history')} data={history.gcCount} colorKey="red" unit={t('monitor.times')} yAxisLabel={t('monitor.times')} />
           </Col>
           <Col xs={24} lg={12}>
-            <MetricChart title={t('monitor.young_gc_history')} data={history.youngGcCount} colorKey="green" unit="次" yAxisLabel="次" />
+            <MetricChart title={t('monitor.young_gc_history')} data={history.youngGcCount} colorKey="green" unit={t('monitor.times')} yAxisLabel={t('monitor.times')} />
           </Col>
           <Col xs={24} lg={12}>
-            <MetricChart title={t('monitor.old_gc_history')} data={history.oldGcCount} colorKey="red" unit="次" yAxisLabel="次" />
+            <MetricChart title={t('monitor.old_gc_history')} data={history.oldGcCount} colorKey="red" unit={t('monitor.times')} yAxisLabel={t('monitor.times')} />
           </Col>
           <Col xs={24} lg={12}>
             <MetricChart title={t('monitor.allocation_rate_history')} data={history.allocationRate} colorKey="orange" unit="MB/s" yAxisLabel="MB/s" valueTransform={toMB} />

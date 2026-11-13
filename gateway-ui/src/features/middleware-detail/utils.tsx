@@ -1,9 +1,11 @@
 /**
  * Display helpers for the middleware detail page.
- * Strings on this page are intentionally kept in Chinese to match the
- * legacy page (it was never i18n-ed).
+ * User-visible strings are i18n-ed: configs expose labelKey (resolved by the
+ * renderer via t()), and builder functions receive a TFunction parameter.
+ * Never translate at module level — that would freeze the language on import.
  */
 import React from 'react';
+import type { TFunction } from 'i18next';
 import { parseServerTime } from '../../utils/serverTime';
 import {
   AlertOutlined, ApiOutlined, CheckCircleOutlined, ClockCircleOutlined,
@@ -41,17 +43,17 @@ export const getMiddlewareTypeConfig = (middlewareType: string): MiddlewareTypeC
     label: middlewareType,
   };
 
-// 指标分类图标配置
-export const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-  memory: { icon: <FundOutlined />, label: '内存', color: palette.primary },
-  connections: { icon: <ApiOutlined />, label: '连接', color: palette.success },
-  throughput: { icon: <DashboardOutlined />, label: '吞吐量', color: palette.warning },
-  latency: { icon: <ClockCircleOutlined />, label: '延迟', color: palette.accent },
-  cache: { icon: <DatabaseOutlined />, label: '缓存', color: palette.info },
-  errors: { icon: <AlertOutlined />, label: '异常', color: palette.error },
-  cluster: { icon: <ClusterOutlined />, label: '集群', color: '#2f54eb' },
-  messages: { icon: <ThunderboltOutlined />, label: '消息', color: '#fd7e14' },
-  other: { icon: <InfoCircleOutlined />, label: '其他', color: palette.textMuted },
+// 指标分类图标配置（labelKey 为 i18n 键，由渲染方用 t() 翻译）
+export const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; labelKey: string; color: string }> = {
+  memory: { icon: <FundOutlined />, labelKey: 'middleware.category_memory', color: palette.primary },
+  connections: { icon: <ApiOutlined />, labelKey: 'middleware.category_connections', color: palette.success },
+  throughput: { icon: <DashboardOutlined />, labelKey: 'middleware.category_throughput', color: palette.warning },
+  latency: { icon: <ClockCircleOutlined />, labelKey: 'middleware.category_latency', color: palette.accent },
+  cache: { icon: <DatabaseOutlined />, labelKey: 'middleware.category_cache', color: palette.info },
+  errors: { icon: <AlertOutlined />, labelKey: 'middleware.category_errors', color: palette.error },
+  cluster: { icon: <ClusterOutlined />, labelKey: 'middleware.category_cluster', color: '#2f54eb' },
+  messages: { icon: <ThunderboltOutlined />, labelKey: 'middleware.category_messages', color: '#fd7e14' },
+  other: { icon: <InfoCircleOutlined />, labelKey: 'middleware.category_other', color: palette.textMuted },
 };
 
 // 格式化数值显示
@@ -181,6 +183,7 @@ const resolveSummary = (
  * Keys come from the backend trend collector (type-specific).
  */
 export const buildTrendItems = (
+  t: TFunction,
   timeSeries: Record<string, TimeSeriesPoint[]> | undefined,
   summary: Record<string, TimeSeriesSummary> | undefined,
   middlewareType: string,
@@ -205,37 +208,37 @@ export const buildTrendItems = (
 
   if (type === 'redis') {
     push('opsPerSec', 'OPS', '/s');
-    push('memoryUsedBytes', '内存使用', 'bytes');
-    push('connectedClients', '连接数', '');
-    push('p99LatencySeconds', 'P99延迟', 'seconds');
-    push('hitRate', '命中率', '%');
+    push('memoryUsedBytes', t('middleware.trend_memory_used'), 'bytes');
+    push('connectedClients', t('middleware.trend_connections'), '');
+    push('p99LatencySeconds', t('middleware.trend_p99_latency'), 'seconds');
+    push('hitRate', t('middleware.trend_hit_rate'), '%');
   } else if (type === 'mysql' || type === 'mariadb') {
     push('qps', 'QPS', '/s');
-    push('connections', '连接数', '');
-    push('slowQueryRate', '慢查询速率', '/s');
-    push('bufferPoolPages', '缓冲池页数', '');
+    push('connections', t('middleware.trend_connections'), '');
+    push('slowQueryRate', t('middleware.trend_slow_query_rate'), '/s');
+    push('bufferPoolPages', t('middleware.trend_buffer_pool_pages'), '');
   } else if (type === 'elasticsearch') {
-    push('jvmMemoryUsedBytes', 'JVM内存', 'bytes');
-    push('searchQueryTotal', '搜索速率', '/s');
-    push('cpuPercent', 'CPU使用率', '%');
+    push('jvmMemoryUsedBytes', t('middleware.trend_jvm_memory'), 'bytes');
+    push('searchQueryTotal', t('middleware.trend_search_rate'), '/s');
+    push('cpuPercent', t('middleware.trend_cpu_usage'), '%');
   } else if (type === 'rocketmq') {
-    push('producerTps', '生产TPS', '/s');
-    push('consumerTps', '消费TPS', '/s');
-    push('consumerLag', '消费延迟', '');
+    push('producerTps', t('middleware.trend_produce_tps'), '/s');
+    push('consumerTps', t('middleware.trend_consume_tps'), '/s');
+    push('consumerLag', t('middleware.trend_consumer_lag'), '');
   } else if (type === 'mongodb') {
-    push('connections', '连接数', '');
-    push('queryOpsRate', '查询速率', '/s');
-    push('insertOpsRate', '插入速率', '/s');
-    push('cacheUsedBytes', '缓存使用', 'bytes');
+    push('connections', t('middleware.trend_connections'), '');
+    push('queryOpsRate', t('middleware.trend_query_rate'), '/s');
+    push('insertOpsRate', t('middleware.trend_insert_rate'), '/s');
+    push('cacheUsedBytes', t('middleware.trend_cache_used'), 'bytes');
   } else if (type === 'rabbitmq') {
-    push('messagesTotal', '消息总数', '');
-    push('messagesReady', '待处理消息', '');
-    push('publishRate', '发布速率', '/s');
-    push('deliverRate', '投递速率', '/s');
+    push('messagesTotal', t('middleware.trend_messages_total'), '');
+    push('messagesReady', t('middleware.trend_messages_ready'), '');
+    push('publishRate', t('middleware.trend_publish_rate'), '/s');
+    push('deliverRate', t('middleware.trend_deliver_rate'), '/s');
   } else if (type === 'postgresql') {
-    push('activeConnections', '活跃连接', '');
-    push('transactionCommitRate', '提交速率', '/s');
-    push('cacheHitRate', '缓存命中', '%');
+    push('activeConnections', t('middleware.trend_active_connections'), '');
+    push('transactionCommitRate', t('middleware.trend_commit_rate'), '/s');
+    push('cacheHitRate', t('middleware.trend_cache_hit'), '%');
   }
 
   return items;
@@ -243,13 +246,14 @@ export const buildTrendItems = (
 
 // 构建趋势图表配置
 export const buildTrendChartOption = (
+  t: TFunction,
   seriesName: string,
   data: TimeSeriesPoint[],
   unit: string,
 ) => {
   if (!data || data.length === 0) {
     return {
-      title: { text: '暂无数据', left: 'center', top: 'center', textStyle: { color: palette.textMuted } },
+      title: { text: t('middleware.no_data'), left: 'center', top: 'center', textStyle: { color: palette.textMuted } },
       xAxis: { show: false },
       yAxis: { show: false },
     };

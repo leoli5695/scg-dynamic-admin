@@ -95,7 +95,7 @@ function RequestQuery({ instanceId }: { instanceId: string }) {
           <Form.Item name="routeId" label={t('tokenUsage.table.route')}>
             <Input allowClear placeholder={t('requestSearch.exactRoute')} />
           </Form.Item>
-          <Form.Item name="traceId" label="Trace ID">
+          <Form.Item name="traceId" label={t('access_log.trace_id')}>
             <Input allowClear placeholder={t('requestSearch.exactTrace')} />
           </Form.Item>
           <Form.Item name="statusCode" label={t('trace.status')}>
@@ -129,7 +129,7 @@ function RequestQuery({ instanceId }: { instanceId: string }) {
             { title: t('trace.path'), dataIndex: 'path', ellipsis: true },
             { title: 'HTTP', dataIndex: 'statusCode', width: 80, render: value => <Tag color={value >= 400 ? 'red' : 'green'}>{value}</Tag> },
             { title: t('trace.latency'), dataIndex: 'durationMs', width: 100, render: value => `${value} ms` },
-            { title: 'Trace ID', dataIndex: 'traceId', ellipsis: true, render: value => value || '—' },
+            { title: t('access_log.trace_id'), dataIndex: 'traceId', ellipsis: true, render: value => value || '—' },
             { title: t('common.actions'), key: 'actions', width: 110, fixed: 'right', render: (_, row) =>
               <Button type="link" disabled={!row.traceId} onClick={() => openRequest(row)}>{t('journey.inspect')}</Button> },
           ]} />}

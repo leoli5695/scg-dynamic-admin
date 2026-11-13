@@ -139,6 +139,10 @@
   "routes.disabled_success": "路由已禁用",
   "routes.enable_failed": "启用路由失败",
   "routes.disable_failed": "禁用路由失败",
+  "predicate.Path.name": "路径",
+  "predicate.Host.name": "主机",
+  "predicate.Method.name": "方法",
+  "predicate.Header.name": "请求头",
   "predicate.Path.detail": "按 URL 路径模式匹配请求。支持 Spring Ant 风格模式：? (单个字符)、* (除 / 外任意字符)、** (包含 / 的任意字符)。例如：/api/** 匹配 /api/ 下的所有路径。",
   "predicate.Host.detail": "按 Host 请求头匹配请求。支持 Ant 风格模式如 *.example.com 匹配所有子域名。适用于基于域名的多租户路由。",
   "predicate.Method.detail": "按 HTTP 方法匹配请求 (GET、POST、PUT、DELETE、PATCH、HEAD、OPTIONS)。支持多个方法组合。适用于 API 方法限制。",
@@ -175,6 +179,9 @@
   "routes.gray_rule_name": "名称",
   "routes.gray_rule_value": "值",
   "routes.rule_type": "类型",
+  "routes.rule_type_header": "请求头",
+  "routes.rule_type_cookie": "Cookie",
+  "routes.rule_type_query": "查询参数",
   "routes.target_version": "目标版本",
   "routes.add_gray_rule": "添加灰度规则",
   "routes.static_services": "静态服务",
@@ -271,5 +278,8 @@
   "routes.debug_auth_bound": "路由已绑定",
   "routes.debug_auth_other": "实例其他鉴权",
   "routes.debug_auth_failed": "无法加载鉴权配置，请刷新重试或手动填写请求头",
-  "routes.debug_auth_key": "选择密钥"
+  "routes.debug_auth_key": "选择密钥",
+  "routes.method_required": "请选择请求方法",
+  "routes.select_methods": "选择请求方法",
+  "routes.args_required": "请输入匹配值"
 }

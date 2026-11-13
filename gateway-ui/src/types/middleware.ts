@@ -70,6 +70,7 @@ export interface MiddlewareDetailMetric {
   name: string;
   value: number;
   displayName: string;
+  displayNameEn?: string;
   unit: string;
   status: string;
   category: string;

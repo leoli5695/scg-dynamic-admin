@@ -5,6 +5,7 @@
 import React from 'react';
 import ReactECharts from 'echarts-for-react';
 import { Card, Row, Col } from 'antd';
+import { useTranslation } from 'react-i18next';
 import type { StressTestMetrics } from '../../../types/stressTest';
 import { palette, withAlpha } from '../../../styles/palette';
 import { chartCategoryAxis, chartLegend, chartTitle, chartTooltip, chartValueAxis } from '../../../styles/chartTheme';
@@ -27,6 +28,7 @@ const axisCommon = {
 const titleStyle = chartTitle;
 
 const StressTestCharts: React.FC<Props> = ({ metrics }) => {
+  const { t } = useTranslation();
   if (!metrics || !metrics.timeline || metrics.timeline.length === 0) {
     return null;
   }
@@ -40,7 +42,7 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
 
   // RPS Chart
   const rpsOption = {
-    title: { text: 'Requests Per Second', left: 'center', textStyle: titleStyle },
+    title: { text: t('stress_test.req_per_sec'), left: 'center', textStyle: titleStyle },
     tooltip: { ...axisCommon.tooltip, borderColor: palette.primary },
     grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
     xAxis: { type: 'category' as const, data: timeLabels, ...axisCommon.xAxis },
@@ -66,10 +68,10 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
 
   // Response Time Chart
   const rtOption = {
-    title: { text: 'Response Time (ms)', left: 'center', textStyle: titleStyle },
+    title: { text: t('stress_test.chart_response_time'), left: 'center', textStyle: titleStyle },
     tooltip: { ...axisCommon.tooltip, borderColor: palette.primary },
     legend: {
-      data: ['Avg', 'P95', 'P99'],
+      data: [t('stress_test.chart_avg'), 'P95', 'P99'],
       top: 25,
       textStyle: chartLegend.textStyle,
     },
@@ -78,7 +80,7 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
     yAxis: { type: 'value' as const, name: 'ms', ...axisCommon.yAxis },
     series: [
       {
-        name: 'Avg',
+        name: t('stress_test.chart_avg'),
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.avgResponseTime.toFixed(2)),
@@ -103,20 +105,20 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
 
   // Error Rate Chart
   const errorOption = {
-    title: { text: 'Error Rate (%)', left: 'center', textStyle: titleStyle },
+    title: { text: t('stress_test.chart_error_rate'), left: 'center', textStyle: titleStyle },
     tooltip: {
       ...axisCommon.tooltip,
       borderColor: palette.error,
       formatter: (params: unknown) => {
         const point = (params as Array<{ name: string; value: string }>)[0];
-        return `${point.name}<br/>Error Rate: ${point.value}%`;
+        return `${point.name}<br/>${t('stress_test.error_rate')}: ${point.value}%`;
       },
     },
     grid: { left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true },
     xAxis: { type: 'category' as const, data: timeLabels, ...axisCommon.xAxis },
     yAxis: { type: 'value' as const, name: '%', max: 100, ...axisCommon.yAxis },
     series: [{
-      name: 'Error Rate',
+      name: t('stress_test.error_rate'),
       type: 'line',
       smooth: true,
       data: metrics.timeline.map((p) => p.errorRate.toFixed(2)),
@@ -135,7 +137,7 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
       },
       markLine: {
         silent: true,
-        data: [{ yAxis: 5, label: { formatter: 'Warning: 5%' } }],
+        data: [{ yAxis: 5, label: { formatter: t('stress_test.chart_error_warning', { value: 5 }) } }],
         lineStyle: { color: palette.warning, type: 'dashed' },
       },
     }],
@@ -143,10 +145,10 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
 
   // Cumulative Requests Chart
   const cumulativeOption = {
-    title: { text: 'Cumulative Requests', left: 'center', textStyle: titleStyle },
+    title: { text: t('stress_test.chart_cumulative_requests'), left: 'center', textStyle: titleStyle },
     tooltip: { ...axisCommon.tooltip, borderColor: palette.primary },
     legend: {
-      data: ['Total', 'Success', 'Failed'],
+      data: [t('common.total_label'), t('common.success'), t('stress_test.failed')],
       top: 25,
       textStyle: chartLegend.textStyle,
     },
@@ -155,21 +157,21 @@ const StressTestCharts: React.FC<Props> = ({ metrics }) => {
     yAxis: { type: 'value' as const, ...axisCommon.yAxis },
     series: [
       {
-        name: 'Total',
+        name: t('common.total_label'),
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.totalRequests),
         itemStyle: { color: palette.primary },
       },
       {
-        name: 'Success',
+        name: t('common.success'),
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.successRequests),
         itemStyle: { color: palette.success },
       },
       {
-        name: 'Failed',
+        name: t('stress_test.failed'),
         type: 'line',
         smooth: true,
         data: metrics.timeline.map((p) => p.failedRequests),

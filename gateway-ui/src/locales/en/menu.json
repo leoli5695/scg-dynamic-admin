@@ -32,6 +32,7 @@
   "app.title": "API Gateway",
   "app.subtitle": "Unified Management Platform",
   "app.console_title": "API Gateway Console",
+  "app.copyright": "leoli. All rights reserved.",
   "menu.token_usage": "Usage",
   "menu.platform": "Platform management",
   "menu.feature_settings": "Feature switches",

@@ -21,6 +21,7 @@ import {
 } from '@ant-design/icons';
 import type { StrategyTypeField, StrategyTypeSchema } from '../../../types/strategy';
 import type { TFunc } from './DynamicConfigFields';
+import { fieldUnit } from './schemaLabels';
 import { message } from '../../../utils/antdStatic';
 import {
   listProviderCredentials,
@@ -28,16 +29,6 @@ import {
   type ProviderCredential,
 } from '../../../api/providerCredentials';
 import { palette } from '../../../styles/palette';
-
-/** Built-in provider catalogue — mirrors my-gateway ai/LlmProvider.java. */
-const PROVIDERS = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'qwen', label: '通义千问/百炼' },
-  { value: 'zhipu', label: '智谱 GLM' },
-  { value: 'moonshot', label: '月之暗面/Kimi' },
-  { value: 'anthropic', label: 'Anthropic Claude' },
-];
 
 interface AiProxyFieldsProps {
   schema: StrategyTypeSchema | undefined;
@@ -50,6 +41,17 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
   const [credModalOpen, setCredModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [credForm] = Form.useForm();
+
+  /** Built-in provider catalogue — mirrors my-gateway ai/LlmProvider.java.
+   * Labels are resolved during render so they follow the active language. */
+  const providers = [
+    { value: 'openai', label: t('strategy.ai.provider_openai') },
+    { value: 'deepseek', label: t('strategy.ai.provider_deepseek') },
+    { value: 'qwen', label: t('strategy.ai.provider_qwen') },
+    { value: 'zhipu', label: t('strategy.ai.provider_zhipu') },
+    { value: 'moonshot', label: t('strategy.ai.provider_moonshot') },
+    { value: 'anthropic', label: t('strategy.ai.provider_anthropic') },
+  ];
 
   const selection = Form.useWatch('providerSelection', form);
 
@@ -82,7 +84,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
         return (
           <Col span={colSpan} key={field.name}>
             <Form.Item name={field.name} label={label} initialValue={field.default}>
-              <InputNumber min={field.min} max={field.max} addonAfter={field.unit} style={{ width: '100%' }} />
+              <InputNumber min={field.min} max={field.max} addonAfter={fieldUnit(field)} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
         );
@@ -140,7 +142,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
         provider: vals.provider,
         apiKey: vals.apiKey,
       });
-      message.success(t('strategy.ai.credential_created', { defaultValue: '凭据已创建（密钥已加密存储）' }));
+      message.success(t('strategy.ai.credential_created'));
       setCredModalOpen(false);
       credForm.resetFields();
       await loadCredentials();
@@ -152,7 +154,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
         ]);
       }
     } catch (e) {
-      message.error((e as Error)?.message || t('common.error_request_failed', { defaultValue: '创建失败' }));
+      message.error((e as Error)?.message || t('common.error_request_failed'));
     } finally {
       setCreating(false);
     }
@@ -168,7 +170,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
       <Card
         size="small"
         style={{ marginBottom: 16 }}
-        title={<Space><ApiOutlined /><span>{t('strategy.ai.basic', { defaultValue: '代理基本配置' })}</span></Space>}
+        title={<Space><ApiOutlined /><span>{t('strategy.ai.basic')}</span></Space>}
       >
         <Row gutter={16}>
           {visibleFlatFields.map((field) => (
@@ -183,15 +185,15 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
         title={
           <Space>
             <KeyOutlined />
-            <span>{t('strategy.ai.credentials', { defaultValue: 'Provider 凭据（API Key）' })}</span>
-            <Tooltip title={t('strategy.ai.credentials_help', { defaultValue: '为每个 Provider 绑定一个凭据；密钥加密存储、只写不回显。' })}>
+            <span>{t('strategy.ai.credentials')}</span>
+            <Tooltip title={t('strategy.ai.credentials_help')}>
               <InfoCircleOutlined style={{ color: palette.textMuted }} />
             </Tooltip>
           </Space>
         }
         extra={
           <Button size="small" icon={<PlusOutlined />} onClick={() => setCredModalOpen(true)}>
-            {t('strategy.ai.new_credential', { defaultValue: '新建凭据' })}
+            {t('strategy.ai.new_credential')}
           </Button>
         }
       >
@@ -202,17 +204,17 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
                 <Row gutter={12} key={key} align="middle" style={{ marginBottom: 8 }}>
                   <Col span={9}>
                     <Form.Item name={[name, 'provider']} style={{ marginBottom: 0 }}>
-                      <Select placeholder={t('strategy.ai.provider', { defaultValue: 'Provider' })} options={PROVIDERS} />
+                      <Select placeholder={t('strategy.ai.provider')} options={providers} />
                     </Form.Item>
                   </Col>
                   <Col span={12}>
                     <Form.Item name={[name, 'credentialRef']} style={{ marginBottom: 0 }}>
                       <Select
-                        placeholder={t('strategy.ai.credential', { defaultValue: '选择凭据' })}
+                        placeholder={t('strategy.ai.credential')}
                         showSearch
                         optionFilterProp="label"
                         options={credentialOptions}
-                        notFoundContent={t('strategy.ai.no_credentials', { defaultValue: '暂无凭据，请先新建' })}
+                        notFoundContent={t('strategy.ai.no_credentials')}
                       />
                     </Form.Item>
                   </Col>
@@ -227,7 +229,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
                 icon={<PlusOutlined />}
                 onClick={() => add({ provider: undefined, credentialRef: undefined })}
               >
-                {t('strategy.ai.add_credential_binding', { defaultValue: '绑定 Provider 凭据' })}
+                {t('strategy.ai.add_credential_binding')}
               </Button>
             </>
           )}
@@ -240,8 +242,8 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
         title={
           <Space>
             <ApiOutlined />
-            <span>{t('strategy.ai.key_pools', { defaultValue: '多密钥池与负载均衡' })}</span>
-            <Tooltip title={t('strategy.ai.key_pools_help', { defaultValue: '为同一 Provider 配置多个凭据并按策略选择(轮询/最少在途)，规避单钥限流；配置后优先于上方单凭据绑定(对标 Higress ai-load-balancer)。' })}>
+            <span>{t('strategy.ai.key_pools')}</span>
+            <Tooltip title={t('strategy.ai.key_pools_help')}>
               <InfoCircleOutlined style={{ color: palette.textMuted }} />
             </Tooltip>
           </Space>
@@ -254,15 +256,15 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
                 <Row gutter={12} key={key} align="middle" style={{ marginBottom: 8 }}>
                   <Col span={6}>
                     <Form.Item name={[name, 'provider']} style={{ marginBottom: 0 }}>
-                      <Select placeholder={t('strategy.ai.provider', { defaultValue: 'Provider' })} options={PROVIDERS} />
+                      <Select placeholder={t('strategy.ai.provider')} options={providers} />
                     </Form.Item>
                   </Col>
                   <Col span={6}>
                     <Form.Item name={[name, 'strategy']} style={{ marginBottom: 0 }} initialValue="ROUND_ROBIN">
                       <Select
                         options={[
-                          { value: 'ROUND_ROBIN', label: t('strategy.ai.lb_rr', { defaultValue: '轮询' }) },
-                          { value: 'LEAST_INFLIGHT', label: t('strategy.ai.lb_least', { defaultValue: '最少在途' }) },
+                          { value: 'ROUND_ROBIN', label: t('strategy.ai.lb_rr') },
+                          { value: 'LEAST_INFLIGHT', label: t('strategy.ai.lb_least') },
                         ]}
                       />
                     </Form.Item>
@@ -271,11 +273,11 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
                     <Form.Item name={[name, 'credentialRefs']} style={{ marginBottom: 0 }}>
                       <Select
                         mode="multiple"
-                        placeholder={t('strategy.ai.pool_refs', { defaultValue: '选择凭据(可多选)' })}
+                        placeholder={t('strategy.ai.pool_refs')}
                         showSearch
                         optionFilterProp="label"
                         options={credentialOptions}
-                        notFoundContent={t('strategy.ai.no_credentials', { defaultValue: '暂无凭据，请先新建' })}
+                        notFoundContent={t('strategy.ai.no_credentials')}
                       />
                     </Form.Item>
                   </Col>
@@ -290,7 +292,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
                 icon={<PlusOutlined />}
                 onClick={() => add({ provider: undefined, strategy: 'ROUND_ROBIN', credentialRefs: [] })}
               >
-                {t('strategy.ai.add_key_pool', { defaultValue: '添加密钥池' })}
+                {t('strategy.ai.add_key_pool')}
               </Button>
             </>
           )}
@@ -303,8 +305,8 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
         title={
           <Space>
             <BranchesOutlined />
-            <span>{t('strategy.ai.model_routing', { defaultValue: 'Model 路由别名（可选）' })}</span>
-            <Tooltip title={t('strategy.ai.model_routing_help', { defaultValue: '把自定义 model 名显式指向某 Provider；不配则按内置前缀自动识别（gpt-→openai、qwen→qwen、deepseek-→deepseek、glm-→zhipu、kimi-→moonshot、claude-→anthropic）。' })}>
+            <span>{t('strategy.ai.model_routing')}</span>
+            <Tooltip title={t('strategy.ai.model_routing_help')}>
               <InfoCircleOutlined style={{ color: palette.textMuted }} />
             </Tooltip>
           </Space>
@@ -317,12 +319,12 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
                 <Row gutter={12} key={key} align="middle" style={{ marginBottom: 8 }}>
                   <Col span={11}>
                     <Form.Item name={[name, 'model']} style={{ marginBottom: 0 }}>
-                      <Input placeholder={t('strategy.ai.model_name', { defaultValue: 'model 名，如 my-gpt' })} />
+                      <Input placeholder={t('strategy.ai.model_name')} />
                     </Form.Item>
                   </Col>
                   <Col span={10}>
                     <Form.Item name={[name, 'provider']} style={{ marginBottom: 0 }}>
-                      <Select placeholder={t('strategy.ai.route_to', { defaultValue: '路由到 Provider' })} options={PROVIDERS} />
+                      <Select placeholder={t('strategy.ai.route_to')} options={providers} />
                     </Form.Item>
                   </Col>
                   <Col span={3}>
@@ -331,7 +333,7 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
                 </Row>
               ))}
               <Button type="dashed" block icon={<PlusOutlined />} onClick={() => add({ model: '', provider: undefined })}>
-                {t('strategy.ai.add_model_route', { defaultValue: '添加 model 别名' })}
+                {t('strategy.ai.add_model_route')}
               </Button>
             </>
           )}
@@ -339,27 +341,27 @@ export function AiProxyFields({ schema, form, t }: AiProxyFieldsProps) {
       </Card>
 
       <Modal
-        title={<Space><RobotOutlined />{t('strategy.ai.new_credential', { defaultValue: '新建 Provider 凭据' })}</Space>}
+        title={<Space><RobotOutlined />{t('strategy.ai.new_provider_credential')}</Space>}
         open={credModalOpen}
         onCancel={() => setCredModalOpen(false)}
         onOk={handleCreateCredential}
         confirmLoading={creating}
-        okText={t('common.create', { defaultValue: '创建' })}
-        cancelText={t('common.cancel', { defaultValue: '取消' })}
+        okText={t('common.create')}
+        cancelText={t('common.cancel')}
         destroyOnHidden
       >
         <Form form={credForm} layout="vertical">
-          <Form.Item name="name" label={t('strategy.ai.cred_name', { defaultValue: '凭据名称' })} rules={[{ required: true }]}>
-            <Input placeholder="bailian-qwen" />
+          <Form.Item name="name" label={t('strategy.ai.cred_name')} rules={[{ required: true }]}>
+            <Input placeholder={t('strategy.ai.cred_name_placeholder')} />
           </Form.Item>
-          <Form.Item name="provider" label={t('strategy.ai.provider', { defaultValue: 'Provider' })} rules={[{ required: true }]}>
-            <Select options={PROVIDERS} placeholder={t('strategy.ai.provider', { defaultValue: 'Provider' })} />
+          <Form.Item name="provider" label={t('strategy.ai.provider')} rules={[{ required: true }]}>
+            <Select options={providers} placeholder={t('strategy.ai.provider')} />
           </Form.Item>
           <Form.Item
             name="apiKey"
-            label={t('strategy.ai.api_key', { defaultValue: 'API Key' })}
+            label={t('strategy.ai.api_key')}
             rules={[{ required: true }]}
-            extra={t('strategy.ai.api_key_help', { defaultValue: '加密存储，保存后不再显示明文。' })}
+            extra={t('strategy.ai.api_key_help')}
           >
             <Input.Password placeholder="sk-..." autoComplete="new-password" />
           </Form.Item>

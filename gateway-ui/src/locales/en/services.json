@@ -49,7 +49,7 @@
   "services.description_placeholder": "Optional description",
   "services.description": "Description",
   "services.create_description": "Create a backend service with load balancing",
-  "services.edit_description": "更新服务配置和实例",
+  "services.edit_description": "Update service configuration and instances",
   "services.basic_config": "Basic Configuration",
   "services.instances_helper": "Add backend service instances",
   "services.instance": "Instance",
@@ -112,5 +112,9 @@
   "services.normal_editor_subtitle": "Connect upstream instances and configure load balancing",
   "services.ai_editor_subtitle": "Connect a model provider and manage its credentials and endpoint",
   "services.normal_type_hint": "Distribute requests across upstream instances with weighted, round-robin and other strategies.",
-  "services.ai_type_hint": "Connect a model provider using an API key and an optional base URL."
+  "services.ai_type_hint": "Connect a model provider using an API key and an optional base URL.",
+  "services.weighted_desc": "Smooth weighted round-robin, recommended",
+  "services.round_robin_desc": "Simple round-robin distribution",
+  "services.random_desc": "Random selection",
+  "services.consistent_hash_desc": "Hash-based, suitable for session stickiness"
 }

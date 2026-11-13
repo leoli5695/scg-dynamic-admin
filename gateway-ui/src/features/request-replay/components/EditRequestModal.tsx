@@ -154,22 +154,22 @@ const EditRequestModal: React.FC<EditRequestModalProps> = ({
                 <Col span={20}>
                   <Form.Item name="path" rules={[{ required: true }]}>
                     <Input
-                      aria-label="Path"
+                      aria-label={t('replay.path')}
                       placeholder="/api/users"
                       value={editPath}
                       onChange={(e) => setEditPath(e.target.value)}
-                      addonBefore="Path"
+                      addonBefore={t('replay.path')}
                     />
                   </Form.Item>
                 </Col>
               </Row>
               <div style={{ marginTop: 12 }}>
                 <Input
-                  aria-label="Query"
+                  aria-label={t('replay.query_string')}
                   placeholder={t('replay.query_string')}
                   value={editQueryString}
                   onChange={(e) => setEditQueryString(e.target.value)}
-                  addonBefore="Query"
+                  addonBefore={t('replay.query_string')}
                 />
               </div>
             </div>

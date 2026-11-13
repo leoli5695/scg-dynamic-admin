@@ -76,7 +76,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
           <Card size="small" className="mb-4">
             <Row gutter={16} align="middle">
               <Col span={16}>
-                <Text strong>Trace ID: </Text>
+                <Text strong>{t('trace.trace_id')}: </Text>
                 <Text copyable className="text-xs-sm">{chain.traceId}</Text>
               </Col>
               <Col span={8} style={{ textAlign: 'right' }}>
@@ -177,18 +177,18 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                 items={[
                   ...(chain.gateway.requestHeaders || chain.gateway.requestBody ? [{
                     key: 'request',
-                    label: <Text strong className="text-xs-sm">Request</Text>,
+                    label: <Text strong className="text-xs-sm">{t('trace.request')}</Text>,
                     children: (
                       <div>
                         {chain.gateway.requestHeaders && (
                           <div style={{ marginBottom: 8 }}>
-                            <Text type="secondary" className="text-xs-tiny">Headers</Text>
+                            <Text type="secondary" className="text-xs-tiny">{t('trace.request_headers')}</Text>
                             <pre style={preStyle}>{formatJson(chain.gateway.requestHeaders)}</pre>
                           </div>
                         )}
                         {chain.gateway.requestBody && (
                           <div>
-                            <Text type="secondary" className="text-xs-tiny">Body</Text>
+                            <Text type="secondary" className="text-xs-tiny">{t('trace.request_body')}</Text>
                             <pre style={{ ...preStyle, maxHeight: 200 }}>{formatJson(chain.gateway.requestBody)}</pre>
                           </div>
                         )}
@@ -197,18 +197,18 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                   }] : []),
                   ...(chain.gateway.responseHeaders || chain.gateway.responseBody ? [{
                     key: 'response',
-                    label: <Text strong className="text-xs-sm">Response</Text>,
+                    label: <Text strong className="text-xs-sm">{t('trace.response')}</Text>,
                     children: (
                       <div>
                         {chain.gateway.responseHeaders && (
                           <div style={{ marginBottom: 8 }}>
-                            <Text type="secondary" className="text-xs-tiny">Headers</Text>
+                            <Text type="secondary" className="text-xs-tiny">{t('trace.response_headers')}</Text>
                             <pre style={preStyle}>{formatJson(chain.gateway.responseHeaders)}</pre>
                           </div>
                         )}
                         {chain.gateway.responseBody && (
                           <div>
-                            <Text type="secondary" className="text-xs-tiny">Body</Text>
+                            <Text type="secondary" className="text-xs-tiny">{t('trace.response_body')}</Text>
                             <pre style={{ ...preStyle, maxHeight: 200 }}>{formatJson(chain.gateway.responseBody)}</pre>
                           </div>
                         )}
@@ -281,7 +281,7 @@ const FullChainDetailDrawer: React.FC<FullChainDetailDrawerProps> = ({
                             {t('trace.span_details')} ({service.spans.length})
                           </Text>
                           {service.spans.some((s) => !s.success) && (
-                            <Tag color="error" style={{ fontSize: 10 }}>有错误</Tag>
+                            <Tag color="error" style={{ fontSize: 10 }}>{t('trace.has_errors')}</Tag>
                           )}
                         </Space>
                       ),

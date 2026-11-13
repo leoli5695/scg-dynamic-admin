@@ -6,6 +6,22 @@ import { palette } from '../../styles/palette';
 export const DEFAULT_VISIBLE_COLUMNS = ['traceId', 'method', 'path', 'statusCode', 'latencyMs', 'traceTime', 'actions'];
 export const ALL_COLUMNS = ['traceId', 'method', 'path', 'statusCode', 'latencyMs', 'clientIp', 'traceTime', 'replayCount', 'actions'];
 
+/**
+ * Column id → i18n key. Shared by the table headers and the column chooser so the
+ * two cannot drift; the ids are camelCase while the pack keys are snake_case.
+ */
+export const COLUMN_LABEL_KEYS: Record<string, string> = {
+  traceId: 'trace.trace_id',
+  method: 'trace.method',
+  path: 'trace.path',
+  statusCode: 'trace.status',
+  latencyMs: 'trace.latency',
+  clientIp: 'trace.client_ip',
+  traceTime: 'trace.time',
+  replayCount: 'trace.replay_count',
+  actions: 'common.actions',
+};
+
 /** Client-side time range presets (minutes). */
 export const TIME_RANGE_OPTIONS = [
   { label: '15m', value: 15 },

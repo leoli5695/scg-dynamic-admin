@@ -67,7 +67,11 @@ function harness(feature) {
     '../../api/traces': api, '../../api/replay': api,
     '../../api/http': { ApiError: class ApiError extends Error {} },
     '../../hooks/useRequest': { useRequest: () => ({ data: undefined }) },
-    './utils': { DEFAULT_VISIBLE_COLUMNS: [], ALL_COLUMNS: [], TIME_RANGE_OPTIONS: [] },
+    './utils': {
+      DEFAULT_VISIBLE_COLUMNS: [], ALL_COLUMNS: [], TIME_RANGE_OPTIONS: [],
+      // Real mapping is asserted by i18nCatalog.test.mjs; here any column id resolves to a key.
+      COLUMN_LABEL_KEYS: new Proxy({}, { get: (_, key) => `trace.${String(key)}` }),
+    },
     './components/EditRequestModal': { __esModule: true, default: 'EditRequestModal' },
     './components/ReplayResultModal': { __esModule: true, default: 'ReplayResultModal' },
     './components/TraceDetailDrawer': { __esModule: true, default: 'TraceDetailDrawer' },
