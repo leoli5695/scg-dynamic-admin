@@ -7,7 +7,6 @@ import {
   AppstoreAddOutlined,
   CheckCircleOutlined,
   PlusOutlined,
-  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { BUILTIN_JAR_PATH } from '../../../types/plugin';
@@ -83,7 +82,7 @@ const PluginSelectModal: React.FC<PluginSelectModalProps> = ({
       <Spin spinning={loading}>
         {plugins.length === 0 ? (
           <Empty
-            image={<ThunderboltOutlined style={{ fontSize: 48, color: 'var(--text-muted)' }} />}
+            image={<AppstoreAddOutlined style={{ fontSize: 48, color: 'var(--text-muted)' }} />}
             description={t('plugin_bindings.plugins_empty')}
           />
         ) : (

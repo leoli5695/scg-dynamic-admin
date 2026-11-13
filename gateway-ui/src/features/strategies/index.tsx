@@ -6,7 +6,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Button, Card, Empty, Select, Spin, Tabs, Typography } from 'antd';
 import { message } from '../../utils/antdStatic';
-import { PlusOutlined, RobotOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { ControlOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
@@ -311,7 +311,7 @@ const StrategiesPage: React.FC = () => {
             key: 'NORMAL',
             label: (
               <span>
-                <ThunderboltOutlined /> {t('strategy.tab_normal')} ({categoryCounts.normal})
+                <ControlOutlined /> {t('strategy.tab_normal')} ({categoryCounts.normal})
               </span>
             ),
           },
@@ -331,7 +331,7 @@ const StrategiesPage: React.FC = () => {
         {filteredStrategies.length === 0 ? (
           <Card className="empty-card">
             <Empty
-              image={<ThunderboltOutlined className="empty-icon" />}
+              image={<ControlOutlined className="empty-icon" />}
               description={<span className="empty-text">{t('strategy.empty')}</span>}
             >
               <Button

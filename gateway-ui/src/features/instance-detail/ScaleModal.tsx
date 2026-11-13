@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import {
   Form, InputNumber, Modal, Select, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
+import { WarningOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { scaleInstance } from '../../api/instances';
 import { ApiError } from '../../api/http';
@@ -185,7 +186,7 @@ const ScaleModal: React.FC<ScaleModalProps> = ({
           }}
           >
             <Text type="warning">
-              ⚠️
+              <WarningOutlined />
               {' '}
               {t('instance.spec_change_warning')}
             </Text>

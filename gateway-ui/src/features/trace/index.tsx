@@ -13,8 +13,8 @@ import {
 import { message } from '../../utils/antdStatic';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  ApiOutlined, BranchesOutlined, ClockCircleOutlined, CloseCircleOutlined,
-  DeleteOutlined, DownloadOutlined, EyeOutlined, PlayCircleOutlined,
+  BranchesOutlined, ClockCircleOutlined, CloseCircleOutlined,
+  DeleteOutlined, DownloadOutlined, EyeOutlined, RedoOutlined,
   ReloadOutlined, SearchOutlined, SettingOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -334,14 +334,14 @@ const TracePage: React.FC = () => {
   return (
     <div className="console-workspace-page console-resource-page">
       <ConsolePageHeader
-        icon={<ApiOutlined />}
+        icon={<BranchesOutlined />}
         eyebrow={t('trace.eyebrow')}
         title={t('trace.title')}
         description={t('trace.subtitle')}
         actions={(
           <Space>
             <Button icon={<SearchOutlined />} onClick={() => navigate(`/instances/${encodeURIComponent(instanceId)}/requests`)}>{t('menu.requests')}</Button>
-            <Button icon={<PlayCircleOutlined />} onClick={() => navigate(`/instances/${instanceId}/request_replay`)}>
+            <Button icon={<RedoOutlined />} onClick={() => navigate(`/instances/${instanceId}/request_replay`)}>
               {t('trace.go_to_replay')}
             </Button>
             <Dropdown menu={{

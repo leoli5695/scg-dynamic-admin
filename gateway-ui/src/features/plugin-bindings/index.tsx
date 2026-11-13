@@ -19,16 +19,17 @@ import { message } from '../../utils/antdStatic';
 import InlineStatChips from '../../components/InlineStatChips';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  ApiOutlined,
+  AppstoreAddOutlined,
+  CompassOutlined,
   DeleteOutlined,
   EditOutlined,
   GlobalOutlined,
+  LinkOutlined,
   OrderedListOutlined,
   PlayCircleOutlined,
   PlusOutlined,
+  ReloadOutlined,
   StopOutlined,
-  SyncOutlined,
-  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -295,7 +296,7 @@ const RoutePluginBindingsPage: React.FC = () => {
         key: 'pluginName',
         render: (name: string) => (
           <span className="binding-plugin">
-            <ThunderboltOutlined />
+            <AppstoreAddOutlined />
             {name}
           </span>
         ),
@@ -312,7 +313,7 @@ const RoutePluginBindingsPage: React.FC = () => {
             </span>
           ) : (
             <span className="binding-scope">
-              <ApiOutlined />
+              <CompassOutlined />
               {name}
             </span>
           ),
@@ -432,7 +433,7 @@ const RoutePluginBindingsPage: React.FC = () => {
               {t('plugin_bindings.create_binding')}
             </Button>
             <Button
-              icon={<SyncOutlined />}
+              icon={<ReloadOutlined />}
               onClick={bindingsRequest.run}
               loading={bindingsRequest.loading}
             >
@@ -453,7 +454,7 @@ const RoutePluginBindingsPage: React.FC = () => {
           locale={{
             emptyText: (
               <Empty
-                image={<ThunderboltOutlined className="bindings-empty-icon" />}
+                image={<LinkOutlined className="bindings-empty-icon" />}
                 description={t('plugin_bindings.bindings_empty')}
               />
             ),

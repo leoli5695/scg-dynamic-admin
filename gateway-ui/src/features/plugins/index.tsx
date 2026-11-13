@@ -17,14 +17,15 @@ import { message } from '../../utils/antdStatic';
 import { formatServerTime } from '../../utils/serverTime';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  AppstoreOutlined,
+  AppstoreAddOutlined,
+  CheckCircleOutlined,
   DeleteOutlined,
   EyeOutlined,
-  FileTextOutlined,
+  FundOutlined,
+  HddOutlined,
   PlayCircleOutlined,
+  ReloadOutlined,
   StopOutlined,
-  SyncOutlined,
-  ThunderboltOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
 import { useParams } from 'react-router-dom';
@@ -222,7 +223,7 @@ const PluginsPage: React.FC = () => {
             >
               {t('plugins.upload')}
             </Button>
-            <Button icon={<SyncOutlined />} onClick={reload} loading={pluginsRequest.loading}>
+            <Button icon={<ReloadOutlined />} onClick={reload} loading={pluginsRequest.loading}>
               {t('plugins.refresh')}
             </Button>
           </Space>
@@ -233,27 +234,27 @@ const PluginsPage: React.FC = () => {
         <ManagementMetric
           title={t('plugins.total_plugins')}
           value={stats.total}
-          icon={<AppstoreOutlined />}
+          icon={<AppstoreAddOutlined />}
           subtitle={t('plugins.card.total_hint', { count: stats.registered })}
         />
         <ManagementMetric
           title={t('plugins.enabled')}
           value={stats.enabled}
-          icon={<PlayCircleOutlined />}
+          icon={<CheckCircleOutlined />}
           tone="green"
           subtitle={t('plugins.card.enabled_hint', { count: stats.disabled })}
         />
         <ManagementMetric
           title={t('plugins.loaded')}
           value={stats.loaded}
-          icon={<ThunderboltOutlined />}
+          icon={<HddOutlined />}
           tone="purple"
           subtitle={t('plugins.card.loaded_hint')}
         />
         <ManagementMetric
           title={t('plugins.active_rate')}
           value={`${stats.total ? Math.round((stats.registered / stats.total) * 100) : 0}%`}
-          icon={<FileTextOutlined />}
+          icon={<FundOutlined />}
           tone="amber"
           subtitle={t('plugins.card.active_hint')}
           accentBar={(

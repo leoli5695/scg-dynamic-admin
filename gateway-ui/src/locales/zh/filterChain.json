@@ -176,8 +176,8 @@
   "filterChain.waterfall_start_time": "开始时间: {{time}}ms",
   "filterChain.waterfall_order": "执行顺序: #{{index}} (order={{order}})",
   "filterChain.waterfall_status": "状态: {{status}}",
-  "filterChain.status_success": "✅ 成功",
-  "filterChain.status_failed": "❌ 失败",
+  "filterChain.status_success": "成功",
+  "filterChain.status_failed": "失败",
   "filterChain.legend_self_fast": "自身耗时 (快)",
   "filterChain.legend_self_slow": "自身耗时 (慢)",
   "filterChain.waterfall_total_time": "总耗时: {{time}}ms"

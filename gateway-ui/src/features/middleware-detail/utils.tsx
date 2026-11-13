@@ -10,8 +10,8 @@ import { parseServerTime } from '../../utils/serverTime';
 import {
   AlertOutlined, ApiOutlined, CheckCircleOutlined, ClockCircleOutlined,
   CloseCircleOutlined, ClusterOutlined, DashboardOutlined, DatabaseOutlined,
-  ExclamationCircleOutlined, FundOutlined, InfoCircleOutlined,
-  SearchOutlined, ThunderboltOutlined,
+  ExclamationCircleOutlined, FundOutlined, InfoCircleOutlined, MessageOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import type {
   TimeSeriesPoint, TimeSeriesSummary,
@@ -29,11 +29,11 @@ export const MIDDLEWARE_TYPE_CONFIG: Record<string, MiddlewareTypeConfig> = {
   redis: { color: '#dc3545', icon: <DatabaseOutlined />, label: 'Redis' },
   mysql: { color: '#007bff', icon: <DatabaseOutlined />, label: 'MySQL' },
   elasticsearch: { color: '#28a745', icon: <SearchOutlined />, label: 'Elasticsearch' },
-  rocketmq: { color: '#fd7e14', icon: <ThunderboltOutlined />, label: 'RocketMQ' },
+  rocketmq: { color: '#fd7e14', icon: <MessageOutlined />, label: 'RocketMQ' },
   mongodb: { color: '#17a2b8', icon: <DatabaseOutlined />, label: 'MongoDB' },
-  rabbitmq: { color: '#ff6b6b', icon: <ThunderboltOutlined />, label: 'RabbitMQ' },
+  rabbitmq: { color: '#ff6b6b', icon: <MessageOutlined />, label: 'RabbitMQ' },
   postgresql: { color: '#336791', icon: <DatabaseOutlined />, label: 'PostgreSQL' },
-  kafka: { color: '#000000', icon: <ThunderboltOutlined />, label: 'Kafka' },
+  kafka: { color: palette.textMuted, icon: <MessageOutlined />, label: 'Kafka' },
 };
 
 export const getMiddlewareTypeConfig = (middlewareType: string): MiddlewareTypeConfig =>
@@ -52,7 +52,7 @@ export const CATEGORY_CONFIG: Record<string, { icon: React.ReactNode; labelKey: 
   cache: { icon: <DatabaseOutlined />, labelKey: 'middleware.category_cache', color: palette.info },
   errors: { icon: <AlertOutlined />, labelKey: 'middleware.category_errors', color: palette.error },
   cluster: { icon: <ClusterOutlined />, labelKey: 'middleware.category_cluster', color: '#2f54eb' },
-  messages: { icon: <ThunderboltOutlined />, labelKey: 'middleware.category_messages', color: '#fd7e14' },
+  messages: { icon: <MessageOutlined />, labelKey: 'middleware.category_messages', color: '#fd7e14' },
   other: { icon: <InfoCircleOutlined />, labelKey: 'middleware.category_other', color: palette.textMuted },
 };
 

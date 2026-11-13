@@ -4,9 +4,9 @@
 import React from 'react';
 import {
   ApiOutlined,
+  AppstoreAddOutlined,
   SecurityScanOutlined,
   SyncOutlined,
-  ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { Plugin } from '../../types/plugin';
 import { palette } from '../../styles/palette';
@@ -41,7 +41,7 @@ export const getCategoryIcon = (category: string): React.ReactNode => {
     case 'transform':
       return React.createElement(SyncOutlined);
     default:
-      return React.createElement(ThunderboltOutlined);
+      return React.createElement(AppstoreAddOutlined);
   }
 };
 

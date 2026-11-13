@@ -3,7 +3,7 @@ import {
   Alert, Card, Col, Divider, Progress, Row, Space, Statistic, Tag, Typography
 } from 'antd';
 import {
-  ApiOutlined, ClockCircleOutlined, DashboardFilled, DatabaseOutlined,
+  ApiOutlined, ClockCircleOutlined, DashboardOutlined, DatabaseOutlined,
   FundOutlined, ThunderboltOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -285,7 +285,7 @@ const MetricCards: React.FC<{ metrics?: MonitorMetricsData }> = ({ metrics }) =>
         </Col>
 
         <Col xs={24} sm={12} lg={6}>
-          <Card title={<Space><DashboardFilled />{t('monitor.cpu_usage')}</Space>} className="metric-card" styles={{ body: bodyStyle }}>
+          <Card title={<Space><DashboardOutlined />{t('monitor.cpu_usage')}</Space>} className="metric-card" styles={{ body: bodyStyle }}>
             <div style={{ marginBottom: 8 }}>
               <Text type="secondary">{t('monitor.process_cpu')}</Text>
               <Progress

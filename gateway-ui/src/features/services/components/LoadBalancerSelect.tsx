@@ -5,8 +5,7 @@ import React from 'react';
 import { Select } from 'antd';
 import type { SelectProps } from 'antd';
 import {
-  AimOutlined, ForkOutlined, LinkOutlined, ReloadOutlined,
-  SwapOutlined, ThunderboltOutlined, TrophyOutlined,
+  AimOutlined, NumberOutlined, PercentageOutlined, RetweetOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
@@ -16,29 +15,29 @@ const LoadBalancerSelect: React.FC<SelectProps> = (props) => {
   const options = [
     {
       value: 'weighted',
-      icon: <TrophyOutlined className="option-icon option-icon-weighted" />,
-      labelIcon: <TrophyOutlined className="option-icon" />,
+      icon: <PercentageOutlined className="option-icon option-icon-weighted" />,
+      labelIcon: <PercentageOutlined className="option-icon" />,
       title: t('services.weighted'),
       desc: t('services.weighted_desc'),
     },
     {
       value: 'round-robin',
-      icon: <SwapOutlined className="option-icon option-icon-roundrobin" />,
-      labelIcon: <ReloadOutlined className="option-icon" />,
+      icon: <RetweetOutlined className="option-icon option-icon-roundrobin" />,
+      labelIcon: <RetweetOutlined className="option-icon" />,
       title: t('services.round_robin'),
       desc: t('services.round_robin_desc'),
     },
     {
       value: 'random',
       icon: <AimOutlined className="option-icon option-icon-random" />,
-      labelIcon: <ThunderboltOutlined className="option-icon" />,
+      labelIcon: <AimOutlined className="option-icon" />,
       title: t('services.random'),
       desc: t('services.random_desc'),
     },
     {
       value: 'consistent-hash',
-      icon: <ForkOutlined className="option-icon option-icon-hash" />,
-      labelIcon: <LinkOutlined className="option-icon" />,
+      icon: <NumberOutlined className="option-icon option-icon-hash" />,
+      labelIcon: <NumberOutlined className="option-icon" />,
       title: t('services.consistent_hash'),
       desc: t('services.consistent_hash_desc'),
     },

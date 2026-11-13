@@ -1,15 +1,20 @@
 import React from 'react';
 import {
-  ApiOutlined,
+  BranchesOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   CloseCircleOutlined,
-  CloudOutlined,
+  ClusterOutlined,
+  CompassOutlined,
+  ContainerOutlined,
   CrownOutlined,
   DashboardOutlined,
+  DisconnectOutlined,
+  ExperimentOutlined,
   FileSearchOutlined,
   GlobalOutlined,
-  HistoryOutlined,
   LineChartOutlined,
+  PercentageOutlined,
   RocketOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
@@ -52,7 +57,7 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
     displayNameKey: 'licenseUI.feature.BASIC_ROUTING.name',
     descriptionKey: 'licenseUI.feature.BASIC_ROUTING.desc',
     requiredEdition: 'BASIC',
-    icon: <ApiOutlined />,
+    icon: <CompassOutlined />,
     enabled: true,
     detailedDescriptionKey: 'licenseUI.feature.BASIC_ROUTING.detail',
     benefitKeys: [
@@ -111,7 +116,7 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
     displayNameKey: 'licenseUI.feature.DOCKER_DEPLOY.name',
     descriptionKey: 'licenseUI.feature.DOCKER_DEPLOY.desc',
     requiredEdition: 'BASIC',
-    icon: <CloudOutlined />,
+    icon: <ContainerOutlined />,
     enabled: true,
     detailedDescriptionKey: 'licenseUI.feature.DOCKER_DEPLOY.detail',
     benefitKeys: [
@@ -171,7 +176,7 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
     displayNameKey: 'licenseUI.feature.TIMEOUT_CONFIG.name',
     descriptionKey: 'licenseUI.feature.TIMEOUT_CONFIG.desc',
     requiredEdition: 'BASIC',
-    icon: <HistoryOutlined />,
+    icon: <ClockCircleOutlined />,
     enabled: true,
     detailedDescriptionKey: 'licenseUI.feature.TIMEOUT_CONFIG.detail',
     benefitKeys: [
@@ -232,7 +237,7 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
     displayNameKey: 'licenseUI.feature.WEIGHTED_ROUTING.name',
     descriptionKey: 'licenseUI.feature.WEIGHTED_ROUTING.desc',
     requiredEdition: 'ADVANCED',
-    icon: <ApiOutlined />,
+    icon: <PercentageOutlined />,
     enabled: false,
     detailedDescriptionKey: 'licenseUI.feature.WEIGHTED_ROUTING.detail',
     benefitKeys: [
@@ -272,7 +277,7 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
     displayNameKey: 'licenseUI.feature.CIRCUIT_BREAKER.name',
     descriptionKey: 'licenseUI.feature.CIRCUIT_BREAKER.desc',
     requiredEdition: 'ADVANCED',
-    icon: <SafetyCertificateOutlined />,
+    icon: <DisconnectOutlined />,
     enabled: false,
     detailedDescriptionKey: 'licenseUI.feature.CIRCUIT_BREAKER.detail',
     benefitKeys: [
@@ -292,7 +297,7 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
     displayNameKey: 'licenseUI.feature.K8S_INTEGRATION.name',
     descriptionKey: 'licenseUI.feature.K8S_INTEGRATION.desc',
     requiredEdition: 'ADVANCED',
-    icon: <CloudOutlined />,
+    icon: <ClusterOutlined />,
     enabled: false,
     detailedDescriptionKey: 'licenseUI.feature.K8S_INTEGRATION.detail',
     benefitKeys: [
@@ -453,7 +458,7 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
     displayNameKey: 'licenseUI.feature.STRESS_TEST.name',
     descriptionKey: 'licenseUI.feature.STRESS_TEST.desc',
     requiredEdition: 'ENTERPRISE',
-    icon: <LineChartOutlined />,
+    icon: <ExperimentOutlined />,
     enabled: false,
     detailedDescriptionKey: 'licenseUI.feature.STRESS_TEST.detail',
     benefitKeys: [
@@ -493,7 +498,7 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
     displayNameKey: 'licenseUI.feature.FULL_CHAIN_TRACE.name',
     descriptionKey: 'licenseUI.feature.FULL_CHAIN_TRACE.desc',
     requiredEdition: 'ENTERPRISE',
-    icon: <ApiOutlined />,
+    icon: <BranchesOutlined />,
     enabled: false,
     detailedDescriptionKey: 'licenseUI.feature.FULL_CHAIN_TRACE.detail',
     benefitKeys: [
@@ -533,7 +538,7 @@ export const FEATURE_CATALOG: LicenseFeatureDef[] = [
     displayNameKey: 'licenseUI.feature.SSL_MANAGEMENT.name',
     descriptionKey: 'licenseUI.feature.SSL_MANAGEMENT.desc',
     requiredEdition: 'ENTERPRISE',
-    icon: <SecurityScanOutlined />,
+    icon: <SafetyCertificateOutlined />,
     enabled: false,
     detailedDescriptionKey: 'licenseUI.feature.SSL_MANAGEMENT.detail',
     benefitKeys: [

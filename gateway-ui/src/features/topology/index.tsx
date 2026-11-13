@@ -9,9 +9,9 @@ import {
   Switch, Tag, Tooltip, Typography
 } from 'antd';
 import {
-  AimOutlined, ApiOutlined, ApartmentOutlined, CloseOutlined, ControlOutlined,
-  EyeOutlined, FullscreenOutlined, FundOutlined, GlobalOutlined, LinkOutlined,
-  ReloadOutlined, SearchOutlined, TeamOutlined,
+  AimOutlined, ApiOutlined, ApartmentOutlined, CloseOutlined, CompassOutlined, ControlOutlined,
+  DeploymentUnitOutlined, ExportOutlined, EyeOutlined, FundOutlined,
+  GlobalOutlined, ReloadOutlined, SearchOutlined,
 } from '@ant-design/icons';
 import * as echarts from 'echarts';
 import { useTranslation } from 'react-i18next';
@@ -234,13 +234,13 @@ const TrafficTopologyPage: React.FC = () => {
       const routeId = contextMenuNode.routeId;
       items.push({
         key: 'route-detail',
-        icon: <LinkOutlined />,
+        icon: <CompassOutlined />,
         label: t('topology.menu_route_detail'),
         onClick: () => navigateToRouteDetail(routeId),
       });
       items.push({
         key: 'route-detail-new-tab',
-        icon: <FullscreenOutlined />,
+        icon: <ExportOutlined />,
         label: t('topology.menu_route_detail_new_tab'),
         onClick: () => openRouteDetailInNewTab(routeId),
       });
@@ -250,13 +250,13 @@ const TrafficTopologyPage: React.FC = () => {
       const serviceId = contextMenuNode.serviceId;
       items.push({
         key: 'service-detail',
-        icon: <TeamOutlined />,
+        icon: <DeploymentUnitOutlined />,
         label: t('topology.menu_service_detail'),
         onClick: () => navigateToServiceDetail(serviceId),
       });
       items.push({
         key: 'service-detail-new-tab',
-        icon: <FullscreenOutlined />,
+        icon: <ExportOutlined />,
         label: t('topology.menu_service_detail_new_tab'),
         onClick: () => openServiceDetailInNewTab(serviceId),
       });

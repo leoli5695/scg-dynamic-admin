@@ -25,6 +25,8 @@
   "replay.latency_diff": "Latency Diff",
   "replay.status_match": "Status Match",
   "replay.headers": "Headers",
+  "replay.add_header": "Add header",
+  "replay.remove_header": "Remove header",
   "replay.request_body": "Request Body",
   "replay.comparison": "Comparison",
   "replay.original_response": "Original Response",

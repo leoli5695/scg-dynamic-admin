@@ -7,7 +7,7 @@ import {
   Button, Card, Empty, Input, Spin, Tabs, Typography  } from 'antd';
 import { message, modal } from '../../utils/antdStatic';
 import InlineStatChips from '../../components/InlineStatChips';
-import { ClusterOutlined, PlusOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
+import { DeploymentUnitOutlined, PlusOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
@@ -251,7 +251,7 @@ const ServicesPage: React.FC = () => {
           { key: 'ALL', label: `${t('services.tab_all')} (${categoryCounts.all})` },
           {
             key: 'NORMAL',
-            label: (<span><ClusterOutlined /> {t('services.tab_normal')} ({categoryCounts.normal})</span>),
+            label: (<span><DeploymentUnitOutlined /> {t('services.tab_normal')} ({categoryCounts.normal})</span>),
           },
           {
             key: 'AI',
@@ -265,7 +265,7 @@ const ServicesPage: React.FC = () => {
         {filteredServices.length === 0 ? (
           <Card className="empty-card">
             <Empty
-              image={<ClusterOutlined className="empty-icon" />}
+              image={<DeploymentUnitOutlined className="empty-icon" />}
               description={<><span className="empty-text">{t('services.' + (services.length ? 'no_matches' : 'empty_description'))}</span><p className="empty-hint">{t('services.' + (services.length ? 'filter_hint' : 'empty_hint'))}</p></>}
             >
               {services.length > 0 ? (

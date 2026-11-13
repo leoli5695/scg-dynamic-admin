@@ -2,9 +2,9 @@ import React, { useMemo } from 'react';
 import { normalizeSpanTimeline } from '../timeline';
 import { Tooltip, Tag, Badge, Typography } from 'antd';
 import {
-  CheckCircleOutlined, WarningOutlined, FilterOutlined,
-  CloudServerOutlined, DatabaseOutlined, ApiOutlined,
-  ThunderboltOutlined, CodeOutlined, BranchesOutlined
+  CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, FilterOutlined,
+  DeploymentUnitOutlined, DatabaseOutlined, ApiOutlined,
+  MessageOutlined, CodeOutlined, BranchesOutlined
 } from '@ant-design/icons';
 
 const { Text } = Typography;
@@ -110,10 +110,10 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
   const getSpanTypeIcon = (spanType?: SpanType): React.ReactNode => {
     switch (spanType) {
       case 'FILTER': return <FilterOutlined style={{ fontSize: 12 }} />;
-      case 'SERVICE': return <CloudServerOutlined style={{ fontSize: 12 }} />;
-      case 'REDIS': return <ThunderboltOutlined style={{ fontSize: 12 }} />;
+      case 'SERVICE': return <DeploymentUnitOutlined style={{ fontSize: 12 }} />;
+      case 'REDIS': return <DatabaseOutlined style={{ fontSize: 12 }} />;
       case 'DB': return <DatabaseOutlined style={{ fontSize: 12 }} />;
-      case 'MQ': return <ApiOutlined style={{ fontSize: 12 }} />;
+      case 'MQ': return <MessageOutlined style={{ fontSize: 12 }} />;
       case 'HTTP': return <ApiOutlined style={{ fontSize: 12 }} />;
       case 'INTERNAL': return <CodeOutlined style={{ fontSize: 12 }} />;
       default: return <BranchesOutlined style={{ fontSize: 12 }} />;
@@ -279,7 +279,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
               <CheckCircleOutlined style={{ color: palette.success, fontSize: 12 }} />
             )
           ) : (
-            <WarningOutlined style={{ color: palette.error, fontSize: 12 }} />
+            <CloseCircleOutlined style={{ color: palette.error, fontSize: 12 }} />
           )}
         </div>
       </div>
@@ -411,7 +411,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
               <CheckCircleOutlined style={{ color: palette.success }} />
             )
           ) : (
-            <WarningOutlined style={{ color: palette.error }} />
+            <CloseCircleOutlined style={{ color: palette.error }} />
           )}
         </div>
       </div>
@@ -429,12 +429,12 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
         </span>
         <span>
           <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.successSolid, marginRight: 4, borderRadius: 2 }}></span>
-          <CloudServerOutlined style={{ fontSize: 10, marginRight: 2 }} />
+          <DeploymentUnitOutlined style={{ fontSize: 10, marginRight: 2 }} />
           {t('trace.service')}
         </span>
         <span>
           <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.warningSolid, marginRight: 4, borderRadius: 2 }}></span>
-          <ThunderboltOutlined style={{ fontSize: 10, marginRight: 2 }} />
+          <DatabaseOutlined style={{ fontSize: 10, marginRight: 2 }} />
           Redis
         </span>
         <span>
@@ -444,7 +444,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
         </span>
         <span>
           <span style={{ display: 'inline-block', width: 10, height: 10, background: palette.infoSolid, marginRight: 4, borderRadius: 2 }}></span>
-          <ApiOutlined style={{ fontSize: 10, marginRight: 2 }} />
+          <MessageOutlined style={{ fontSize: 10, marginRight: 2 }} />
           MQ
         </span>
         <span>
@@ -485,7 +485,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
             background: palette.primarySoft,
             borderRadius: 4
           }}>
-            <ApiOutlined style={{ color: palette.primary, marginRight: 8 }} />
+            <FilterOutlined style={{ color: palette.primary, marginRight: 8 }} />
             <Text strong style={{ fontSize: 12 }}>{t('trace.filter_section')}</Text>
             <Badge
               count={filterExecutions.length}
@@ -513,7 +513,7 @@ const FullChainWaterfallChart: React.FC<FullChainWaterfallChartProps> = ({
             background: palette.successSoft,
             borderRadius: 4
           }}>
-            <CloudServerOutlined style={{ color: palette.success, marginRight: 8 }} />
+            <DeploymentUnitOutlined style={{ color: palette.success, marginRight: 8 }} />
             <Text strong style={{ fontSize: 12 }}>
               {serviceName ? `${t('trace.service')}: ${serviceName}` : t('trace.service_section')}
             </Text>

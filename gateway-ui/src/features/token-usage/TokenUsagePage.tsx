@@ -58,7 +58,6 @@ const { RangePicker } = DatePicker;
 
 const PALETTE = chartColors;
 const AXIS_TEXT = chartAxis.label;
-const SPLIT_LINE = chartAxis.grid;
 
 /** Axis labels stay compact: 12.4k / 3.1M instead of seven-digit rows. */
 const compact = (value: number): string => {

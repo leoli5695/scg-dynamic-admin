@@ -20,10 +20,10 @@ import { message } from '../../utils/antdStatic';
 import { parseServerTime } from '../../utils/serverTime';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  ApiOutlined,
   CloseCircleOutlined,
-  CloudOutlined,
-  GlobalOutlined,
+  CloudServerOutlined,
+  CompassOutlined,
+  DeploymentUnitOutlined,
   KeyOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
@@ -303,17 +303,17 @@ const LicensePage: React.FC = () => {
                           <ManagementMetric
                             title={t('licenseUI.instances')}
                             value={quotaValue(licenseInfo?.quotas?.maxInstances)}
-                            icon={<CloudOutlined />}
+                            icon={<CloudServerOutlined />}
                           />
                           <ManagementMetric
                             title={t('licenseUI.routes')}
                             value={quotaValue(licenseInfo?.quotas?.maxRoutes)}
-                            icon={<ApiOutlined />}
+                            icon={<CompassOutlined />}
                           />
                           <ManagementMetric
                             title={t('licenseUI.services')}
                             value={quotaValue(licenseInfo?.quotas?.maxServices)}
-                            icon={<GlobalOutlined />}
+                            icon={<DeploymentUnitOutlined />}
                           />
                           <ManagementMetric
                             title={t('licenseUI.qps')}

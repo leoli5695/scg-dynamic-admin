@@ -259,9 +259,7 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
       const changedRouteId = (result.data as { routeId?: unknown } | null | undefined)?.routeId;
       const assistantMessage: ChatMessage = {
         role: 'assistant',
-        content: result.success
-          ? `✅ ${result.message || t('copilot.operation_success')}`
-          : `❌ ${result.message || t('copilot.operation_failed')}`,
+        content: result.message || t(result.success ? 'copilot.operation_success' : 'copilot.operation_failed'),
         timestamp: new Date(),
         link: result.success && typeof changedRouteId === 'string'
           ? {

@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from './AuthContext';
 import { ApiError } from '../../api/http';
 import LoginParticles from './LoginParticles';
+import GatewayLogo from '../layout/components/GatewayLogo';
 import './login.css';
 
 const { Title, Text } = Typography;
@@ -69,7 +70,7 @@ const LoginPage: React.FC = () => {
       <header className="login-header">
         <div className="login-wordmark">
           <span className="login-logo">
-            <ApiOutlined />
+            <GatewayLogo style={{ width: 25, height: 25 }} />
           </span>
           <span>
             API GATEWAY<span className="wordmark-caption">{t('login.subtitle')}</span>
@@ -105,7 +106,7 @@ const LoginPage: React.FC = () => {
                 <path d="M0 25 H40 Q65 25 65 50 V55 Q65 75 95 75 H365 Q395 75 395 55 V50 Q395 25 420 25 H460 M0 75 H460 M0 125 H40 Q65 125 65 100 V95 Q65 75 95 75 M365 75 Q395 75 395 95 V100 Q395 125 420 125 H460" />
               </svg>
               <div className="topology-core">
-                <ApiOutlined />
+                <GatewayLogo style={{ width: 28, height: 28 }} />
                 <span>GATEWAY</span>
               </div>
               <div className="topology-services">

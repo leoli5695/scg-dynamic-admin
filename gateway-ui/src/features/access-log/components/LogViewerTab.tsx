@@ -13,7 +13,7 @@ import {
 import { message } from '../../../utils/antdStatic';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  ClockCircleOutlined, CloudServerOutlined, HistoryOutlined,
+  ClockCircleOutlined, ClusterOutlined, HistoryOutlined,
   ReloadOutlined, SearchOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -361,7 +361,7 @@ const LogViewerTab: React.FC<LogViewerTabProps> = ({ instanceId, deployMode, onT
           type="info"
           showIcon
           style={{ marginBottom: 16, borderLeft: `4px solid ${palette.primary}` }}
-          title={<Space><CloudServerOutlined />{t('access_log.k8s_viewer_title')}</Space>}
+          title={<Space><ClusterOutlined />{t('access_log.k8s_viewer_title')}</Space>}
           description={
             <div>
               <div style={{ marginBottom: 8 }}>

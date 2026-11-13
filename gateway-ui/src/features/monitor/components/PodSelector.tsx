@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Badge, Card, Col, Row, Select, Space, Tag, Typography
 } from 'antd';
-import { CloudServerOutlined, ReloadOutlined } from '@ant-design/icons';
+import { ContainerOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { InstancePod } from '../../../types/instance';
 import { parseServerTime } from '../../../utils/serverTime';
@@ -30,7 +30,7 @@ const PodSelector: React.FC<PodSelectorProps> = ({
       <Row gutter={16} align="middle" style={{ overflow: 'visible' }}>
         <Col style={{ overflow: 'visible' }}>
           <Space style={{ overflow: 'visible' }}>
-            <CloudServerOutlined />
+            <ContainerOutlined />
             <Text strong>{t('monitor.select_pod')}</Text>
             <Select
               value={selectedPod?.name}

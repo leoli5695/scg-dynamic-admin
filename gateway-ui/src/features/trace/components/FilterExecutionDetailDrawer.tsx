@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Card, Col, Descriptions, Drawer, Empty, Progress, Row, Spin, Statistic, Tag } from 'antd';
-import { CheckCircleOutlined, ClockCircleOutlined, FilterOutlined, WarningOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, ClockCircleOutlined, FilterOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { getFilterChainStats } from '../../../api/filterChain';
 import logger from '../../../utils/logger';
@@ -155,7 +155,7 @@ const FilterExecutionDetailDrawer: React.FC<FilterExecutionDetailDrawerProps> = 
             <Statistic
               title={t('filter_detail.status')}
               styles={{ content: { color: getHealthColor(healthStatus) } }}
-              prefix={execution.success ? <CheckCircleOutlined /> : <WarningOutlined />}
+              prefix={execution.success ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
               value={execution.success ? t('filter_detail.success') : t('filter_detail.failed')}
             />
           </Col>

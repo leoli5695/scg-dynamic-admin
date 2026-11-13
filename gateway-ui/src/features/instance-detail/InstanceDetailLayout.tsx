@@ -6,13 +6,14 @@ import {
   Button, Dropdown, Result, Select, Spin, Tag, Tooltip, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
-  AlertOutlined, ApartmentOutlined, AppstoreOutlined, ArrowLeftOutlined,
-  BellOutlined, BugOutlined, CloudServerOutlined, DashboardOutlined,
-  DatabaseOutlined, DeploymentUnitOutlined, FileTextOutlined, FilterOutlined,
-  HistoryOutlined, HomeOutlined, KeyOutlined, LineChartOutlined, LinkOutlined,
-  LockOutlined, MedicineBoxOutlined, PauseCircleOutlined, PlayCircleOutlined,
-  PlusSquareOutlined, ReloadOutlined, RobotOutlined, RocketOutlined,
-  SafetyOutlined, StopOutlined, ThunderboltOutlined, SearchOutlined, FundOutlined, DownOutlined,
+  AlertOutlined, ApartmentOutlined, AppstoreAddOutlined, ArrowLeftOutlined,
+  BellOutlined, BranchesOutlined, BugOutlined, CloudServerOutlined, ClusterOutlined,
+  CompassOutlined, ControlOutlined, DashboardOutlined, DatabaseOutlined,
+  DeploymentUnitOutlined, ExperimentOutlined, FileTextOutlined, FilterOutlined,
+  FundOutlined, HistoryOutlined, HomeOutlined, KeyOutlined, LinkOutlined,
+  PauseCircleOutlined, PlayCircleOutlined, PlusSquareOutlined, RedoOutlined,
+  ReloadOutlined, RobotOutlined, SafetyCertificateOutlined, SafetyOutlined,
+  SearchOutlined, StopOutlined, ToolOutlined, DownOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -41,28 +42,28 @@ const OutletGuard: React.FC = () => <Outlet />;
 
 /** Route key → icon mapping. */
 const TAB_ICONS = {
-  overview: CloudServerOutlined,
-  services: AppstoreOutlined,
-  routes: DeploymentUnitOutlined,
-  plugins: RocketOutlined,
+  overview: HomeOutlined,
+  services: DeploymentUnitOutlined,
+  routes: CompassOutlined,
+  plugins: AppstoreAddOutlined,
   plugin_bindings: LinkOutlined,
-  strategies: SafetyOutlined,
-  authentication: LockOutlined,
+  strategies: ControlOutlined,
+  authentication: KeyOutlined,
   token_revocation: StopOutlined,
-  certificates: KeyOutlined,
-  trace: LineChartOutlined,
+  certificates: SafetyCertificateOutlined,
+  trace: BranchesOutlined,
   monitor: DashboardOutlined,
   alerts: BellOutlined,
   access_log: FileTextOutlined,
   audit_logs: HistoryOutlined,
-  diagnostic: MedicineBoxOutlined,
+  diagnostic: BugOutlined,
   topology: ApartmentOutlined,
   filter_chain: FilterOutlined,
-  request_replay: BugOutlined,
+  request_replay: RedoOutlined,
   copilot: RobotOutlined,
-  stress_test: ThunderboltOutlined,
+  stress_test: ExperimentOutlined,
   events: AlertOutlined,
-  resources: DashboardOutlined,
+  resources: ClusterOutlined,
   middleware: DatabaseOutlined,
   requests: SearchOutlined,
   token_usage: FundOutlined,
@@ -184,9 +185,9 @@ const InstanceDetailLayout: React.FC = () => {
   });
   const activeGroup = navigation.find((group) => group.pages.some((page) => page === activeTab));
   const groupIcons = {
-    overview: CloudServerOutlined, services: AppstoreOutlined, routes: DeploymentUnitOutlined,
-    requests: SearchOutlined, diagnostics: MedicineBoxOutlined, usage: FundOutlined,
-    security: SafetyOutlined, operations: HistoryOutlined, tools: ThunderboltOutlined,
+    overview: HomeOutlined, services: DeploymentUnitOutlined, routes: CompassOutlined,
+    requests: SearchOutlined, diagnostics: BugOutlined, usage: FundOutlined,
+    security: SafetyOutlined, operations: HistoryOutlined, tools: ToolOutlined,
   };
   const tools = navigation.find(group => group.key === 'tools')!;
 
@@ -278,7 +279,11 @@ const InstanceDetailLayout: React.FC = () => {
           <Dropdown trigger={['click']} menu={{
             selectedKeys: [activeTab],
             onClick: ({ key }) => handleTabChange(key),
-            items: tools.pages.map(page => ({ key: page, label: t(tabI18nKey(page)) })),
+            items: tools.pages.map(page => ({
+              key: page,
+              icon: React.createElement(TAB_ICONS[page]),
+              label: t(tabI18nKey(page)),
+            })),
           }}>
             <Button type="text" className={activeGroup?.key === 'tools' ? 'is-active' : undefined}>
               {t('instance_nav.tools')} <DownOutlined />

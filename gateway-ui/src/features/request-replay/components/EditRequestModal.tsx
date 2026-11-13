@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import ResourceEditor from '../../instance-detail/ResourceEditor';
 import { Button, Col, Divider, Form, Input, Row, Select, Space, Statistic, Typography } from 'antd';
-import { EditOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { ReplayableRequest, ReplayOptions } from '../../../types/replay';
 import { palette } from '../../../styles/palette';
@@ -196,9 +196,7 @@ const EditRequestModal: React.FC<EditRequestModalProps> = ({
                   onChange={(e) => setNewHeaderValue(e.target.value)}
                   style={{ width: '55%' }}
                 />
-                <Button type="primary" onClick={addHeader}>
-                  +
-                </Button>
+                <Button type="primary" icon={<PlusOutlined />} aria-label={t('replay.add_header')} onClick={addHeader} />
               </Space.Compact>
               <div style={{ maxHeight: 150, overflowY: 'auto', marginBottom: 12 }}>
                 {Object.entries(editHeaders).map(([key, value]) => (
@@ -216,9 +214,7 @@ const EditRequestModal: React.FC<EditRequestModalProps> = ({
                     <Text code>{key}</Text>
                     <Space>
                       <Text>{value}</Text>
-                      <Button size="small" danger onClick={() => removeHeader(key)}>
-                        ×
-                      </Button>
+                      <Button size="small" danger icon={<DeleteOutlined />} aria-label={t('replay.remove_header')} onClick={() => removeHeader(key)} />
                     </Space>
                   </div>
                 ))}

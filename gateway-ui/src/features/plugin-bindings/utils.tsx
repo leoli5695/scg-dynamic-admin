@@ -78,7 +78,7 @@ const RESILIENCE = design(palette.warning, palette.warningSolid, palette.warning
 const TRANSFORM = design(palette.accent, palette.accentSolid, palette.accentLight, <SyncOutlined />);
 const OBSERVABILITY = design(palette.success, palette.successSolid, palette.success, <FileTextOutlined />);
 const CUSTOM = design(chartColors[2], palette.accentSolid, chartColors[2], <AppstoreAddOutlined />);
-const NEUTRAL = design(palette.textMuted, palette.textDisabled, palette.textTertiary, <ThunderboltOutlined />);
+const NEUTRAL = design(palette.textMuted, palette.textDisabled, palette.textTertiary, <AppstoreAddOutlined />);
 
 const CATEGORY_DESIGN: Record<string, CategoryDesign> = {
   // 中文分类名
@@ -131,5 +131,5 @@ export const getPluginIcon = (plugin: Plugin): React.ReactNode => {
   if (plugin.jarPath !== BUILTIN_JAR_PATH) {
     return <AppstoreAddOutlined />;
   }
-  return PLUGIN_ICON_MAP[plugin.icon || 'ThunderboltOutlined'] || <ThunderboltOutlined />;
+  return PLUGIN_ICON_MAP[plugin.icon || ''] || <AppstoreAddOutlined />;
 };

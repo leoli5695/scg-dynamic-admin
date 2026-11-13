@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Card, List, Tabs, Tag, Typography } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, CrownOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, LockOutlined, CrownOutlined } from '@ant-design/icons';
 import { EDITION_CONFIG, type LicenseFeatureDef } from '../constants/featureCatalog';
 import { useTranslation } from 'react-i18next';
 import { palette } from '../../../styles/palette';
@@ -58,7 +58,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
                 ) : feature.requiredEdition === 'ADVANCED' ? (
                   <Tag
                     color="processing"
-                    icon={<CloseCircleOutlined />}
+                    icon={<LockOutlined />}
                     style={{ backgroundColor: palette.primary, color: '#fff' }}
                   >
                     {t('licenseUI.edition.ADVANCED.label')}
@@ -66,7 +66,7 @@ export const FeatureMatrix: React.FC<FeatureMatrixProps> = ({ features, onFeatur
                 ) : (
                   <Tag
                     color="purple"
-                    icon={<CloseCircleOutlined />}
+                    icon={<LockOutlined />}
                     style={{ backgroundColor: palette.accentSolid, color: '#fff' }}
                   >
                     {t('licenseUI.edition.ENTERPRISE.label')}

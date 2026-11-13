@@ -79,7 +79,7 @@ ui.Form = { useForm: () => [{}], Item: 'Form.Item' };
 ui.Input = { TextArea: 'TextArea' };
 ui.Space = { Compact: 'Space.Compact' };
 ui.Typography = { Text: 'Text', Title: 'Title' };
-const icons = Object.fromEntries(['ArrowLeftOutlined', 'EditOutlined', 'ReloadOutlined', 'ThunderboltOutlined'].map(name => [name, name]));
+const icons = Object.fromEntries(['ArrowLeftOutlined', 'DeleteOutlined', 'EditOutlined', 'PlusOutlined', 'ReloadOutlined', 'ThunderboltOutlined'].map(name => [name, name]));
 const defaultComponent = name => ({ __esModule: true, default: name });
 function commonMocks(getHooks) {
   return {
@@ -102,7 +102,7 @@ function nodes(tree, predicate) {
 }
 const byType = (tree, type) => nodes(tree, node => node.type === type);
 function button(tree, label) {
-  const found = byType(tree, 'Button').find(node => node.props.children === label);
+  const found = byType(tree, 'Button').find(node => node.props.children === label || node.props['aria-label'] === label);
   assert.ok(found, `Missing button ${label}`);
   return found;
 }
@@ -461,13 +461,13 @@ function editHarness() {
 function headerContent(h) { return h.render().props.sections[1].content; }
 function deleteHeader(h, name) {
   const row = nodes(headerContent(h), node => node.key === name)[0];
-  button(row, '×').props.onClick();
+  button(row, 'replay.remove_header').props.onClick();
 }
 function addHeader(h, name, value) {
   const inputs = nodes(headerContent(h), node => node.props.placeholder?.startsWith('replay.header_'));
   inputs.find(node => node.props.placeholder === 'replay.header_name').props.onChange({ target: { value: name } });
   inputs.find(node => node.props.placeholder === 'replay.header_value').props.onChange({ target: { value } });
-  button(headerContent(h), '+').props.onClick();
+  button(headerContent(h), 'replay.add_header').props.onClick();
 }
 
 test('editor explicitly removes deleted captured headers while preserving remaining request options', async () => {

@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Modal, Select, Space, Spin, Table, Tabs, Tag } from 'antd';
 import { message } from '../../../utils/antdStatic';
-import { CloudServerOutlined, CopyOutlined, PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  ClearOutlined, ContainerOutlined, CopyOutlined, PauseCircleOutlined,
+  PlayCircleOutlined, ReloadOutlined,
+} from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { getPodDetail, getPodLogs, getPodYaml } from '../../../api/kubernetes';
 import type { KubernetesPodDetail, KubernetesPodInfo } from '../../../types/kubernetes';
@@ -117,7 +120,7 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
     <Modal
       title={
         <div className="modal-pod-title">
-          <CloudServerOutlined />
+          <ContainerOutlined />
           <span className="modal-pod-name">{pod?.name}</span>
           {pod && (
             <Tag color={pod.phase === 'Running' ? 'green' : pod.phase === 'Pending' ? 'blue' : 'red'}>
@@ -356,13 +359,13 @@ export const PodDetailModal: React.FC<PodDetailModalProps> = ({ clusterId, pod, 
                           />
                           <Button
                             type={logAutoRefresh ? 'primary' : 'default'}
-                            icon={<PlayCircleOutlined />}
+                            icon={logAutoRefresh ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
                             onClick={() => (logAutoRefresh ? setLogAutoRefresh(false) : handleStartAutoRefresh())}
                           >
                             {logAutoRefresh ? t('k8s.log_stop') : t('k8s.log_start')}
                           </Button>
                           <Button
-                            icon={<ReloadOutlined />}
+                            icon={<ClearOutlined />}
                             onClick={() => {
                               setLogs('');
                               void loadPodLogs();

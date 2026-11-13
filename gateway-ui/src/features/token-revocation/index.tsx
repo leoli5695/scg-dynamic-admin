@@ -13,7 +13,7 @@ import {
   Radio, Row, Space, Switch, Tag, Typography,
 } from 'antd';
 import { message } from '../../utils/antdStatic';
-import { SafetyCertificateOutlined, StopOutlined } from '@ant-design/icons';
+import { RollbackOutlined, StopOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../hooks/useRequest';
 import { ApiError } from '../../api/http';
@@ -102,7 +102,7 @@ const TokenRevocationPage: React.FC = () => {
       {/* Header */}
       <div className="page-header-modern console-page-header">
         <div className="page-header-left">
-          <SafetyCertificateOutlined className="page-icon" />
+          <StopOutlined className="page-icon" />
           <Title level={2}>{t('jwt_revocation.title')}</Title>
         </div>
       </div>
@@ -232,7 +232,7 @@ const TokenRevocationPage: React.FC = () => {
                       disabled={!target}
                     >
                       <Button
-                        icon={<SafetyCertificateOutlined />}
+                        icon={<RollbackOutlined />}
                         loading={submitting}
                         disabled={!target}
                       >

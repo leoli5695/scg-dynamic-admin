@@ -4,8 +4,7 @@
 import React from 'react';
 import {
   CheckCircleOutlined, CloseCircleOutlined, DatabaseOutlined,
-  ExclamationCircleOutlined, InfoCircleOutlined, SearchOutlined,
-  ThunderboltOutlined,
+  ExclamationCircleOutlined, InfoCircleOutlined, MessageOutlined, SearchOutlined,
 } from '@ant-design/icons';
 import type { ServiceMiddlewareView } from '../../types/middleware';
 import { palette } from '../../styles/palette';
@@ -19,9 +18,9 @@ export interface MiddlewareTypeInfo {
 const MIDDLEWARE_TYPE_INFO: Record<string, MiddlewareTypeInfo> = {
   redis: { color: 'red', icon: <DatabaseOutlined />, label: 'Redis' },
   mysql: { color: 'blue', icon: <DatabaseOutlined />, label: 'MySQL' },
-  rocketmq: { color: 'orange', icon: <ThunderboltOutlined />, label: 'RocketMQ' },
+  rocketmq: { color: 'orange', icon: <MessageOutlined />, label: 'RocketMQ' },
   elasticsearch: { color: 'green', icon: <SearchOutlined />, label: 'Elasticsearch' },
-  kafka: { color: 'purple', icon: <ThunderboltOutlined />, label: 'Kafka' },
+  kafka: { color: 'purple', icon: <MessageOutlined />, label: 'Kafka' },
   mongodb: { color: 'cyan', icon: <DatabaseOutlined />, label: 'MongoDB' },
 };
 

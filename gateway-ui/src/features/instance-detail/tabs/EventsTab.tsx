@@ -6,7 +6,7 @@ import React from 'react';
 import {
   Badge, Button, Card, Col, Row, Space, Spin, Tag, Typography
 } from 'antd';
-import { ClockCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { ContainerOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../../hooks/useRequest';
 import { getInstanceEvents } from '../../../api/instances';
@@ -85,7 +85,7 @@ const EventsTab: React.FC = () => {
                 <Col span={5}>
                   <Space orientation="vertical" size="small">
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      <ClockCircleOutlined />
+                      <ContainerOutlined />
                       {' '}
                       {event.objectName}
                     </Text>

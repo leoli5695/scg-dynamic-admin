@@ -223,15 +223,15 @@ function getNodeLabel(node: TopologyNode): Record<string, unknown> {
  */
 function formatNodeTooltip(node: TopologyNode, t: TFunction): string {
   const typeInfo = {
-    gateway: { icon: '🚪', color: palette.primary, label: t('topology.node_gateway') },
-    route: { icon: '🔗', color: node.enabled === false ? palette.textMuted : palette.info, label: t('topology.node_route') },
-    service: { icon: '⚙️', color: node.serviceType === '静态服务' ? palette.success : palette.accent, label: t('topology.node_service') },
-    client: { icon: '👤', color: palette.warning, label: t('topology.node_client') },
+    gateway: { color: palette.primary, label: t('topology.node_gateway') },
+    route: { color: node.enabled === false ? palette.textMuted : palette.info, label: t('topology.node_route') },
+    service: { color: node.serviceType === '静态服务' ? palette.success : palette.accent, label: t('topology.node_service') },
+    client: { color: palette.warning, label: t('topology.node_client') },
   };
-  const info = typeInfo[node.type as keyof typeof typeInfo] || { icon: '📦', color: palette.textMuted, label: node.type };
+  const info = typeInfo[node.type as keyof typeof typeInfo] || { color: palette.textMuted, label: node.type };
 
   let html = '<div style="padding: 4px 0;">';
-  html += `<div style="font-weight: 600; font-size: 15px; color: ${info.color}; margin-bottom: 8px;">${info.icon} ${node.name}</div>`;
+  html += `<div style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; color: ${info.color}; margin-bottom: 8px;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 2px; background: ${info.color}; box-shadow: 0 0 10px ${info.color};"></span><span>${node.name}</span></div>`;
   html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 8px;">${info.label}</div>`;
 
   if (node.type === 'gateway') {
@@ -327,7 +327,7 @@ function formatNodeTooltip(node: TopologyNode, t: TFunction): string {
 
   if (node.metrics) {
     html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.15);">';
-    html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 6px;">📊 ${t('topology.tooltip_traffic_metrics')}</div>`;
+    html += `<div style="color: ${palette.textTertiary}; font-size: 11px; margin-bottom: 6px; letter-spacing: 0.04em; text-transform: uppercase;">${t('topology.tooltip_traffic_metrics')}</div>`;
     if (node.metrics.requestCount) {
       html += '<div style="display: flex; justify-content: space-between; margin-bottom: 3px;">';
       html += `<span style="color: ${palette.textSecondary};">${t('topology.tooltip_requests')}</span>`;

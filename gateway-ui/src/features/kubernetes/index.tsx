@@ -5,7 +5,7 @@ import {
   CheckCircleOutlined,
   CloudServerOutlined,
   ClusterOutlined,
-  DashboardOutlined,
+  ContainerOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -167,7 +167,7 @@ const KubernetesPage: React.FC = () => {
         <ManagementMetric
           title={t('k8s.stats_pods')}
           value={loading && clusters.length === 0 ? '—' : stats.totalPods}
-          icon={<DashboardOutlined />}
+          icon={<ContainerOutlined />}
           tone="purple"
           subtitle={t('k8s.running_pods')}
         />

@@ -3,8 +3,8 @@ import {
   Alert, Button, Card, Col, Row, Space, Spin, Tabs
 } from 'antd';
 import {
-  ApiOutlined, DashboardFilled, DatabaseOutlined, FundOutlined,
-  LineChartOutlined, SyncOutlined, ThunderboltOutlined,
+  ApiOutlined, DashboardOutlined, DatabaseOutlined, FundOutlined,
+  LineChartOutlined, ReloadOutlined, CompassOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { MonitorHistoryData, MonitorRouteMetric } from '../../../types/monitor';
@@ -98,7 +98,7 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
     },
     {
       key: 'cpu',
-      label: <Space><DashboardFilled />{t('monitor.tab_cpu')}</Space>,
+      label: <Space><DashboardOutlined />{t('monitor.tab_cpu')}</Space>,
       children: initialLoading || !history?.processCpuUsage?.length ? renderHistoryContent() : (
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={8}>
@@ -129,7 +129,7 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
     },
     {
       key: 'routes',
-      label: <Space><ThunderboltOutlined />{t('monitor.tab_routes')}</Space>,
+      label: <Space><CompassOutlined />{t('monitor.tab_routes')}</Space>,
       children: <RouteMetricsTable data={routeMetrics} loading={routeMetricsLoading} />,
     },
   ];
@@ -138,7 +138,7 @@ const HistoryTrends: React.FC<HistoryTrendsProps> = ({
     <Card
       title={<Space><LineChartOutlined />{t('monitor.history_trends')}</Space>}
       extra={(
-        <Button icon={<SyncOutlined />} onClick={onRefresh} loading={loading} size="small">
+        <Button icon={<ReloadOutlined />} onClick={onRefresh} loading={loading} size="small">
           {t('common.refresh')}
         </Button>
       )}

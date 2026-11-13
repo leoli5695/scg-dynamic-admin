@@ -4,8 +4,7 @@ import {
   DatePicker, Radio } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
-  RobotOutlined, CheckCircleOutlined,
-  ThunderboltOutlined, ClockCircleOutlined,
+  RobotOutlined, CheckCircleOutlined, RedoOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import dayjs, { Dayjs } from 'dayjs';
@@ -316,7 +315,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
 
               <Button
                 type="primary"
-                icon={<ClockCircleOutlined />}
+                icon={<RobotOutlined />}
                 loading={analyzing}
                 disabled={!validated || !selectedModel || !timeRange[0] || !timeRange[1]}
                 onClick={handleSaveAndAnalyze}
@@ -340,7 +339,7 @@ const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ visible, onClose, lan
         <div className="ai-analysis-result">
           <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Space>
-              <Button onClick={() => setResult('')} icon={<ThunderboltOutlined />}>
+              <Button onClick={() => setResult('')} icon={<RedoOutlined />}>
                 {t('ai.reanalyze')}
               </Button>
               <Tag color="blue" icon={<CheckCircleOutlined />}>{t('ai.analysis_complete')}</Tag>

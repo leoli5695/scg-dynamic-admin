@@ -6,8 +6,8 @@ import {
   Badge, Button, Drawer, Empty, Tag, Tooltip, Typography  } from 'antd';
 import { message, modal } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, CloseOutlined, CloudServerOutlined, CopyOutlined,
-  DeleteOutlined, EditOutlined, RobotOutlined,
+  CloseOutlined, CloudServerOutlined, CopyOutlined, DeleteOutlined,
+  DeploymentUnitOutlined, EditOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { ServiceDefinition } from '../../../types/service';
@@ -62,7 +62,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
         {/* Header */}
         <div className="drawer-header">
           <div className="drawer-header-left">
-            <div className="drawer-icon">{isAi ? <RobotOutlined /> : <CloudServerOutlined />}</div>
+            <div className="drawer-icon">{isAi ? <RobotOutlined /> : <DeploymentUnitOutlined />}</div>
             <div className="drawer-title-wrapper">
               <Title level={4} className="drawer-title">{service.name}</Title>
               <div className="drawer-id-row">
@@ -109,7 +109,7 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
         ) : (
         <div className="drawer-section">
           <div className="section-title">
-            <ApiOutlined />
+            <CloudServerOutlined />
             {' '}
             {t('services.instances')}
             <span className="count">{service.instances?.length || 0}</span>

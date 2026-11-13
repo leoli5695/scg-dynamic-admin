@@ -8,8 +8,8 @@ import {
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
-  CloudServerOutlined, ClusterOutlined, ControlOutlined, KeyOutlined, FundOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined, SettingOutlined,
+  AppstoreOutlined, CloudServerOutlined, ClusterOutlined, ControlOutlined,
+  FundOutlined, MenuFoldOutlined, MenuUnfoldOutlined, SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -50,10 +50,10 @@ const AppShell: React.FC = () => {
     getItem(t('menu.instances'), 'instances', <CloudServerOutlined />),
     getItem(t('menu.token_usage'), 'token-usage', <FundOutlined />),
     {
-      key: 'platform', label: t('menu.platform'), icon: <SettingOutlined />,
+      key: 'platform', label: t('menu.platform'), icon: <AppstoreOutlined />,
       children: [
         ...(kubernetesVisible ? [getItem(t('menu.kubernetes'), 'kubernetes', <ClusterOutlined />)] : []),
-        getItem('License', 'license', <KeyOutlined />),
+        getItem('License', 'license', <SafetyCertificateOutlined />),
         getItem(t('menu.feature_settings'), 'settings', <ControlOutlined />),
       ],
     },

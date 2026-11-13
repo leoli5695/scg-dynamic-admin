@@ -9,7 +9,7 @@ import {
   Tooltip, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
 import type { ColumnsType } from 'antd/es/table';
-import { DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { DeleteOutlined, PlayCircleOutlined, RedoOutlined, ReloadOutlined } from '@ant-design/icons';
 import { parseServerTime } from '../../utils/serverTime';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
@@ -259,7 +259,7 @@ const RequestReplayPage: React.FC = () => {
   return (
     <div className="request-replay-page console-workspace-page console-resource-page">
       <ConsolePageHeader
-        icon={<PlayCircleOutlined />}
+        icon={<RedoOutlined />}
         eyebrow={t('replay.eyebrow')}
         title={t('replay.title')}
         description={t('replay.subtitle')}
@@ -279,7 +279,7 @@ const RequestReplayPage: React.FC = () => {
                 style={{ width: 280 }}
               />
             )}
-            <Button type="primary" icon={<PlayCircleOutlined />} onClick={loadTraces} loading={loading}>
+            <Button type="primary" icon={<ReloadOutlined />} onClick={loadTraces} loading={loading}>
               {t('common.refresh')}
             </Button>
             <Popconfirm

@@ -8,9 +8,8 @@ import {
 } from 'antd';
 import { modal } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, BranchesOutlined, BugOutlined, CloseOutlined, CloudOutlined,
-  DeleteOutlined, EditOutlined, FileTextOutlined, SplitCellsOutlined,
-  ThunderboltOutlined,
+  AppstoreAddOutlined, BranchesOutlined, BugOutlined, CloseOutlined, CloudOutlined,
+  CompassOutlined, DeleteOutlined, EditOutlined, FileTextOutlined, SplitCellsOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -62,7 +61,7 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
       <div className="drawer-content">
         <div className="drawer-header">
           <div className="drawer-header-left">
-            <div className="drawer-icon route-icon"><ApiOutlined /></div>
+            <div className="drawer-icon route-icon"><CompassOutlined /></div>
             <div className="drawer-title-wrapper">
               <Typography.Title level={4} className="drawer-title">{route.routeName || 'Route Detail'}</Typography.Title>
               <Typography.Text type="secondary" copyable={{ text: route.id }}>
@@ -266,7 +265,7 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
         {route.filters && route.filters.length > 0 && (
           <div className="drawer-section">
             <div className="section-title">
-              <ThunderboltOutlined />
+              <AppstoreAddOutlined />
               {' '}
               {t('routes.plugins')}
               {' '}

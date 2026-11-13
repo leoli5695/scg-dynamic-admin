@@ -11,7 +11,7 @@ import {
   Alert, Button, Form, Input, Modal, Select  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, ClusterOutlined, EditOutlined, ExclamationCircleOutlined,
+  CloudServerOutlined, DeploymentUnitOutlined, EditOutlined, ExclamationCircleOutlined,
   PlusOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -108,7 +108,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         <div className="modal-header-modern">
           <div className="modal-title-wrapper" key={category}>
             <div className={`modal-icon-wrapper ${isEdit ? 'edit' : ''}`}>
-              {isAi ? <RobotOutlined /> : <ClusterOutlined />}
+              {isAi ? <RobotOutlined /> : <DeploymentUnitOutlined />}
             </div>
             <div className="modal-title-text">
               <div className="modal-title">{t(`services.${isEdit ? 'edit' : 'create'}_${isAi ? 'ai' : 'normal'}`)}</div>
@@ -152,7 +152,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         <div className="editor-scroll" data-direction={stepDirection}>
         <div className="form-section-modern" hidden={activeStep !== 0}>
           <div className="section-header">
-            <ClusterOutlined className="section-icon" />
+            <DeploymentUnitOutlined className="section-icon" />
             <span className="section-title">{t('services.basic_config')}</span>
           </div>
           <div className="section-content">
@@ -166,6 +166,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                 label={t('services.category')}
                 normalLabel={t('services.category_normal')}
                 aiLabel={t('services.category_ai')}
+                normalIcon={<DeploymentUnitOutlined />}
               />
             </Form.Item>
             <p className="editor-type-hint" key={category}>{t('services.' + (isAi ? 'ai_type_hint' : 'normal_type_hint'))}</p>
@@ -239,7 +240,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         {!isAi && visitedSteps.includes(1) && (
         <div className="form-section-modern" hidden={activeStep !== 1}>
           <div className="section-header">
-            <ApiOutlined className="section-icon" />
+            <CloudServerOutlined className="section-icon" />
             <span className="section-title">{t('services.service_instances')}</span>
             <span className="section-subtitle">{t('services.instances_helper')}</span>
           </div>

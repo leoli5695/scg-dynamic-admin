@@ -176,8 +176,8 @@
   "filterChain.waterfall_start_time": "Start time: {{time}}ms",
   "filterChain.waterfall_order": "Execution order: #{{index}} (order={{order}})",
   "filterChain.waterfall_status": "Status: {{status}}",
-  "filterChain.status_success": "✅ Success",
-  "filterChain.status_failed": "❌ Failed",
+  "filterChain.status_success": "Success",
+  "filterChain.status_failed": "Failed",
   "filterChain.legend_self_fast": "Self Time (Fast)",
   "filterChain.legend_self_slow": "Self Time (Slow)",
   "filterChain.waterfall_total_time": "Total time: {{time}}ms"

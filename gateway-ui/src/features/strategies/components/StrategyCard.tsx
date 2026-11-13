@@ -5,7 +5,7 @@ import React, { memo } from 'react';
 import { Badge, Button, Card, Popconfirm, Space, Tag, Tooltip, Typography } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, CopyOutlined, DeleteOutlined, EditOutlined,
+  CompassOutlined, CopyOutlined, DeleteOutlined, EditOutlined,
   GlobalOutlined, PlayCircleOutlined, StopOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -141,7 +141,7 @@ const StrategyCard = memo(({ strategy, typeInfo, typeLabel, onEdit, onToggle, on
 
       <div className="strategy-meta">
         <Badge status={strategy.enabled ? 'success' : 'default'} text={strategy.enabled ? t('common.enabled') : t('common.disabled')} />
-        <Tag icon={strategy.scope === 'GLOBAL' ? <GlobalOutlined /> : <ApiOutlined />} color={strategy.scope === 'GLOBAL' ? 'blue' : 'green'}>
+        <Tag icon={strategy.scope === 'GLOBAL' ? <GlobalOutlined /> : <CompassOutlined />} color={strategy.scope === 'GLOBAL' ? 'blue' : 'green'}>
           {strategy.scope === 'GLOBAL' ? t('strategy.scope_global') : t('strategy.scope_route')}
         </Tag>
       </div>

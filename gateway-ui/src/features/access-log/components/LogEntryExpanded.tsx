@@ -4,6 +4,7 @@
  */
 import React, { useState } from 'react';
 import { Alert, Badge, Button, Descriptions, Radio, Tag, Tooltip, Typography } from 'antd';
+import { DownloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -75,7 +76,7 @@ const BodyContent: React.FC<{
 };
 
 const BodyPanel: React.FC<{
-  title: string;
+  title: React.ReactNode;
   body: string | undefined;
   viewMode: 'raw' | 'formatted';
   headerColor?: string;
@@ -207,7 +208,7 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
       <div style={{ marginTop: 12 }}>
         <div className="json-container">
           <div className="json-header">
-            <span>📤 {t('access_log.request_body')}</span>
+            <span><UploadOutlined /> {t('access_log.request_body')}</span>
             {record.requestBody && <span className="json-size">{record.requestBody.length} bytes</span>}
             <Radio.Group
               size="small"
@@ -231,7 +232,7 @@ const LogEntryExpanded: React.FC<LogEntryExpandedProps> = ({
       {/* Response body */}
       <div style={{ marginTop: 12 }}>
         <BodyPanel
-          title={`📥 ${t('access_log.response_body')}`}
+          title={<span><DownloadOutlined /> {t('access_log.response_body')}</span>}
           body={record.responseBody}
           viewMode={bodyViewMode}
           headerColor={`var(--success-color, ${palette.success})`}

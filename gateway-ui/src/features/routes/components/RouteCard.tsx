@@ -6,8 +6,8 @@ import {
   Badge, Button, Card, Tag, Tooltip, Typography  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, BranchesOutlined, CloudOutlined, CopyOutlined,
-  SplitCellsOutlined, ThunderboltOutlined,
+  AppstoreAddOutlined, BranchesOutlined, CloudOutlined, CompassOutlined,
+  CopyOutlined, SplitCellsOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -89,7 +89,7 @@ const RouteCard: React.FC<RouteCardProps> = ({
     <Card className="route-card" hoverable>
       <div className="route-card-header">
         <div className="route-info">
-          <div className="route-icon"><ApiOutlined /></div>
+          <div className="route-icon"><CompassOutlined /></div>
           <div className="route-details">
             <Text strong className="route-name">
               {route.routeName || (route.id && route.id.substring(0, 8)) || 'Unknown'}
@@ -177,7 +177,7 @@ const RouteCard: React.FC<RouteCardProps> = ({
       {/* Plugins */}
       <div className="route-section">
         <Text type="secondary" className="section-label">
-          <ThunderboltOutlined />
+          <AppstoreAddOutlined />
           {' '}
           {t('routes.plugins')}
           {' '}
@@ -190,7 +190,7 @@ const RouteCard: React.FC<RouteCardProps> = ({
             route.filters!.map((f, idx) => (
               <Tooltip key={idx} title={t(`plugin.${f.name}.detail`, { defaultValue: '' })} placement="top">
                 <Tag style={pluginTagStyle} className="plugin-tag">
-                  <ThunderboltOutlined />
+                  <AppstoreAddOutlined />
                   {' '}
                   {t(`plugin.${f.name}.name`, { defaultValue: f.name })}
                 </Tag>

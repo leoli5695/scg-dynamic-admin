@@ -10,7 +10,7 @@ import {
 } from 'antd';
 import type { FormInstance } from 'antd';
 import {
-  CheckCircleOutlined, CloudServerOutlined, CodeOutlined, ContainerOutlined,
+  CheckCircleOutlined, ClusterOutlined, CodeOutlined, ContainerOutlined,
   DesktopOutlined, FileOutlined, FileTextOutlined, FolderOutlined,
   InfoCircleOutlined, SettingOutlined,
 } from '@ant-design/icons';
@@ -37,7 +37,7 @@ const getDeployModeIcon = (mode: string) => {
   switch (mode) {
     case 'LOCAL': return <DesktopOutlined />;
     case 'DOCKER': return <ContainerOutlined />;
-    case 'K8S': return <CloudServerOutlined />;
+    case 'K8S': return <ClusterOutlined />;
     default: return <FolderOutlined />;
   }
 };

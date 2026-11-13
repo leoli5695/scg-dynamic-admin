@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClusterOutlined, RobotOutlined } from '@ant-design/icons';
+import { RobotOutlined } from '@ant-design/icons';
 
 interface EditorCategorySwitchProps {
   id?: string;
@@ -9,11 +9,12 @@ interface EditorCategorySwitchProps {
   label: string;
   normalLabel: string;
   aiLabel: string;
+  normalIcon: React.ReactNode;
 }
 
 /** A persistent sliding indicator makes the type change visible without remounting fields. */
 const EditorCategorySwitch: React.FC<EditorCategorySwitchProps> = ({
-  id, value = 'NORMAL', onChange, disabled, label, normalLabel, aiLabel,
+  id, value = 'NORMAL', onChange, disabled, label, normalLabel, aiLabel, normalIcon,
 }) => (
   <div id={id} className="editor-category-switch" role="radiogroup" aria-label={label}
     aria-disabled={disabled} data-value={value}>
@@ -29,7 +30,7 @@ const EditorCategorySwitch: React.FC<EditorCategorySwitchProps> = ({
           onChange?.(next === 0 ? 'NORMAL' : 'AI');
           event.currentTarget.parentElement?.querySelectorAll('button')[next]?.focus();
         }}>
-        {category === 'AI' ? <RobotOutlined /> : <ClusterOutlined />}
+        {category === 'AI' ? <RobotOutlined /> : normalIcon}
         {category === 'AI' ? aiLabel : normalLabel}
       </button>
     ))}

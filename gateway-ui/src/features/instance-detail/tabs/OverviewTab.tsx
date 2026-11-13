@@ -9,7 +9,7 @@ import {
 } from 'antd';
 import {
   AlertOutlined, BugOutlined, DownOutlined, LinkOutlined,
-  ReloadOutlined, RightOutlined, SafetyOutlined,
+  ReloadOutlined, RightOutlined, BulbOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useRequest } from '../../../hooks/useRequest';
@@ -311,7 +311,7 @@ const HealthScorePopover: React.FC = () => {
             }}
             >
               <div className="flex-items-center mb-2">
-                <SafetyOutlined style={{ color: palette.primary, fontSize: 14 }} />
+                <BulbOutlined style={{ color: palette.primary, fontSize: 14 }} />
                 <span style={{ fontWeight: 500, marginLeft: 8, color: palette.primary }}>
                   {t('instance.recommendations')}
                 </span>

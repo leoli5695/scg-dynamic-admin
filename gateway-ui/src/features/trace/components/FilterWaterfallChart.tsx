@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Tooltip, Tag, Badge, Typography } from 'antd';
-import { CheckCircleOutlined, WarningOutlined, FilterOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, FilterOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 import { useTranslation } from 'react-i18next';
@@ -228,7 +228,7 @@ const FilterWaterfallChart: React.FC<FilterWaterfallChartProps> = ({
                   <CheckCircleOutlined style={{ color: palette.success }} />
                 )
               ) : (
-                <WarningOutlined style={{ color: palette.error }} />
+                <CloseCircleOutlined style={{ color: palette.error }} />
               )}
             </div>
           </div>

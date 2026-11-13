@@ -9,7 +9,7 @@ import {
   Switch, Typography  } from 'antd';
 import { message } from '../../utils/antdStatic';
 import {
-  ApiOutlined, CloudServerOutlined, DashboardOutlined, DatabaseOutlined,
+  ApiOutlined, CloudServerOutlined, CompassOutlined, DashboardOutlined, DatabaseOutlined,
   LockOutlined, MedicineBoxOutlined, RocketOutlined, SyncOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
@@ -219,7 +219,7 @@ const DiagnosticPage: React.FC = () => {
           <Col xs={24} lg={12}>
             <ComponentCard
               title={t('diagnostic.redis')}
-              icon={<CloudServerOutlined />}
+              icon={<DatabaseOutlined />}
               diagnostic={report.redis}
             />
           </Col>
@@ -233,7 +233,7 @@ const DiagnosticPage: React.FC = () => {
           <Col xs={24} lg={12}>
             <ComponentCard
               title={t('diagnostic.routes')}
-              icon={<DashboardOutlined />}
+              icon={<CompassOutlined />}
               diagnostic={report.routes}
             />
           </Col>

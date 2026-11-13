@@ -7,7 +7,7 @@ import {
   ThunderboltOutlined, SafetyOutlined, ClockCircleOutlined, StopOutlined,
   KeyOutlined, SyncOutlined, GlobalOutlined, FileTextOutlined,
   SettingOutlined, CloudOutlined, SecurityScanOutlined, NumberOutlined,
-  PlayCircleOutlined,
+  PlayCircleOutlined, ControlOutlined,
 } from '@ant-design/icons';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -27,5 +27,5 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 };
 
 export function getStrategyTypeIcon(iconName?: string): React.ReactNode {
-  return (iconName && ICON_MAP[iconName]) || <ThunderboltOutlined />;
+  return (iconName && ICON_MAP[iconName]) || <ControlOutlined />;
 }

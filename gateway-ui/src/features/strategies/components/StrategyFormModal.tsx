@@ -21,7 +21,8 @@ import {
   Typography,
 } from 'antd';
 import {
-  ApiOutlined,
+  ArrowLeftOutlined,
+  CompassOutlined,
   EditOutlined,
   GlobalOutlined,
   KeyOutlined,
@@ -121,7 +122,7 @@ function renderConfigFields(
                   <KeyOutlined /> {t('strategy.auth_type.jwt')}
                 </Select.Option>
                 <Select.Option value="API_KEY">
-                  <ApiOutlined /> {t('strategy.auth_type.api_key')}
+                  <KeyOutlined /> {t('strategy.auth_type.api_key')}
                 </Select.Option>
                 <Select.Option value="OAUTH2">
                   <GlobalOutlined /> {t('strategy.auth_type.oauth2')}
@@ -314,7 +315,7 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
         {!isEdit && onBackToTypeSelect && (
           <Button
             type="text"
-            icon={<EditOutlined />}
+            icon={<ArrowLeftOutlined />}
             onClick={onBackToTypeSelect}
             style={{ marginRight: 8 }}
           >
@@ -393,7 +394,7 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
                               <GlobalOutlined /> {t('strategy.scope_global')}
                             </Radio.Button>
                             <Radio.Button value="ROUTE">
-                              <ApiOutlined /> {t('strategy.scope_route')}
+                              <CompassOutlined /> {t('strategy.scope_route')}
                             </Radio.Button>
                           </Radio.Group>
                         </Form.Item>
@@ -435,7 +436,7 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
                               <GlobalOutlined /> {t('strategy.scope_global')}
                             </Radio.Button>
                             <Radio.Button value="ROUTE">
-                              <ApiOutlined /> {t('strategy.scope_route')}
+                              <CompassOutlined /> {t('strategy.scope_route')}
                             </Radio.Button>
                           </Radio.Group>
                         </Form.Item>

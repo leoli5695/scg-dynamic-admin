@@ -5,7 +5,7 @@
  */
 import React, { useState } from 'react';
 import { Alert, Badge, Divider, Form, InputNumber, Radio, Select, Typography } from 'antd';
-import { ApiOutlined, EditOutlined, GlobalOutlined, SettingOutlined } from '@ant-design/icons';
+import { CompassOutlined, EditOutlined, GlobalOutlined, SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import ResourceEditor from '../../instance-detail/ResourceEditor';
 import type { Plugin, PluginBinding, PluginConfigSchema } from '../../../types/plugin';
@@ -188,7 +188,7 @@ const BindingFormModal: React.FC<BindingFormModalProps> = ({
                         {t('plugin_bindings.global_binding')}
                       </Radio.Button>
                       <Radio.Button value="ROUTE" style={{ width: '50%', textAlign: 'center' }}>
-                        <ApiOutlined style={{ marginRight: 8 }} />
+                        <CompassOutlined style={{ marginRight: 8 }} />
                         {t('plugin_bindings.route_binding')}
                       </Radio.Button>
                     </Radio.Group>

@@ -6,7 +6,7 @@ import {
   Alert, Badge, Button, Card, Popconfirm, Space, Tag, Tooltip, Typography  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, CloudServerOutlined, CopyOutlined, DeleteOutlined,
+  CloudServerOutlined, CopyOutlined, DeleteOutlined, DeploymentUnitOutlined,
   EditOutlined, ExclamationCircleOutlined, EyeOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -73,7 +73,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
       )}
       <div className="service-card-header">
         <div className="service-info">
-          <div className="service-icon">{isAi ? <RobotOutlined /> : <CloudServerOutlined />}</div>
+          <div className="service-icon">{isAi ? <RobotOutlined /> : <DeploymentUnitOutlined />}</div>
           <div className="service-details">
             <Text strong className="service-name">{service.name}</Text>
             <div className="service-id-row">
@@ -133,7 +133,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
       <div className="instances-section" style={{ flex: 1 }}>
         <div className="instances-header">
           <Text type="secondary" className="instances-title">
-            <ApiOutlined />
+            <CloudServerOutlined />
             {' '}
             {healthyEnabled}
             /

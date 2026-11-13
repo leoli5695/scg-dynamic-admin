@@ -2,7 +2,7 @@ import React from 'react';
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
-  WarningOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons';
 import { palette } from '../../styles/palette';
 
@@ -25,7 +25,7 @@ export const getInstanceStatusColor = (status: string) =>
 export const getInstanceStatusIcon = (status: string): React.ReactNode => {
   if (status === 'UP') return <CheckCircleOutlined style={{ color: palette.success }} />;
   if (status === 'DOWN') return <CloseCircleOutlined style={{ color: palette.error }} />;
-  return <WarningOutlined style={{ color: palette.warning }} />;
+  return <QuestionCircleOutlined style={{ color: palette.textMuted }} />;
 };
 
 /** K8s pod phase → antd Badge preset status / Tag color. */

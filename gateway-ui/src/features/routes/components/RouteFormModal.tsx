@@ -12,8 +12,8 @@ import {
   Alert, Button, Form, Input, Modal, Typography  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
-  ApiOutlined, EditOutlined, FileTextOutlined, LinkOutlined,
-  PlusOutlined, RobotOutlined, RocketOutlined, ThunderboltOutlined,
+  AppstoreAddOutlined, BranchesOutlined, CompassOutlined, EditOutlined, FileTextOutlined, LinkOutlined,
+  PlusOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -187,7 +187,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         <div className="modal-header-modern">
           <div className="modal-title-wrapper" key={category}>
             <div className={`modal-icon-wrapper ${isEdit ? 'edit' : ''}`}>
-              {isAi ? <RobotOutlined /> : <ApiOutlined />}
+              {isAi ? <RobotOutlined /> : <CompassOutlined />}
             </div>
             <div className="modal-title-text">
               <div className="modal-title">{t(`routes.${isEdit ? 'edit' : 'create'}_${isAi ? 'ai' : 'normal'}`)}</div>
@@ -239,6 +239,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
                 label={t('routes.category')}
                 normalLabel={t('routes.category_normal')}
                 aiLabel={t('routes.category_ai')}
+                normalIcon={<CompassOutlined />}
               />
             </Form.Item>
             <p className="editor-type-hint" key={category}>{t('routes.' + (isAi ? 'ai_type_hint' : 'normal_type_hint'))}</p>
@@ -269,7 +270,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         {visitedSteps.includes(1) && (
         <div className="form-section-modern" hidden={activeStep !== 1}>
           <div className="section-header">
-            {isAi ? <RobotOutlined className="section-icon" /> : <ApiOutlined className="section-icon" />}
+            {isAi ? <RobotOutlined className="section-icon" /> : <CompassOutlined className="section-icon" />}
             <span className="section-title">{isAi ? t('routes.ai_target_configuration') : t('routes.target_configuration')}</span>
             {isAi && <span className="section-subtitle">{t('routes.ai_target_helper')}</span>}
           </div>
@@ -304,7 +305,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         {/* Predicates */}
         <div className="form-section-modern" hidden={activeStep !== 2}>
           <div className="section-header">
-            <ThunderboltOutlined className="section-icon" />
+            <BranchesOutlined className="section-icon" />
             <span className="section-title">{t('routes.predicates_section')}</span>
           </div>
           <div className="section-content">
@@ -326,7 +327,7 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         {/* Plugins — managed on the plugin binding page */}
         <div className="form-section-modern editor-plugin-note" hidden={activeStep !== 2}>
           <div className="section-header">
-            <RocketOutlined className="section-icon" />
+            <AppstoreAddOutlined className="section-icon" />
             <span className="section-title">{t('routes.plugins_section')}</span>
           </div>
           <div className="section-content">

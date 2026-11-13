@@ -25,6 +25,8 @@
   "replay.latency_diff": "耗时差异",
   "replay.status_match": "状态匹配",
   "replay.headers": "请求头",
+  "replay.add_header": "添加请求头",
+  "replay.remove_header": "删除请求头",
   "replay.request_body": "请求体",
   "replay.comparison": "对比",
   "replay.original_response": "原始响应",

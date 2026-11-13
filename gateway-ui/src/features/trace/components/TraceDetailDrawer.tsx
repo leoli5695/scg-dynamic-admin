@@ -11,7 +11,7 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   CheckCircleOutlined, CompressOutlined, CopyOutlined, ExpandOutlined,
   FilterOutlined, ShareAltOutlined, ThunderboltOutlined, UnorderedListOutlined,
-  WarningOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
@@ -137,7 +137,7 @@ const TraceDetailDrawer: React.FC<TraceDetailDrawerProps> = ({
       width: 80,
       render: (success: boolean) => (success
         ? <CheckCircleOutlined style={{ color: palette.success }} />
-        : <WarningOutlined style={{ color: palette.warning }} />),
+        : <CloseCircleOutlined style={{ color: palette.warning }} />),
     },
     {
       title: t('trace.filter_error'),

@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {
-  CheckCircleOutlined, CloseCircleOutlined, WarningOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, QuestionCircleOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { palette } from '../../styles/palette';
 
@@ -17,9 +17,9 @@ export const getStatusIcon = (status: string) => {
     case 'CRITICAL':
       return <CloseCircleOutlined className="status-icon-error" />;
     case 'NOT_CONFIGURED':
-      return <WarningOutlined className="status-icon-muted" />;
+      return <QuestionCircleOutlined className="status-icon-muted" />;
     default:
-      return <WarningOutlined className="status-icon-muted" />;
+      return <QuestionCircleOutlined className="status-icon-muted" />;
   }
 };
 
