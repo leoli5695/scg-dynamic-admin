@@ -1,5 +1,6 @@
 package com.leoli.gateway.admin.controller;
 
+import com.leoli.gateway.admin.service.AccessLogEntryQueryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,21 +30,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(MockitoExtension.class)
 class AccessLogPathSafetyTest {
 
-    private AccessLogConfigController controller;
+    private AccessLogEntryQueryService queryService;
     private Path logDir;
 
     @BeforeEach
     void setUp() {
-        controller = new AccessLogConfigController(null, null, null, null);
+        queryService = new AccessLogEntryQueryService(null, null, null);
         logDir = Paths.get("/var/log/gateway/access").toAbsolutePath().normalize();
     }
 
     private Path resolve(String date) {
-        return ReflectionTestUtils.invokeMethod(controller, "resolveLogFile", logDir, date);
+        return ReflectionTestUtils.invokeMethod(queryService, "resolveLogFile", logDir, date);
     }
 
     private int clamp(int requested) {
-        Integer clamped = ReflectionTestUtils.invokeMethod(controller, "clampTailLines", requested);
+        Integer clamped = ReflectionTestUtils.invokeMethod(queryService, "clampTailLines", requested);
         return clamped == null ? -1 : clamped;
     }
 

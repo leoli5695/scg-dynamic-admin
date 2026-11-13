@@ -80,7 +80,7 @@ class RequestCenterSearchTest {
         mvc = MockMvcBuilders.standaloneSetup(
                         new RequestJourneyController(traces, usage, logs),
                         new RequestTraceController(service, null, null, null, null, null),
-                        new AccessLogConfigController(null, null, logs, mapper))
+                        new AccessLogConfigController(null, null, logs, null))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

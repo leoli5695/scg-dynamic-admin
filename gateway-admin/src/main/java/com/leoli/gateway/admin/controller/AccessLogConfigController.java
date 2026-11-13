@@ -1,11 +1,11 @@
 package com.leoli.gateway.admin.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leoli.gateway.admin.dto.ApiResponse;
 import com.leoli.gateway.admin.model.AccessLogGlobalConfig;
 import com.leoli.gateway.admin.model.AccessLogEntryEntity;
 import com.leoli.gateway.admin.repository.AccessLogEntryRepository;
 import com.leoli.gateway.admin.service.AccessLogConfigService;
+import com.leoli.gateway.admin.service.AccessLogEntryQueryService;
 import com.leoli.gateway.admin.service.KubernetesResourceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,8 +19,6 @@ import org.springframework.web.bind.annotation.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -44,101 +42,7 @@ public class AccessLogConfigController extends BaseController {
     private final AccessLogConfigService accessLogConfigService;
     private final KubernetesResourceService kubernetesResourceService;
     private final AccessLogEntryRepository accessLogEntryRepository;
-    private final ObjectMapper objectMapper;
-
-    /**
-     * Upper bound on how many lines one tail request may pull into memory. Both k8s log endpoints
-     * split the whole response on newlines and JSON-parse every line into a List before paging in
-     * memory, so an unbounded tailLines let any authenticated caller size that list by asking for it.
-     */
-    private static final int MAX_TAIL_LINES = 10_000;
-
-    private static final java.util.regex.Pattern LOG_DATE =
-            java.util.regex.Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
-
-    /**
-     * Resolve the access-log file for a date, refusing to leave the configured log directory.
-     *
-     * <p>FIX (path traversal): the name used to be built as {@code "access-" + date + ".log"} from a
-     * raw request parameter and resolved without normalisation. The {@code access-} prefix does not
-     * constrain anything - {@code date=x/../../../etc/passwd} produces
-     * {@code access-x/../../../etc/passwd.log}, whose first segment is an ordinary directory name and
-     * whose later {@code ..} segments escape the log directory, giving an authenticated read of any
-     * {@code *.log} file on the filesystem. The format check rejects that outright; the containment
-     * check keeps the guarantee even if the name is ever built differently.
-     *
-     * @throws IllegalArgumentException when the date is malformed or resolves outside the log directory
-     */
-    private Path resolveLogFile(Path logDirPath, String date) {
-        String effectiveDate = (date != null && !date.isEmpty())
-                ? date
-                : LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
-        if (!LOG_DATE.matcher(effectiveDate).matches()) {
-            // Deliberately does not echo the value back: it is caller-controlled and this message
-            // reaches both the HTTP response and the logs.
-            throw new IllegalArgumentException("Invalid date parameter, expected yyyy-MM-dd");
-        }
-        Path base = logDirPath.toAbsolutePath().normalize();
-        Path filePath = base.resolve("access-" + effectiveDate + ".log").normalize();
-        if (!filePath.startsWith(base)) {
-            throw new IllegalArgumentException("Resolved log path escapes the configured log directory");
-        }
-        return filePath;
-    }
-
-    /**
-     * Clamp a requested tail size into [1, MAX_TAIL_LINES].
-     */
-    private static int clampTailLines(int tailLines) {
-        return Math.min(Math.max(tailLines, 1), MAX_TAIL_LINES);
-    }
-
-    /**
-     * Resolve log directory - try multiple possible locations.
-     */
-    private Path resolveLogDirectory(String logDir) {
-        if (logDir == null || logDir.isEmpty()) {
-            logDir = "./logs/access";
-        }
-
-        // Try the configured path first
-        Path dirPath = Paths.get(logDir);
-        if (Files.exists(dirPath)) {
-            return dirPath;
-        }
-
-        // Try absolute path
-        if (Paths.get(logDir).isAbsolute()) {
-            return dirPath;
-        }
-
-        // Try relative to user.dir (project root)
-        String userDir = System.getProperty("user.dir");
-        dirPath = Paths.get(userDir, logDir);
-        if (Files.exists(dirPath)) {
-            return dirPath;
-        }
-
-        // Try sibling my-gateway directory (common dev setup)
-        Path gatewayPath = Paths.get(userDir).getParent();
-        if (gatewayPath != null) {
-            Path myGatewayPath = gatewayPath.resolve("my-gateway");
-            if (Files.exists(myGatewayPath)) {
-                dirPath = myGatewayPath.resolve(logDir.replace("./", ""));
-                if (Files.exists(dirPath)) {
-                    return dirPath;
-                }
-            }
-            // Also try gatewayPath directly
-            dirPath = gatewayPath.resolve("my-gateway/logs/access");
-            if (Files.exists(dirPath)) {
-                return dirPath;
-            }
-        }
-
-        // Return original path
-        return Paths.get(logDir);
-    }
+    private final AccessLogEntryQueryService accessLogEntryQueryService;
 
     /**
      * Get current access log configuration.
@@ -510,7 +414,7 @@ services:
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getLogFiles() {
         try {
             AccessLogGlobalConfig config = accessLogConfigService.getConfig();
-            Path dirPath = resolveLogDirectory(config.getLogDirectory());
+            Path dirPath = accessLogEntryQueryService.resolveLogDirectory(config.getLogDirectory());
 
             if (dirPath == null || !Files.exists(dirPath)) {
                 return ResponseEntity.ok(ApiResponse.success(Collections.emptyList(), "Log directory not found: " + config.getLogDirectory()));
@@ -562,88 +466,11 @@ services:
             @RequestParam(required = false) String path,
             @RequestParam(required = false) String traceId) {
         try {
-            AccessLogGlobalConfig config = accessLogConfigService.getConfig();
-            Path logDirPath = resolveLogDirectory(config.getLogDirectory());
-
-            // Determine file name - validated and confined to the log directory
-            Path filePath;
-            try {
-                filePath = resolveLogFile(logDirPath, date);
-            } catch (IllegalArgumentException e) {
-                return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
-            }
-            String fileName = filePath.getFileName().toString();
-            if (!Files.exists(filePath)) {
-                Map<String, Object> data = new LinkedHashMap<>();
-                data.put("entries", Collections.emptyList());
-                data.put("total", 0);
-                data.put("page", page);
-                data.put("size", size);
-                data.put("file", fileName);
-                return ResponseEntity.ok(ApiResponse.success(data));
-            }
-
-            // Read and parse log entries
-            List<Map<String, Object>> allEntries = new ArrayList<>();
-            try (Stream<String> lines = Files.lines(filePath)) {
-                lines.forEach(line -> {
-                    if (line != null && !line.trim().isEmpty()) {
-                        try {
-                            @SuppressWarnings("unchecked")
-                            Map<String, Object> entry = objectMapper.readValue(line, Map.class);
-
-                            // Apply filters
-                            if (method != null && !method.isEmpty()) {
-                                if (!method.equalsIgnoreCase((String) entry.get("method"))) {
-                                    return;
-                                }
-                            }
-                            if (statusCode != null) {
-                                Object code = entry.get("statusCode");
-                                if (code == null || ((Number) code).intValue() != statusCode) {
-                                    return;
-                                }
-                            }
-                            if (path != null && !path.isEmpty()) {
-                                String entryPath = (String) entry.get("path");
-                                if (entryPath == null || !entryPath.contains(path)) {
-                                    return;
-                                }
-                            }
-                            if (traceId != null && !traceId.isEmpty()) {
-                                if (!traceId.equals(entry.get("traceId"))) {
-                                    return;
-                                }
-                            }
-
-                            allEntries.add(entry);
-                        } catch (Exception e) {
-                            // Skip malformed lines
-                        }
-                    }
-                });
-            }
-
-            // Paginate
-            int total = allEntries.size();
-            int fromIndex = page * size;
-            int toIndex = Math.min(fromIndex + size, total);
-
-            List<Map<String, Object>> pagedEntries;
-            if (fromIndex >= total) {
-                pagedEntries = Collections.emptyList();
-            } else {
-                pagedEntries = allEntries.subList(fromIndex, toIndex);
-            }
-
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("entries", pagedEntries);
-            data.put("total", total);
-            data.put("page", page);
-            data.put("size", size);
-            data.put("file", fileName);
-
+            Map<String, Object> data = accessLogEntryQueryService.getLogEntries(
+                    date, page, size, method, statusCode, path, traceId);
             return ResponseEntity.ok(ApiResponse.success(data));
+        } catch (AccessLogEntryQueryService.InvalidLogDateException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to read log entries", e);
             return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to read logs: " + e.getMessage()));
@@ -657,86 +484,10 @@ services:
     public ResponseEntity<ApiResponse<Map<String, Object>>> getLogStats(
             @RequestParam(required = false) String date) {
         try {
-            AccessLogGlobalConfig config = accessLogConfigService.getConfig();
-            Path logDirPath = resolveLogDirectory(config.getLogDirectory());
-
-            // Validated and confined to the log directory - see resolveLogFile.
-            Path filePath;
-            try {
-                filePath = resolveLogFile(logDirPath, date);
-            } catch (IllegalArgumentException e) {
-                return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
-            }
-            String fileName = filePath.getFileName().toString();
-            if (!Files.exists(filePath)) {
-                Map<String, Object> data = new LinkedHashMap<>();
-                data.put("totalRequests", 0);
-                data.put("avgDuration", 0.0);
-                data.put("statusCodes", Collections.emptyMap());
-                data.put("topPaths", Collections.emptyList());
-                data.put("methods", Collections.emptyMap());
-                return ResponseEntity.ok(ApiResponse.success(data));
-            }
-
-            // Calculate statistics
-            long totalRequests = 0;
-            long totalDuration = 0;
-            Map<Integer, Integer> statusCodes = new HashMap<>();
-            Map<String, Integer> paths = new HashMap<>();
-            Map<String, Integer> methods = new HashMap<>();
-
-            try (Stream<String> lines = Files.lines(filePath)) {
-                for (String line : lines.collect(Collectors.toList())) {
-                    if (line == null || line.trim().isEmpty()) continue;
-                    try {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> entry = objectMapper.readValue(line, Map.class);
-                        totalRequests++;
-
-                        Object duration = entry.get("durationMs");
-                        if (duration != null) {
-                            totalDuration += ((Number) duration).longValue();
-                        }
-
-                        Object status = entry.get("statusCode");
-                        if (status != null) {
-                            int code = ((Number) status).intValue();
-                            statusCodes.merge(code, 1, Integer::sum);
-                        }
-
-                        String pathStr = (String) entry.get("path");
-                        if (pathStr != null) {
-                            paths.merge(pathStr, 1, Integer::sum);
-                        }
-
-                        String methodStr = (String) entry.get("method");
-                        if (methodStr != null) {
-                            methods.merge(methodStr, 1, Integer::sum);
-                        }
-                    } catch (Exception e) {
-                        // Skip malformed lines
-                    }
-                }
-            }
-
-            // Get top 10 paths
-            List<Map<String, Object>> topPaths = paths.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(10)
-                .map(e -> Map.<String, Object>of("path", e.getKey(), "count", e.getValue()))
-                .collect(Collectors.toList());
-
-            double avgDuration = totalRequests > 0 ? (double) totalDuration / totalRequests : 0;
-
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("totalRequests", totalRequests);
-            data.put("avgDuration", Math.round(avgDuration * 100.0) / 100.0);
-            data.put("statusCodes", statusCodes);
-            data.put("topPaths", topPaths);
-            data.put("methods", methods);
-            data.put("file", fileName);
-
+            Map<String, Object> data = accessLogEntryQueryService.getLogStats(date);
             return ResponseEntity.ok(ApiResponse.success(data));
+        } catch (AccessLogEntryQueryService.InvalidLogDateException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.badRequest(e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to get log stats", e);
             return ResponseEntity.internalServerError().body(ApiResponse.error("Failed to get stats: " + e.getMessage()));
@@ -818,72 +569,9 @@ services:
             @RequestParam(required = false) String traceId,
             @RequestParam(required = false) Integer sinceSeconds) {
         try {
-            String rawLogs = kubernetesResourceService.getPodLogs(clusterId, namespace, podName, null,
-                sinceSeconds != null ? null : clampTailLines(tailLines), sinceSeconds);
-
-            List<Map<String, Object>> allEntries = new ArrayList<>();
-            if (rawLogs != null && !rawLogs.isEmpty()) {
-                for (String line : rawLogs.split("\n")) {
-                    if (line == null || line.trim().isEmpty()) continue;
-                    if (!line.trim().startsWith("{")) continue;
-
-                    try {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> entry = objectMapper.readValue(line, Map.class);
-
-                        if (entry.get("method") == null || entry.get("path") == null) continue;
-
-                        if (method != null && !method.isEmpty()) {
-                            if (!method.equalsIgnoreCase((String) entry.get("method"))) continue;
-                        }
-                        if (statusCode != null) {
-                            Object code = entry.get("statusCode");
-                            if (code == null || ((Number) code).intValue() != statusCode) continue;
-                        }
-                        if (path != null && !path.isEmpty()) {
-                            String entryPath = (String) entry.get("path");
-                            if (entryPath == null || !entryPath.contains(path)) continue;
-                        }
-                        if (traceId != null && !traceId.isEmpty()) {
-                            if (!traceId.equals(entry.get("traceId"))) continue;
-                        }
-
-                        allEntries.add(entry);
-                    } catch (Exception e) {
-                        // Skip malformed JSON lines
-                    }
-                }
-            }
-
-            // Sort by timestamp (newest first)
-            allEntries.sort((a, b) -> {
-                String tsA = (String) a.get("@timestamp");
-                String tsB = (String) b.get("@timestamp");
-                if (tsA == null || tsB == null) return 0;
-                return tsB.compareTo(tsA);
-            });
-
-            // Paginate
-            int total = allEntries.size();
-            int fromIndex = page * size;
-            int toIndex = Math.min(fromIndex + size, total);
-
-            List<Map<String, Object>> pagedEntries;
-            if (fromIndex >= total) {
-                pagedEntries = Collections.emptyList();
-            } else {
-                pagedEntries = allEntries.subList(fromIndex, toIndex);
-            }
-
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("entries", pagedEntries);
-            data.put("total", total);
-            data.put("page", page);
-            data.put("size", size);
-            data.put("podName", podName);
-            data.put("namespace", namespace);
-            data.put("realtime", true);
-
+            Map<String, Object> data = accessLogEntryQueryService.getK8sLogEntries(
+                    clusterId, namespace, podName, tailLines, page, size,
+                    method, statusCode, path, traceId, sinceSeconds);
             return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get K8s log entries", e);
@@ -902,71 +590,8 @@ services:
             @RequestParam(defaultValue = "500") int tailLines,
             @RequestParam(required = false) Integer sinceSeconds) {
         try {
-            String rawLogs = kubernetesResourceService.getPodLogs(clusterId, namespace, podName, null,
-                sinceSeconds != null ? null : clampTailLines(tailLines), sinceSeconds);
-
-            long totalRequests = 0;
-            long totalDuration = 0;
-            Map<Integer, Integer> statusCodes = new HashMap<>();
-            Map<String, Integer> paths = new HashMap<>();
-            Map<String, Integer> methods = new HashMap<>();
-
-            if (rawLogs != null && !rawLogs.isEmpty()) {
-                for (String line : rawLogs.split("\n")) {
-                    if (line == null || line.trim().isEmpty()) continue;
-                    if (!line.trim().startsWith("{")) continue;
-
-                    try {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> entry = objectMapper.readValue(line, Map.class);
-
-                        if (entry.get("method") == null || entry.get("path") == null) continue;
-
-                        totalRequests++;
-
-                        Object duration = entry.get("durationMs");
-                        if (duration != null) {
-                            totalDuration += ((Number) duration).longValue();
-                        }
-
-                        Object status = entry.get("statusCode");
-                        if (status != null) {
-                            int code = ((Number) status).intValue();
-                            statusCodes.merge(code, 1, Integer::sum);
-                        }
-
-                        String pathStr = (String) entry.get("path");
-                        if (pathStr != null) {
-                            paths.merge(pathStr, 1, Integer::sum);
-                        }
-
-                        String methodStr = (String) entry.get("method");
-                        if (methodStr != null) {
-                            methods.merge(methodStr, 1, Integer::sum);
-                        }
-                    } catch (Exception e) {
-                        // Skip malformed lines
-                    }
-                }
-            }
-
-            List<Map<String, Object>> topPaths = paths.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(10)
-                .map(e -> Map.<String, Object>of("path", e.getKey(), "count", e.getValue()))
-                .toList();
-
-            double avgDuration = totalRequests > 0 ? (double) totalDuration / totalRequests : 0;
-
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("totalRequests", totalRequests);
-            data.put("avgDuration", Math.round(avgDuration * 100.0) / 100.0);
-            data.put("statusCodes", statusCodes);
-            data.put("topPaths", topPaths);
-            data.put("methods", methods);
-            data.put("podName", podName);
-            data.put("realtime", true);
-
+            Map<String, Object> data = accessLogEntryQueryService.getK8sLogStats(
+                    clusterId, namespace, podName, tailLines, sinceSeconds);
             return ResponseEntity.ok(ApiResponse.success(data));
         } catch (Exception e) {
             log.error("Failed to get K8s log stats", e);
