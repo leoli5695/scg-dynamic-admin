@@ -104,8 +104,8 @@
   --shadow-lg: 0 12px 28px rgba(4, 7, 15, 0.46);
   --shadow-xl: 0 24px 60px rgba(4, 7, 15, 0.55);
   --shadow-inner: inset 0 2px 4px rgba(4, 7, 15, 0.28);
-  --shadow-card: 0 18px 48px rgba(3, 7, 18, 0.42), 0 2px 8px rgba(3, 7, 18, 0.28), inset 0 1px 0 rgba(210, 225, 255, 0.06);
-  --shadow-card-hover: 0 22px 56px rgba(3, 7, 18, 0.50), 0 0 0 1px rgba(121, 157, 249, 0.18);
+  --shadow-card: 0 22px 52px rgba(3, 7, 18, 0.36), 0 3px 10px rgba(3, 7, 18, 0.22), inset 0 1px 0 rgba(210, 225, 255, 0.06);
+  --shadow-card-hover: 0 26px 60px rgba(3, 7, 18, 0.46), 0 0 0 1px rgba(121, 157, 249, 0.22), inset 0 1px 0 rgba(210, 225, 255, 0.08);
   --shadow-card-active: 0 26px 64px rgba(3, 7, 18, 0.55), 0 0 0 1px rgba(121, 157, 249, 0.30);
   --shadow-glow: 0 0 28px rgba(76, 128, 236, 0.22);
 
@@ -116,9 +116,19 @@
   --gradient-success: linear-gradient(135deg, #3ddc97, #22b07d);
   --gradient-border: linear-gradient(135deg, rgba(121, 157, 249, 0.35), rgba(155, 140, 245, 0.22));
   /* Login card treatment: radial corner highlight over an opaque navy field. */
-  --gradient-card: radial-gradient(ellipse at 100% 0%, #1a2440, transparent 55%), linear-gradient(150deg, #141d31, #101828 65%);
-  --gradient-card-hover: radial-gradient(ellipse at 100% 0%, #1f2b4c, transparent 55%), linear-gradient(150deg, #17223a, #121b2d 65%);
+  --gradient-card: radial-gradient(ellipse at 100% 0%, rgba(104, 123, 206, 0.16), transparent 55%), linear-gradient(150deg, #151f36, #101828 65%);
+  --gradient-card-hover: radial-gradient(ellipse at 100% 0%, rgba(104, 123, 206, 0.24), transparent 55%), linear-gradient(150deg, #182441, #121b2d 65%);
+  --gradient-modal: radial-gradient(ellipse at 100% 0%, rgba(104, 123, 206, 0.20), transparent 55%), linear-gradient(150deg, #19243a, #101727 65%);
   --hairline-top: linear-gradient(90deg, transparent, rgba(145, 179, 255, 0.45), transparent);
+  --card-border: rgba(145, 169, 222, 0.24);
+  --card-radius: 16px;
+  /* Static colour fields, matching the login backdrop. No animation: these
+     layers cover the whole viewport and must not repaint while scrolling. */
+  --console-backdrop:
+    radial-gradient(ellipse at 8% -6%, rgba(35, 75, 198, 0.24), transparent 46%),
+    radial-gradient(ellipse at 98% 2%, rgba(105, 83, 220, 0.18), transparent 42%),
+    radial-gradient(ellipse at 42% 108%, rgba(31, 140, 163, 0.10), transparent 44%);
+  --console-grid-line: rgba(138, 168, 224, 0.055);
   --glass-bg: rgba(13, 21, 38, 0.82);
   --glass-border: rgba(145, 169, 222, 0.16);
   --glass-blur: blur(12px);

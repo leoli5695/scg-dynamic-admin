@@ -30,6 +30,7 @@ import {
 import './App.css';
 import './App.premium.css';
 import './styles/console-shell.css';
+import './styles/login-language.css';
 import { AntdStaticBridge } from './utils/antdStatic';
 
 const RouteDebugPage = lazy(() => import('./features/routes/debug'));

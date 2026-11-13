@@ -140,9 +140,12 @@ const ChatTab: React.FC<ChatTabProps> = ({ instanceId, provider, model }) => {
   // Abort any in-flight stream on unmount
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
-  // Scroll to bottom when messages change or the answer streams in
+  // Keep the newest message in view without dragging outer scroll containers
+  // (the instance console keeps its navigation above the chat).
   useEffect(() => {
-    if (followBottomRef.current) messagesEndRef.current?.scrollIntoView({ behavior: loading ? 'auto' : 'smooth' });
+    if (followBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: loading ? 'auto' : 'smooth', block: 'nearest' });
+    }
   }, [messages, streamingContent, loading]);
 
   const handleSendMessage = async (override?: string) => {

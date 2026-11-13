@@ -38,6 +38,7 @@
   "ai.start_time": "Start Time",
   "ai.end_time": "End Time",
   "copilot.title": "AI Copilot",
+  "copilot.description": "Ask about gateway configuration, investigate request problems, and draft changes you can apply.",
   "copilot.tab_chat": "Chat",
   "copilot.tab_tools": "Tools",
   "copilot.tab_learn": "Learn",

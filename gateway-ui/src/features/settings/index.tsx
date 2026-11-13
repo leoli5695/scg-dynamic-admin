@@ -5,6 +5,7 @@ import { updateSystemSettings, type SystemSettings } from '../../api/systemSetti
 import { useSystemSettings } from './SystemSettingsContext';
 import { useAuth } from '../auth/AuthContext';
 import { message } from '../../utils/antdStatic';
+import { ManagementPageHeader } from '../layout/components/ManagementPage';
 
 const FIELDS: { key: keyof SystemSettings; label: string; hint: string }[] = [
   { key: 'stressTestEnabled', label: 'settings.stress_test', hint: 'settings.stress_test_hint' },
@@ -40,10 +41,14 @@ const SystemSettingsPage: React.FC = () => {
     }
   };
 
-  return <div className="console-workspace-page" style={{ display: 'grid', gap: 16 }}>
-    <Typography.Title level={3} style={{ margin: 0 }}>{t('settings.title')}</Typography.Title>
-    <Typography.Text type="secondary">{t('settings.subtitle')}</Typography.Text>
-    {!canWrite && <Alert type="info" showIcon title={t('settings.readonly')} />}
+  return <div className="console-workspace-page">
+    <ManagementPageHeader
+      eyebrow={`${t('menu.platform')} / ${t('menu.feature_settings')}`}
+      title={t('settings.title')}
+      subtitle={t('settings.subtitle')}
+    />
+    <div style={{ display: 'grid', gap: 16 }}>
+      {!canWrite && <Alert type="info" showIcon title={t('settings.readonly')} />}
     {settings?.kubernetesEnabled && !hasClusterDeployment && (
       <Alert type="warning" showIcon title={t('settings.kubernetes_no_cluster')} />
     )}
@@ -74,6 +79,7 @@ const SystemSettingsPage: React.FC = () => {
         </Typography.Paragraph>
       )}
     </Card>
+    </div>
   </div>;
 };
 

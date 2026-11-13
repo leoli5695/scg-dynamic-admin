@@ -38,6 +38,7 @@
   "ai.start_time": "开始时间",
   "ai.end_time": "结束时间",
   "copilot.title": "AI助手",
+  "copilot.description": "用自然语言查询网关配置、排查请求问题，并生成可应用的修改草稿。",
   "copilot.tab_chat": "对话",
   "copilot.tab_tools": "工具",
   "copilot.tab_learn": "学习",

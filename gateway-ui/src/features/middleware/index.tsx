@@ -98,7 +98,7 @@ const ServiceMiddlewarePage: React.FC = () => {
     {
       title: t('middleware.health'),
       key: 'health',
-      width: 120,
+      width: 160,
       render: (_: unknown, record: ServiceMiddlewareView) => {
         const health = getServiceHealth(record);
         const color = health.status === 'healthy' ? palette.success
@@ -113,7 +113,7 @@ const ServiceMiddlewarePage: React.FC = () => {
               strokeColor={color}
               showInfo={false}
             />
-            <Text style={{ fontSize: 12 }}>{health.score}%</Text>
+            <Text style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{health.score}%</Text>
           </Space>
         );
       },

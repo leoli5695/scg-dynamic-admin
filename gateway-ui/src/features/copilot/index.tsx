@@ -24,9 +24,8 @@ import ToolsTab from './components/ToolsTab';
 import LearnTab from './components/LearnTab';
 import KnowledgeTab from './components/KnowledgeTab';
 import ConfigModal from './components/ConfigModal';
-import { palette } from '../../styles/palette';
 
-const { Text } = Typography;
+const { Paragraph, Text, Title } = Typography;
 
 const AiCopilotPage: React.FC = () => {
   const { t } = useTranslation();
@@ -194,15 +193,15 @@ const AiCopilotPage: React.FC = () => {
 
   return (
     <div className="console-workspace-page console-resource-page">
-      <Card
-        title={
-          <span>
-            <RobotOutlined style={{ marginRight: '8px', color: palette.success }} />
-            {t('copilot.title')}
-          </span>
-        }
-        style={{ background: 'rgba(255,255,255,0.05)' }}
-      >
+      <div className="page-header-modern console-page-header">
+        <div className="page-header-left">
+          <RobotOutlined className="page-icon" />
+          <Title level={3} className="page-title-main">{t('copilot.title')}</Title>
+        </div>
+      </div>
+      <Paragraph type="secondary">{t('copilot.description')}</Paragraph>
+
+      <Card>
         {/* Model Configuration */}
         <Card
           size="small"
@@ -221,7 +220,7 @@ const AiCopilotPage: React.FC = () => {
               {t('copilot.configure')}
             </Button>
           }
-          style={{ marginBottom: '16px', background: 'rgba(255,255,255,0.05)' }}
+          style={{ marginBottom: '16px' }}
         >
           <Space wrap>
             <Text type="secondary">{t('copilot.current_model')}:</Text>

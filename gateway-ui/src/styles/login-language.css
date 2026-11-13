@@ -1,0 +1,491 @@
+/**
+ * Login design language for the authenticated console.
+ *
+ * The public login page (features/auth/login.css) is the visual source of
+ * truth: deep navy canvas, static grid + blue/violet light fields, glass cards
+ * with a hairline top edge, 16px+ radii, gradient primary actions and wide-tracked
+ * eyebrow labels. This layer carries that language across every console page so
+ * no feature stylesheet has to re-invent it. It only touches colour, surface,
+ * border, radius, shadow and type treatment - never layout metrics.
+ */
+
+/* ==================== Canvas: login backdrop ==================== */
+#root .console-workspace {
+  position: relative;
+  isolation: isolate;
+  background: var(--bg-primary);
+}
+
+#root .console-workspace::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--console-backdrop);
+}
+
+/* Grid texture: same 64-72px rhythm as the login page, faded away from the
+   top-left so dense tables stay calm. */
+#root .console-workspace::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--console-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--console-grid-line) 1px, transparent 1px);
+  background-size: 72px 72px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 75% at 24% -4%, #000 12%, transparent 76%);
+  mask-image: radial-gradient(ellipse 90% 75% at 24% -4%, #000 12%, transparent 76%);
+}
+
+/* Page-level surfaces must stay transparent for the backdrop to show through. */
+#root .main-content,
+#root .main-content.instances-content,
+#root .main-content.management-content,
+#root .instance-detail-page,
+#root .instance-detail-content,
+#root .routes-page,
+#root .license-page {
+  background: transparent !important;
+}
+
+#root .main-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* The instance console owns a sticky header + navigation. Without a bounded
+   scroll container the whole document scrolls and that sticky chrome is lost,
+   so the console column scrolls on its own. */
+#root .main-content.instance-console-content {
+  flex: 0 0 auto;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+#root .page-footer {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+  border-top: 1px solid var(--border-subtle) !important;
+}
+
+/* ==================== Chrome: sidebar + header ==================== */
+#root .console-sidebar.sidebar-premium {
+  background: linear-gradient(180deg, #0c1322, #0a1020 62%) !important;
+  border-right: 1px solid var(--border-subtle);
+}
+
+#root .console-sidebar.sidebar-premium .sidebar-header {
+  height: 64px;
+  min-height: 64px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Same brand chip as the login wordmark. */
+#root .console-sidebar .sidebar-logo .logo-icon {
+  width: 34px !important;
+  height: 34px !important;
+  padding: 5px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #4778e935, #8b65f025);
+  border: 1px solid #7993de40;
+}
+
+#root .console-sidebar .sidebar-logo .logo-text {
+  font-weight: 650;
+  letter-spacing: 0.4px;
+}
+
+#root .console-sidebar.sidebar-premium .ant-menu-item-selected {
+  background: linear-gradient(105deg, rgba(71, 127, 236, 0.22), rgba(104, 102, 220, 0.16)) !important;
+  border-color: rgba(124, 167, 255, 0.38) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(210, 225, 255, 0.08),
+    0 4px 14px rgba(65, 110, 230, 0.12);
+}
+
+#root .console-sidebar .sidebar-footer {
+  border-top: 1px solid var(--border-subtle);
+}
+
+#root .main-header {
+  box-shadow: 0 10px 30px -18px rgba(3, 7, 18, 0.8) !important;
+}
+
+/* The instance console owns its header; give it the same glass chrome. */
+#root .instance-detail-page .instance-detail-header {
+  background: rgba(11, 18, 34, 0.86) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-subtle) !important;
+  box-shadow: 0 10px 30px -18px rgba(3, 7, 18, 0.8);
+}
+
+#root .instance-navigation {
+  background: rgba(10, 17, 32, 0.78) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+#root .instance-navigation-group.is-active::after {
+  background: linear-gradient(90deg, var(--brand-from), var(--brand-to)) !important;
+  box-shadow: 0 0 12px rgba(96, 149, 255, 0.5);
+}
+
+#root .instance-navigation-page.is-active {
+  background: linear-gradient(105deg, rgba(71, 127, 236, 0.24), rgba(104, 102, 220, 0.16)) !important;
+  box-shadow: inset 0 0 0 1px rgba(124, 167, 255, 0.32);
+  color: var(--text-primary) !important;
+}
+
+/* ==================== Cards: the login card treatment ==================== */
+/* One surface recipe for every panel class in the product. Selectors are
+   grouped by page so a new page only needs its class appended here. */
+#root .ant-card,
+#root .instances-stat,
+#root .instance-card,
+#root .stats-card,
+#root .metric-card,
+#root .service-card,
+#root .route-card,
+#root .strategy-card,
+#root .stats-bar,
+#root .license-status-card,
+#root .quota-card,
+#root .license-page-header,
+#root .stat-card-premium,
+#root .cluster-card-premium,
+#root .k8s-info-card,
+#root .pod-detail-card,
+#root .k8s-table-container,
+#root .management-metric,
+#root .instance-summary-bar,
+#root .instance-info-section.ant-card,
+#root .console-template-picker,
+#root .settings-card,
+#root .threshold-card,
+#root .threshold-config-card,
+#root .middleware-table-card,
+#root .diagnostic-card,
+#root .form-section {
+  position: relative;
+  background: var(--gradient-card) !important;
+  border: 1px solid var(--card-border) !important;
+  border-radius: var(--card-radius) !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+/* Hairline arc across the top edge, taken from the login card. */
+#root .ant-card::after,
+#root .instances-stat::after,
+#root .instance-card::after,
+#root .stats-card::after,
+#root .metric-card::after,
+#root .service-card::after,
+#root .route-card::after,
+#root .strategy-card::after,
+#root .license-status-card::after,
+#root .quota-card::after,
+#root .stat-card-premium::after,
+#root .cluster-card-premium::after,
+#root .k8s-info-card::after,
+#root .pod-detail-card::after,
+#root .management-metric::after,
+#root .instance-summary-bar::after,
+#root .settings-card::after,
+#root .form-section::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 22px;
+  right: 22px;
+  height: 1px;
+  z-index: 3;
+  pointer-events: none;
+  background: var(--hairline-top);
+  opacity: 0.75;
+}
+
+#root .ant-card .ant-card-head {
+  background: transparent !important;
+  border-bottom-color: var(--border-subtle) !important;
+}
+
+/* Card hover stays a border/glow response - the login card does not float. */
+#root .instances-stat:hover,
+#root .instance-card:hover,
+#root .stats-card:hover,
+#root .metric-card:hover,
+#root .service-card:hover,
+#root .route-card:hover,
+#root .strategy-card:hover,
+#root .license-status-card:hover,
+#root .quota-card:hover,
+#root .stat-card-premium:hover,
+#root .cluster-card-premium:hover,
+#root .management-metric:hover {
+  border-color: var(--border-strong) !important;
+  background: var(--gradient-card-hover) !important;
+  box-shadow: var(--shadow-card-hover) !important;
+  transform: none !important;
+}
+
+/* Nested panels read as wells, not as cards stacked on cards. */
+#root .ant-card .ant-card {
+  background: rgba(6, 13, 25, 0.38) !important;
+  border-color: var(--border-subtle) !important;
+  border-radius: 12px !important;
+  box-shadow: inset 0 1px 0 rgba(210, 225, 255, 0.03) !important;
+}
+
+#root .ant-card .ant-card::after {
+  display: none;
+}
+
+#root .metric-item,
+#root .instances-section,
+#root .strategy-config,
+#root .plugins-page .ant-statistic {
+  background: rgba(6, 13, 25, 0.38) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 12px !important;
+  box-shadow: inset 0 1px 0 rgba(210, 225, 255, 0.03) !important;
+}
+
+#root .event-card-normal {
+  background: rgba(6, 13, 25, 0.38) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-left: 3px solid var(--success-color) !important;
+  border-radius: 12px !important;
+}
+
+#root .event-card-warning {
+  background: rgba(6, 13, 25, 0.38) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-left: 3px solid var(--error-color) !important;
+  border-radius: 12px !important;
+}
+
+#root .event-card-normal:hover,
+#root .event-card-warning:hover {
+  background: rgba(13, 23, 42, 0.55) !important;
+  border-color: var(--border-default) !important;
+}
+
+/* ==================== Tables ==================== */
+#root .ant-table-wrapper .ant-table {
+  background: transparent !important;
+}
+
+#root .ant-table-wrapper .ant-table-thead > tr > th {
+  background: linear-gradient(180deg, #17223a, #121b2e) !important;
+  color: var(--text-secondary) !important;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid var(--border-default) !important;
+}
+
+#root .ant-table-wrapper .ant-table-thead > tr > th::before {
+  display: none !important;
+}
+
+#root .ant-table-wrapper .ant-table-tbody > tr > td {
+  border-bottom-color: rgba(145, 169, 222, 0.10) !important;
+}
+
+#root .ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: rgba(121, 157, 249, 0.07) !important;
+}
+
+#root .ant-table-wrapper .ant-table-tbody > tr.ant-table-row-selected > td {
+  background: rgba(76, 128, 236, 0.14) !important;
+}
+
+/* ==================== Page headers: eyebrow + display title ==================== */
+#root .instances-eyebrow,
+#root .management-eyebrow {
+  display: flex;
+  align-items: center;
+  color: #aac5ff;
+  letter-spacing: 1.8px;
+}
+
+#root .instances-eyebrow::before,
+#root .management-eyebrow::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin-right: 9px;
+  border-radius: 50%;
+  background: #7faaff;
+  box-shadow: 0 0 12px #6499ff80;
+  flex-shrink: 0;
+}
+
+#root .instances-page-subtitle,
+#root .management-page-header p {
+  color: var(--text-tertiary) !important;
+  line-height: 1.8;
+}
+
+#root .page-title-main.ant-typography {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+/* Display titles inside the instance console match the management pages. */
+#root .console-page-header > :is(h2, h3, h4) {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+
+/* All console page headers share one alignment: title/description stacked at
+   the start edge; icon + title on one row when an icon is present. */
+#root .console-resource-page .page-header-left,
+#root .console-workspace-page .page-header-left {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 6px;
+}
+
+#root .console-resource-page .page-header-left:has(.page-icon),
+#root .console-workspace-page .page-header-left:has(.page-icon) {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 14px;
+}
+
+#root .console-resource-page .page-header-left > .ant-typography,
+#root .console-workspace-page .page-header-left > .ant-typography {
+  margin: 0;
+}
+
+/* Primary actions mirror the login button: gradient fill, hairline border,
+   soft blue shadow, and a 1px lift on hover. */
+#root .ant-btn-primary {
+  box-shadow:
+    0 6px 18px rgba(65, 110, 230, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+#root .ant-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+#root .ant-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* ==================== Inputs, selects, focus rings ==================== */
+#root .ant-input,
+#root .ant-input-affix-wrapper,
+#root .ant-input-number,
+#root .ant-select,
+#root .ant-picker {
+  border-radius: 10px;
+}
+
+#root .ant-input:focus,
+#root .ant-input-affix-wrapper-focused,
+#root .ant-input-number-focused,
+#root .ant-select-focused,
+#root .ant-picker-focused {
+  box-shadow: 0 0 0 3px rgba(96, 149, 255, 0.16) !important;
+  border-color: var(--border-focus) !important;
+}
+
+/* ==================== Overlays: modals, drawers, popups ==================== */
+#root .ant-modal-container {
+  position: relative;
+  background: var(--gradient-modal) !important;
+  border: 1px solid var(--card-border);
+  border-radius: 20px !important;
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(210, 225, 255, 0.07) !important;
+}
+
+#root .ant-modal-container::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 30px;
+  right: 30px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(145, 179, 255, 0.55), transparent);
+}
+
+#root .ant-modal-container .ant-modal-header {
+  background: transparent !important;
+}
+
+#root .ant-drawer .ant-drawer-content {
+  background: var(--gradient-modal) !important;
+  border-left: 1px solid var(--card-border);
+}
+
+#root .ant-drawer .ant-drawer-header,
+#root .ant-drawer .ant-drawer-footer {
+  background: transparent !important;
+  border-color: var(--border-subtle) !important;
+}
+
+#root .ant-select-dropdown,
+#root .ant-dropdown .ant-dropdown-menu,
+#root .ant-picker-dropdown .ant-picker-panel-container,
+#root .ant-popover .ant-popover-inner {
+  background: #0e1729 !important;
+  border: 1px solid var(--card-border);
+  border-radius: 14px !important;
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(210, 225, 255, 0.05) !important;
+}
+
+#root .ant-select-item-option-selected {
+  background: linear-gradient(105deg, rgba(71, 127, 236, 0.22), rgba(104, 102, 220, 0.16)) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ==================== Empty states and misc surfaces ==================== */
+#root .ant-empty-description {
+  color: var(--text-muted) !important;
+  font-size: 12px;
+}
+
+#root .ant-tabs .ant-tabs-ink-bar {
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand-from), var(--brand-to));
+}
+
+#root .ant-segmented {
+  border-radius: 10px;
+}
+
+#root .ant-segmented .ant-segmented-item-selected {
+  box-shadow: inset 0 1px 0 rgba(210, 225, 255, 0.06);
+}
+
+/* ==================== Responsive / reduced motion ==================== */
+@media (max-width: 768px) {
+  #root .console-workspace::after {
+    background-size: 56px 56px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #root .ant-btn-primary:hover:not(:disabled) {
+    transform: none;
+  }
+}
