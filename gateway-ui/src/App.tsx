@@ -146,11 +146,10 @@ const App: React.FC = () => {
     <ConfigProvider
       theme={customTheme}
       locale={i18n.language?.startsWith('zh') ? zhCN : enUS}
-      getPopupContainer={(triggerNode) => (
-        triggerNode?.parentNode instanceof HTMLElement
-          ? triggerNode.parentNode
-          : document.body
-      )}
+      // Portals default to <body>. Mounting overlays inside the trigger's parent
+      // put header/nav menus into the page's stacking context, where the console
+      // content covered them (services page: tools menu and global search).
+      getPopupContainer={() => document.body}
     >
       <AuthProvider>
         <AntdApp>
