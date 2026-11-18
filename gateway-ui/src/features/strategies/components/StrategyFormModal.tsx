@@ -4,8 +4,7 @@
  * (strategy_types.config_schema, enriched with AUTH / TOKEN_RATE_LIMITER
  * subSchemas by the backend).
  */
-import React, { useMemo } from 'react';
-import ResourceEditor from '../../instance-detail/ResourceEditor';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Button,
@@ -13,6 +12,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Radio,
   Row,
   Select,
@@ -220,6 +220,8 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+  const busy = submitting || saving;
   const isEdit = mode === 'edit';
   const strategyTypeCode = strategy?.strategyType ?? typeInfo.typeCode;
   const scope = Form.useWatch('scope', form) ?? strategy?.scope;
@@ -268,7 +270,12 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
         ? { ...strategy?.config, ...values } : values, strategyTypeCode),
       description: values.description ? String(values.description) : undefined,
     };
-    await onSubmit(body);
+    setSaving(true);
+    try {
+      await onSubmit(body);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const routeSelect = (
@@ -340,180 +347,195 @@ const StrategyFormModal: React.FC<StrategyFormModalProps> = ({
   );
 
   return (
-    <ResourceEditor
+    <Modal
+      open
       title={title}
-      form={form}
-      initialValues={initialValues}
-      submitting={submitting}
-      disabled={impactBlocked}
+      width={760}
+      className="console-editor strategy-editor"
+      footer={null}
       onCancel={onCancel}
-      onFinish={handleFinish}
-      submitLabel={t(isEdit ? 'common.update' : 'common.create')}
-      sections={[
-        {
-          label: t('strategy.basic_info'),
-          fields: ['strategyName', 'strategyType', 'scope', 'routeId'],
-          content: (
-            <>
-              {isEdit && <Alert type={impactBlocked ? 'warning' : 'info'} showIcon
-                title={t('routes.workbench.impact')}
-                description={<>
+      destroyOnHidden
+      mask={{ closable: false }}
+      closable={!busy}
+      keyboard={!busy}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={initialValues}
+        disabled={busy || impactBlocked}
+        scrollToFirstError={{ behavior: 'smooth', focus: true }}
+        onFinish={handleFinish}
+      >
+        <div className="editor-scroll">
+          {isEdit && (
+            <Alert
+              type={impactBlocked ? 'warning' : 'info'}
+              showIcon
+              title={t('routes.workbench.impact')}
+              description={(
+                <>
                   <p>{t('routes.workbench.impactHint')}</p>
                   {impact.loading || globalImpact.loading ? t('common.loading') : impact.error || globalImpact.error
                     ? <Button disabled={false} onClick={() => { impact.run(); if (expandingGlobal) globalImpact.run(); }}>{t('common.retry')}</Button>
-                    : <div style={{ maxHeight: 140, overflow: 'auto' }}>{affectedRoutes.length
-                      ? affectedRoutes.map(r => <div key={r.id}>{r.routeName || r.id} <Text type="secondary">{r.id}</Text></div>)
-                      : t('routes.workbench.noBindings')}</div>}
-                </>} style={{ marginBottom: 16 }} />}
-              <div className="form-section-modern">
-                <div className="section-header">
-                  <ThunderboltOutlined className="section-icon" />
-                  <span className="section-title">{t('strategy.basic_info')}</span>
-                </div>
-                <div className="section-content">
-                  <Row gutter={16}>
-                    <Col span={12}>
-                      <Form.Item
-                        name="strategyName"
-                        label={t('strategy.name')}
-                        rules={[{ required: true }]}
-                        extra={t('strategy.name_helper')}
-                      >
-                        <Input placeholder={t('strategy.name_placeholder')} size="large" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      {isEdit ? (
-                        <Form.Item
-                          name="scope"
-                          label={t('strategy.scope')}
-                          extra={t('strategy.scope_helper')}
-                        >
-                          <Radio.Group size="large" disabled={lockBinding}>
-                            <Radio.Button value="GLOBAL">
-                              <GlobalOutlined /> {t('strategy.scope_global')}
-                            </Radio.Button>
-                            <Radio.Button value="ROUTE">
-                              <CompassOutlined /> {t('strategy.scope_route')}
-                            </Radio.Button>
-                          </Radio.Group>
-                        </Form.Item>
-                      ) : (
-                        <>
-                          <Form.Item name="strategyType" label={t('strategy.type')} hidden>
-                            <Input />
-                          </Form.Item>
-                          <div style={{ padding: '8px 0' }}>
-                            <Text type="secondary">{t('strategy.type')}: </Text>
-                            <Tag
-                              color={typeInfo.color}
-                              style={{ fontSize: 14, padding: '4px 12px' }}
-                            >
-                              {typeInfo.typeName}
-                            </Tag>
-                          </div>
-                        </>
-                      )}
-                    </Col>
-                  </Row>
-                  <Row gutter={16}>
-                    <Col span={12}>
-                      {!isEdit && (
-                        <Form.Item
-                          name="scope"
-                          label={t('strategy.scope')}
-                          extra={
-                            globalLocked
-                              ? t('strategy.global_strategy_exists_helper', {
-                                  type: typeInfo.typeName,
-                                  name: existingGlobal?.strategyName,
-                                })
-                              : t('strategy.scope_helper')
-                          }
-                        >
-                          <Radio.Group size="large" disabled={lockBinding}>
-                            <Radio.Button value="GLOBAL" disabled={globalLocked || lockBinding}>
-                              <GlobalOutlined /> {t('strategy.scope_global')}
-                            </Radio.Button>
-                            <Radio.Button value="ROUTE">
-                              <CompassOutlined /> {t('strategy.scope_route')}
-                            </Radio.Button>
-                          </Radio.Group>
-                        </Form.Item>
-                      )}
-                    </Col>
-                    <Col span={12}>{routeSelect}</Col>
-                  </Row>
-                </div>
-              </div>
-            </>
-          ),
-        },
-        {
-          label: t('strategy.config'),
-          content: (
-            <>
-              {/* Configuration Section */}
-              <div className="form-section-modern">
-                <div className="section-header">
-                  <SettingOutlined className="section-icon" />
-                  <span className="section-title">{t('strategy.config')}</span>
-                  <span className="section-subtitle">{t('strategy.config_helper')}</span>
-                </div>
-                <div className="section-content">{renderConfigFields(typeInfo, form, t)}</div>
-              </div>
-            </>
-          ),
-        },
-        {
-          label: t('strategy.advanced_settings'),
-          fields: ['priority', 'enabled', 'description'],
-          content: (
-            <>
-              {/* Advanced Settings Section */}
-              <div className="form-section-modern">
-                <div className="section-header">
-                  <SettingOutlined className="section-icon" />
-                  <span className="section-title">{t('strategy.advanced_settings')}</span>
-                </div>
-                <div className="section-content">
-                  <Row gutter={16}>
-                    <Col span={8}>
-                      <Form.Item
-                        name="priority"
-                        label={t('strategy.priority')}
-                        extra={t('strategy.priority_helper')}
-                      >
-                        <InputNumber min={1} max={1000} style={{ width: '100%' }} size="large" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="enabled"
-                        label={t('strategy.enabled')}
-                        valuePropName="checked"
-                      >
-                        <Switch
-                          checkedChildren={t('common.enabled')}
-                          unCheckedChildren={t('common.disabled')}
-                        />
-                      </Form.Item>
-                    </Col>
-                  </Row>
+                    : (
+                      <div style={{ maxHeight: 140, overflow: 'auto' }}>
+                        {affectedRoutes.length
+                          ? affectedRoutes.map(r => <div key={r.id}>{r.routeName || r.id} <Text type="secondary">{r.id}</Text></div>)
+                          : t('routes.workbench.noBindings')}
+                      </div>
+                    )}
+                </>
+              )}
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
+          <div className="form-section-modern">
+            <div className="section-header">
+              <ThunderboltOutlined className="section-icon" />
+              <span className="section-title">{t('strategy.basic_info')}</span>
+            </div>
+            <div className="section-content">
+              <Row gutter={16}>
+                <Col span={12}>
                   <Form.Item
-                    name="description"
-                    label={t('strategy.description_label')}
-                    extra={t('strategy.description_helper')}
+                    name="strategyName"
+                    label={t('strategy.name')}
+                    rules={[{ required: true }]}
+                    extra={t('strategy.name_helper')}
                   >
-                    <Input.TextArea rows={2} showCount maxLength={500} />
+                    <Input placeholder={t('strategy.name_placeholder')} size="large" />
                   </Form.Item>
-                </div>
-              </div>
-            </>
-          ),
-        },
-      ]}
-    />
+                </Col>
+                <Col span={12}>
+                  {isEdit ? (
+                    <Form.Item
+                      name="scope"
+                      label={t('strategy.scope')}
+                      extra={t('strategy.scope_helper')}
+                    >
+                      <Radio.Group size="large" disabled={lockBinding}>
+                        <Radio.Button value="GLOBAL">
+                          <GlobalOutlined /> {t('strategy.scope_global')}
+                        </Radio.Button>
+                        <Radio.Button value="ROUTE">
+                          <CompassOutlined /> {t('strategy.scope_route')}
+                        </Radio.Button>
+                      </Radio.Group>
+                    </Form.Item>
+                  ) : (
+                    <>
+                      <Form.Item name="strategyType" label={t('strategy.type')} hidden>
+                        <Input />
+                      </Form.Item>
+                      <div style={{ padding: '8px 0' }}>
+                        <Text type="secondary">{t('strategy.type')}: </Text>
+                        <Tag
+                          color={typeInfo.color}
+                          style={{ fontSize: 14, padding: '4px 12px' }}
+                        >
+                          {typeInfo.typeName}
+                        </Tag>
+                      </div>
+                    </>
+                  )}
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  {!isEdit && (
+                    <Form.Item
+                      name="scope"
+                      label={t('strategy.scope')}
+                      extra={
+                        globalLocked
+                          ? t('strategy.global_strategy_exists_helper', {
+                              type: typeInfo.typeName,
+                              name: existingGlobal?.strategyName,
+                            })
+                          : t('strategy.scope_helper')
+                      }
+                    >
+                      <Radio.Group size="large" disabled={lockBinding}>
+                        <Radio.Button value="GLOBAL" disabled={globalLocked || lockBinding}>
+                          <GlobalOutlined /> {t('strategy.scope_global')}
+                        </Radio.Button>
+                        <Radio.Button value="ROUTE">
+                          <CompassOutlined /> {t('strategy.scope_route')}
+                        </Radio.Button>
+                      </Radio.Group>
+                    </Form.Item>
+                  )}
+                </Col>
+                <Col span={12}>{routeSelect}</Col>
+              </Row>
+            </div>
+          </div>
+
+          <div className="form-section-modern">
+            <div className="section-header">
+              <SettingOutlined className="section-icon" />
+              <span className="section-title">{t('strategy.config')}</span>
+              <span className="section-subtitle">{t('strategy.config_helper')}</span>
+            </div>
+            <div className="section-content">{renderConfigFields(typeInfo, form, t)}</div>
+          </div>
+
+          <div className="form-section-modern">
+            <div className="section-header">
+              <SettingOutlined className="section-icon" />
+              <span className="section-title">{t('strategy.advanced_settings')}</span>
+            </div>
+            <div className="section-content">
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item
+                    name="priority"
+                    label={t('strategy.priority')}
+                    extra={t('strategy.priority_helper')}
+                  >
+                    <InputNumber min={1} max={1000} style={{ width: '100%' }} size="large" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="enabled"
+                    label={t('strategy.enabled')}
+                    valuePropName="checked"
+                  >
+                    <Switch
+                      checkedChildren={t('common.enabled')}
+                      unCheckedChildren={t('common.disabled')}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item
+                name="description"
+                label={t('strategy.description_label')}
+                extra={t('strategy.description_helper')}
+              >
+                <Input.TextArea rows={2} showCount maxLength={500} />
+              </Form.Item>
+            </div>
+          </div>
+        </div>
+
+        <div className="modal-footer-modern">
+          <Button onClick={onCancel} disabled={busy}>{t('common.cancel')}</Button>
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={busy}
+            disabled={impactBlocked}
+            icon={isEdit ? <EditOutlined /> : <PlusOutlined />}
+          >
+            {t(isEdit ? 'common.update' : 'common.create')}
+          </Button>
+        </div>
+      </Form>
+    </Modal>
   );
 };
 
