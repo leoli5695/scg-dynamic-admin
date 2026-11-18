@@ -4,12 +4,12 @@
  */
 import React from 'react';
 import {
-  Badge, Button, Drawer, Space, Tag, Typography
+  Badge, Button, Drawer, Space, Tag, Tooltip, Typography
 } from 'antd';
-import { modal } from '../../../utils/antdStatic';
+import { message, modal } from '../../../utils/antdStatic';
 import {
   AppstoreAddOutlined, BranchesOutlined, BugOutlined, CloseOutlined, CloudOutlined,
-  CompassOutlined, DeleteOutlined, EditOutlined, FileTextOutlined, SplitCellsOutlined,
+  CompassOutlined, CopyOutlined, DeleteOutlined, EditOutlined, FileTextOutlined, SplitCellsOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -64,10 +64,23 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
             <div className="drawer-icon route-icon"><CompassOutlined /></div>
             <div className="drawer-title-wrapper">
               <Typography.Title level={4} className="drawer-title">{route.routeName || 'Route Detail'}</Typography.Title>
-              <Typography.Text type="secondary" copyable={{ text: route.id }}>
-                {route.id?.substring(0, 20)}
-                ...
-              </Typography.Text>
+              <div className="drawer-id-row">
+                <Tooltip title={route.id}>
+                  <Typography.Text type="secondary" className="drawer-id">{route.id || 'N/A'}</Typography.Text>
+                </Tooltip>
+                <Tooltip title={t('common.copy')}>
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CopyOutlined />}
+                    className="copy-btn"
+                    onClick={() => {
+                      navigator.clipboard.writeText(route.id || '');
+                      message.success(t('message.copy_success'));
+                    }}
+                  />
+                </Tooltip>
+              </div>
             </div>
           </div>
           <Button type="text" icon={<CloseOutlined />} onClick={onClose} className="drawer-close-btn" />
@@ -83,9 +96,13 @@ const RouteDetailDrawer: React.FC<RouteDetailDrawerProps> = ({
             {' '}
             {route.order ?? 0}
           </Tag>
-          <Tag color={route.mode === 'MULTI' ? 'purple' : 'cyan'}>
-            {route.mode === 'MULTI' ? t('routes.multi_service') : t('routes.single_service')}
-          </Tag>
+          {route.category === 'AI' ? (
+            <Tag color="purple">{t('routes.category_ai')}</Tag>
+          ) : (
+            <Tag color={route.mode === 'MULTI' ? 'purple' : 'cyan'}>
+              {route.mode === 'MULTI' ? t('routes.multi_service') : t('routes.single_service')}
+            </Tag>
+          )}
         </div>
 
         <div className="drawer-section">

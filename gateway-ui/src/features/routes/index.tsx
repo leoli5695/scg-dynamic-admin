@@ -193,6 +193,8 @@ const RoutesPage: React.FC = () => {
   }, [refreshRoutes, t]);
 
   const openEditModal = useCallback((record: RouteResponse) => {
+    // Same flow as the services console: the drawer yields to the editor.
+    setSelectedRoute(null);
     setEditingRoute(record);
   }, []);
 
@@ -247,6 +249,7 @@ const RoutesPage: React.FC = () => {
                 <RouteCard
                   key={route.id}
                   route={route}
+                  services={services}
                   onEdit={openEditModal}
                   onDetail={setSelectedRoute}
                   onToggle={handleToggle}
