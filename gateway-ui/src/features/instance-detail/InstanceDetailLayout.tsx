@@ -276,9 +276,15 @@ const InstanceDetailLayout: React.FC = () => {
               );
             })}
           </div>
-          <Dropdown trigger={['click']} menu={{
-            selectedKeys: [activeTab],
-            onClick: ({ key }) => handleTabChange(key),
+          <Dropdown
+            trigger={['click']}
+            // The global provider renders popups inside the trigger's parent; this
+            // menu lives in the console nav, where that put it in a stacking
+            // context the page content could cover. Portal it to body instead.
+            getPopupContainer={() => document.body}
+            menu={{
+              selectedKeys: [activeTab],
+              onClick: ({ key }) => handleTabChange(key),
             items: tools.pages.map(page => ({
               key: page,
               icon: React.createElement(TAB_ICONS[page]),

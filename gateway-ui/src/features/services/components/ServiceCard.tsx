@@ -65,7 +65,7 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
     <Card
       className={`service-card ${warningMessage ? 'service-card-warning' : ''}`}
       hoverable
-      style={{ minHeight: '260px', height: '100%' }}
+      style={{ height: '100%' }}
     >
       {warningMessage && (
         <div className="service-warning-strip">

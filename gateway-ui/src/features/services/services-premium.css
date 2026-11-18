@@ -1126,3 +1126,47 @@
   color: var(--text-secondary);
   background: rgba(145, 169, 222, 0.12);
 }
+
+/* ==================== Compact cards, 4-up grid (2026-11-18) ==================== */
+.services-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+}
+
+@media (max-width: 1360px) {
+  .services-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 1080px) {
+  .services-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 760px) {
+  .services-grid { grid-template-columns: 1fr !important; }
+}
+
+/* App.premium enforces a 320px floor that turns the cards into mostly-empty
+   panels; the compact layout sizes itself. */
+.services-page .service-card.ant-card { min-height: 168px !important; }
+.services-page .service-card .ant-card-body { padding: 14px 16px; }
+
+.service-card-header { margin-bottom: 8px; }
+.service-name { font-size: 14px; }
+.service-id { font-size: 11px; }
+.service-meta { margin-bottom: 8px; padding-bottom: 6px; gap: 6px; }
+.lb-tag { font-size: 11px; padding: 0 6px; }
+.instances-section { padding: 8px 10px; border-radius: 8px; }
+.instances-header { margin-bottom: 6px; }
+.instances-title { font-size: 11px; }
+.instance-tag { padding: 2px 8px; font-size: 11px; gap: 5px; }
+.instance-addr { font-size: 11px; }
+.instance-dot { width: 5px; height: 5px; }
+.ai-card-body { margin-top: 4px; padding-top: 8px; }
+.ai-meta { margin-bottom: 4px; }
+.provider-tag,
+.protocol-tag { font-size: 11px; padding: 0 7px; }
+.credential-tag { font-size: 11px; }
+.service-card-header .ant-space { gap: 2px !important; }
+
+/* Cards size themselves — a taller sibling must not stretch the row. */
+.services-grid { align-items: start; }
