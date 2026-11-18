@@ -1,6 +1,9 @@
 /**
- * Routes Page - Premium Modal Enhancement
- * Glassmorphism design with gradient icons and refined form inputs
+ * Routes page styles.
+ *
+ * Card-specific selectors are scoped under `.routes-page .route-card.ant-card`
+ * so they outrank the shared `.console-resource-page` rules without touching
+ * console-ui.css (a parallel change set owns the strategy page).
  */
 
 /* ==================== Routes Page Layout ==================== */
@@ -10,366 +13,403 @@
   background: var(--bg-primary);
 }
 
-.routes-grid {
+/* Four-up grid matching the services console; cards size themselves. */
+.routes-page .routes-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: var(--space-5);
-  align-items: stretch;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+  align-items: start;
+}
+
+@media (max-width: 1360px) {
+  .routes-page .routes-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 1080px) {
+  .routes-page .routes-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 760px) {
+  .routes-page .routes-grid { grid-template-columns: 1fr !important; }
 }
 
 /* ==================== Route Card ==================== */
-.route-card {
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  transition: all var(--duration-normal) var(--ease-default);
+.routes-page .route-card.ant-card {
+  border-radius: 13px;
   overflow: hidden;
-  background: var(--bg-card);
-  position: relative;
+  min-height: 176px !important;
   display: flex;
   flex-direction: column;
 }
 
-.route-card:hover {
-  border-color: var(--border-default);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.route-card .ant-card-body {
-  padding: var(--space-5);
+.routes-page .route-card.ant-card .ant-card-body {
+  padding: 14px 16px !important;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 /* ==================== Card Header ==================== */
-.route-card-header {
+.routes-page .route-card.ant-card .route-card-header {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: var(--space-3);
+  gap: 10px;
+  margin: 0;
 }
 
-.route-info {
+.routes-page .route-card.ant-card .route-info {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  flex: 1 1 200px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
   min-width: 0;
 }
 
-.route-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
+.routes-page .route-card.ant-card .route-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  background: rgba(61, 220, 151, 0.12);
-  color: var(--success-color);
+  font-size: 15px;
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  color: var(--primary-light);
   flex-shrink: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-.route-details {
+.routes-page .route-card.ant-card:hover .route-icon {
+  background: rgba(76, 128, 236, 0.08);
+  border-color: rgba(96, 165, 250, 0.32);
+}
+
+.routes-page .route-card.ant-card .route-icon.ai {
+  border-color: rgba(167, 139, 250, 0.28);
+  color: #b9a3ff;
+}
+
+.routes-page .route-card.ant-card:hover .route-icon.ai {
+  background: rgba(139, 92, 246, 0.10);
+  border-color: rgba(167, 139, 250, 0.4);
+}
+
+.routes-page .route-card.ant-card .route-details {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 2px;
   min-width: 0;
+  flex: 1;
 }
 
-.route-name {
-  font-size: var(--text-base);
+.routes-page .route-card.ant-card .route-name.ant-typography {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
   font-weight: var(--weight-semibold);
   color: var(--text-primary);
-  letter-spacing: -0.02em;
-  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+  line-height: 1.45;
 }
 
-.route-id-row {
+.routes-page .route-card.ant-card .route-id-row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
 }
 
-.route-id {
-  font-size: var(--text-xs);
+.routes-page .route-card.ant-card .route-id.ant-typography {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
 
-.route-status {
+.routes-page .route-card.ant-card .route-id-row .copy-btn.ant-btn {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  color: var(--text-caption);
   flex-shrink: 0;
 }
 
-/* ==================== Route Sections ==================== */
-.route-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+/* Action cluster: 26px hit targets, quiet until hover. */
+.routes-page .route-card.ant-card .route-actions.ant-space {
+  gap: 2px !important;
+  flex-shrink: 0;
 }
 
-.section-label {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
+.routes-page .route-card.ant-card .route-actions .action-btn.ant-btn {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 7px;
+  color: var(--text-tertiary);
+}
+
+.routes-page .route-card.ant-card .route-actions .action-btn.ant-btn:hover {
+  background: rgba(145, 169, 222, 0.12);
+  color: var(--text-primary);
+}
+
+.routes-page .route-card.ant-card .route-actions .action-btn.ant-btn-dangerous {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--error-color);
+}
+
+.routes-page .route-card.ant-card .route-actions .action-btn.ant-btn-dangerous:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: var(--error-color);
+}
+
+/* ==================== Status + mode ==================== */
+.routes-page .route-card.ant-card .route-card-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11px;
 }
 
-.tags-container {
+.routes-page .route-card.ant-card .route-card-meta .ant-badge-status-text {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.routes-page .route-card.ant-card .route-mode-tag.ant-tag {
+  margin: 0 0 0 auto;
+  padding: 0 7px;
+  font-size: 11px;
+  line-height: 18px;
+  border-radius: 6px;
+  background: rgba(76, 128, 236, 0.10);
+  border: 1px solid rgba(76, 128, 236, 0.18);
+  color: var(--primary-light);
+}
+
+.routes-page .route-card.ant-card .route-mode-tag.ant-tag[data-tone="multi"] {
+  background: rgba(232, 180, 100, 0.10);
+  border-color: rgba(232, 180, 100, 0.22);
+  color: var(--accent-color);
+}
+
+.routes-page .route-card.ant-card .route-mode-tag.ant-tag[data-tone="ai"] {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.20);
+  color: #b9a3ff;
+}
+
+/* ==================== Method + path summary ==================== */
+.routes-page .route-card.ant-card .route-summary {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
 }
 
-.service-tag {
-  border-radius: 9999px;
-  padding: 4px 12px;
-  font-size: 13px;
+.route-method-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 18px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: var(--text-tertiary);
+}
+
+.route-method-chip[data-tone="GET"] {
+  background: rgba(61, 220, 151, 0.10);
+  border-color: rgba(61, 220, 151, 0.25);
+  color: var(--success-color);
+}
+
+.route-method-chip[data-tone="POST"] {
+  background: rgba(76, 128, 236, 0.12);
+  border-color: rgba(76, 128, 236, 0.25);
+  color: var(--primary-light);
+}
+
+.route-method-chip[data-tone="PUT"] {
+  background: rgba(232, 180, 100, 0.10);
+  border-color: rgba(232, 180, 100, 0.25);
+  color: var(--accent-color);
+}
+
+.route-method-chip[data-tone="PATCH"] {
+  background: rgba(155, 140, 245, 0.12);
+  border-color: rgba(155, 140, 245, 0.25);
+  color: var(--accent-light);
+}
+
+.route-method-chip[data-tone="DELETE"] {
+  background: rgba(242, 113, 127, 0.10);
+  border-color: rgba(242, 113, 127, 0.25);
+  color: var(--error-color);
+}
+
+.route-method-chip[data-tone="ALL"],
+.route-method-chip[data-tone="OTHER"] {
+  letter-spacing: 0.01em;
   font-weight: 500;
 }
 
-.predicate-tag {
-  border-radius: 9999px;
+.route-method-chip[data-tone="ALL"] {
+  font-family: inherit;
 }
 
-.plugin-tag {
-  border-radius: 9999px;
-}
-
-.no-data {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-/* ==================== Route Meta ==================== */
-.route-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--border-subtle);
-  font-size: var(--text-xs);
+.route-method-more {
+  flex-shrink: 0;
+  font-size: 10.5px;
   color: var(--text-muted);
 }
 
-.route-desc {
-  display: inline-block;
-  max-width: 200px;
+.routes-page .route-card.ant-card .route-path {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
-}
-
-/* ==================== Modal Styles - Enhanced Glassmorphism ==================== */
-.route-modal .ant-modal-content {
-  background: rgba(16,27,48, 0.95) !important;
-  backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 16px !important;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
-}
-
-.route-modal .ant-modal-header {
-  background: transparent !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  padding: 20px 24px !important;
-}
-
-.route-modal .ant-modal-body {
-  padding: 24px !important;
-  background: transparent !important;
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-.route-modal .ant-modal-title {
-  color: var(--text-primary) !important;
-  font-weight: 600 !important;
-}
-
-.route-modal .ant-modal-close {
-  color: var(--text-muted) !important;
-  top: 16px !important;
-  right: 16px !important;
-}
-
-.route-modal .ant-modal-close:hover {
-  color: var(--text-primary) !important;
-  background: rgba(255, 255, 255, 0.08) !important;
-  border-radius: 8px !important;
-}
-
-/* ==================== Modal Icon Wrapper - Gradient ==================== */
-.route-modal .modal-icon-wrapper {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--success-solid) 0%, var(--success-solid) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 18px;
-  box-shadow: 0 4px 12px rgba(61, 220, 151, 0.3);
-}
-
-.route-modal .modal-icon-wrapper.edit {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-solid) 100%);
-  box-shadow: 0 4px 12px rgba(76, 128, 236, 0.3);
-}
-
-/* ==================== Form Sections - Enhanced ==================== */
-.route-modal .form-section-modern {
-  margin-bottom: 24px;
-  padding: 20px;
-  background: rgba(26,39,64, 0.5);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.route-modal .section-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.route-modal .section-icon {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: rgba(61, 220, 151, 0.15);
-  color: var(--success-color);
+  font-family: var(--font-mono);
   font-size: 12px;
-}
-
-.route-modal .section-title {
-  font-size: 14px;
-  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
 }
 
-.route-modal .section-content {
+/* ==================== Target ==================== */
+.routes-page .route-card.ant-card .route-target {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
 }
 
-/* ==================== Modal Form Inputs ==================== */
-.route-modal .ant-input,
-.route-modal .ant-input-number,
-.route-modal .ant-select-selector,
-.route-modal .ant-picker {
-  background: rgba(10,15,30, 0.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 10px !important;
-  color: var(--text-primary) !important;
-  transition: all 0.2s ease !important;
+.routes-page .route-card.ant-card .route-target-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+  color: var(--text-muted);
 }
 
-.route-modal .ant-input:hover,
-.route-modal .ant-select-selector:hover {
-  border-color: rgba(255, 255, 255, 0.15) !important;
+.routes-page .route-card.ant-card .route-target-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.route-modal .ant-input:focus,
-.route-modal .ant-input-focused,
-.route-modal .ant-select-focused .ant-select-selector {
-  border-color: var(--success-color) !important;
-  box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.15) !important;
-}
-
-.route-modal .ant-input::placeholder {
-  color: var(--border-strong) !important;
-}
-
-.route-modal .ant-select-arrow {
-  color: var(--text-muted) !important;
-}
-
-.route-modal .ant-select-selection-item {
-  color: var(--text-primary) !important;
-}
-
-.route-modal .ant-select-selection-placeholder {
-  color: var(--border-strong) !important;
-}
-
-.route-modal .ant-form-item-label > label {
-  color: var(--text-secondary) !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-}
-
-.route-modal .ant-form-item-label > label::after {
-  content: '' !important;
-}
-
-/* ==================== Radio Button Group ==================== */
-.route-modal .ant-radio-button-wrapper {
-  background: rgba(10,15,30, 0.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: var(--text-secondary) !important;
-  border-radius: 8px !important;
-  margin-right: 8px !important;
-}
-
-.route-modal .ant-radio-button-wrapper:not(:first-child)::before {
-  background: transparent !important;
-}
-
-.route-modal .ant-radio-button-wrapper:hover {
-  background: rgba(26,39,64, 0.8) !important;
-  border-color: rgba(255, 255, 255, 0.15) !important;
-  color: var(--text-primary) !important;
-}
-
-.route-modal .ant-radio-button-wrapper-checked {
-  background: rgba(61, 220, 151, 0.15) !important;
-  border-color: var(--success-color) !important;
-  color: var(--success-color) !important;
-}
-
-/* ==================== Switch ==================== */
-.route-modal .ant-switch {
-  background: rgba(255, 255, 255, 0.15) !important;
-}
-
-.route-modal .ant-switch-checked {
-  background: var(--success-solid) !important;
-}
-
-/* ==================== Form Row Layout ==================== */
-.form-row {
+/* ==================== Count chips ==================== */
+.routes-page .route-card.ant-card .route-counts {
   display: flex;
-  gap: 16px;
+  align-items: center;
   flex-wrap: wrap;
+  gap: 6px;
 }
 
-.form-item-half {
-  flex: 1;
-  min-width: 200px;
+.route-count-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: rgba(12, 20, 36, 0.4);
+  border: 1px solid rgba(145, 169, 222, 0.11);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
-/* ==================== Predicate/Filter Item Row ==================== */
+.route-count-chip .anticon {
+  font-size: 11px;
+}
+
+/* ==================== Pagination ==================== */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-5) 0;
+}
+
+.pagination-container .ant-pagination-item {
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+
+.pagination-container .ant-pagination-item-active {
+  background: rgba(76, 128, 236, 0.15);
+  border-color: var(--primary-color);
+}
+
+.pagination-container .ant-pagination-item-active a {
+  color: var(--primary-light);
+}
+
+/* ==================== Route editor: compact single page ==================== */
+.route-editor.ant-modal { max-width: calc(100vw - 48px); }
+
+.route-editor.ant-modal .ant-modal-header { padding: 18px 52px 16px 24px !important; }
+.route-editor .modal-title { font-size: 17px !important; }
+.route-editor .modal-subtitle { margin-top: 3px; font-size: 12px; }
+.route-editor .modal-icon-wrapper,
+.route-editor .modal-icon-wrapper.edit { width: 38px; height: 38px; border-radius: 10px; font-size: 17px; }
+.route-editor .ant-modal-close { top: 16px !important; right: 14px !important; }
+.route-editor .editor-scroll { padding: 18px 24px !important; max-height: calc(100dvh - 220px); }
+.route-editor .form-section-modern { margin-bottom: 14px !important; padding: 16px !important; }
+.route-editor .section-header { margin-bottom: 12px !important; padding-bottom: 10px !important; }
+.route-editor .ant-form-item { margin-bottom: 14px !important; }
+.route-editor .modal-footer-modern { padding: 12px 24px !important; gap: 10px; }
+.route-editor .modal-footer-modern .ant-btn { height: 36px; min-width: 84px; border-radius: 8px; font-size: 13px; }
+
+/* Solid primary action instead of the global gradient treatment */
+.console-editor.route-editor.ant-modal .ant-btn-primary {
+  background: var(--primary-color) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 2px 10px rgba(76, 128, 236, 0.25) !important;
+}
+.console-editor.route-editor.ant-modal .ant-btn-primary:hover {
+  background: var(--primary-active) !important;
+  filter: none !important;
+}
+.console-editor.route-editor.ant-modal .modal-footer-modern .ant-btn-default {
+  border: 1px solid rgba(145, 169, 222, 0.28) !important;
+  background: transparent !important;
+  color: var(--text-secondary);
+}
+.console-editor.route-editor.ant-modal .modal-footer-modern .ant-btn-default:hover {
+  border-color: rgba(145, 169, 222, 0.45) !important;
+  color: var(--text-primary);
+  background: rgba(145, 169, 222, 0.08) !important;
+}
+
+/* ==================== Form Rows ==================== */
 .form-item-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 10px 12px;
   margin-bottom: 8px;
-  background: rgba(10,15,30, 0.6);
+  background: rgba(10, 15, 30, 0.6);
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.2s ease;
@@ -379,110 +419,12 @@
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-/* Override inline styles in PredicateItem/FilterItem */
-.form-item-row .ant-select-selector,
-.form-item-row .ant-input {
-  background: rgba(26,39,64, 0.6) !important;
+/* Override inline styles in PredicateItem */
+.route-editor .form-item-row .ant-select-selector,
+.route-editor .form-item-row .ant-input {
+  background: rgba(26, 39, 64, 0.6) !important;
   border-radius: 8px !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Key-Value Input Container */
-.key-value-inputs {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.key-value-inputs .kv-input {
-  width: 110px;
-}
-
-.key-value-inputs .kv-separator {
-  color: var(--text-muted);
-}
-
-/* Header Input Container */
-.header-inputs {
-  display: flex;
-  width: 300px;
-}
-
-.header-inputs .ant-input {
-  background: rgba(26,39,64, 0.6) !important;
-  border-radius: 8px 0 0 8px !important;
-}
-
-.header-inputs .ant-input:last-child {
-  border-radius: 0 8px 8px 0 !important;
-}
-
-/* RewritePath Input Container */
-.rewrite-inputs {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.rewrite-inputs .rewrite-input {
-  width: 110px;
-}
-
-.rewrite-inputs .rewrite-separator {
-  color: var(--text-muted);
-}
-
-/* RedirectTo Input Container */
-.redirect-inputs {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.redirect-inputs .status-select {
-  width: 80px;
-}
-
-.redirect-inputs .url-input {
-  width: 150px;
-}
-
-/* Delete Button in Form Row */
-.form-item-row .delete-btn {
-  color: var(--error-color);
-  opacity: 0.8;
-  padding: 4px 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.2s ease;
-  border-radius: 6px;
-}
-
-.form-item-row .delete-btn:hover {
-  opacity: 1;
-  background: rgba(242, 113, 127, 0.1);
-}
-
-/* No Params Input */
-.no-params-input {
-  opacity: 0.5;
-}
-
-/* ==================== Plugin Type Select ==================== */
-.plugin-type-select {
-  min-width: 160px;
-}
-
-.plugin-help-icon {
-  color: var(--text-muted);
-  font-size: 14px;
-  cursor: help;
-  transition: color 0.2s ease;
-}
-
-.plugin-help-icon:hover {
-  color: var(--primary-light);
 }
 
 /* ==================== Service Option Tags ==================== */
@@ -506,44 +448,19 @@
 }
 
 /* ==================== Add Buttons ==================== */
-.add-predicate-btn-modern,
-.add-filter-btn-modern {
+.add-predicate-btn-modern {
   border: 1px dashed rgba(255, 255, 255, 0.15) !important;
-  background: rgba(26,39,64, 0.3) !important;
+  background: rgba(26, 39, 64, 0.3) !important;
   color: var(--text-secondary) !important;
   border-radius: 10px !important;
   transition: all 0.2s ease !important;
-  height: 44px !important;
+  height: 40px !important;
 }
 
-.add-predicate-btn-modern:hover,
-.add-filter-btn-modern:hover {
-  border-color: var(--success-color) !important;
-  background: rgba(61, 220, 151, 0.08) !important;
-  color: var(--success-color) !important;
-}
-
-/* ==================== Multi-Service Row ==================== */
-.route-modal .ant-form-list .ant-form-item-control-input {
-  min-height: auto;
-}
-
-/* Override inline styles for service binding rows */
-.route-modal .ant-input-number {
-  background: rgba(26,39,64, 0.6) !important;
-}
-
-/* ==================== Weight Indicator ==================== */
-.route-modal .ant-tag.ant-tag-success {
-  background: rgba(61, 220, 151, 0.15) !important;
-  border-color: rgba(61, 220, 151, 0.3) !important;
-  color: var(--success-color) !important;
-}
-
-.route-modal .ant-tag.ant-tag-warning {
-  background: rgba(232, 180, 100, 0.15) !important;
-  border-color: rgba(232, 180, 100, 0.3) !important;
-  color: var(--accent-color) !important;
+.add-predicate-btn-modern:hover {
+  border-color: var(--primary-color) !important;
+  background: rgba(76, 128, 236, 0.08) !important;
+  color: var(--primary-light) !important;
 }
 
 /* ==================== Gray Rules Row ==================== */
@@ -551,131 +468,45 @@
   padding: 8px 12px;
 }
 
-/* ==================== Modal Footer - Enhanced ==================== */
-.route-modal .modal-footer-modern {
+/* ==================== Detail drawer (route-scoped overrides) ==================== */
+/* The drawer is portalled to <body>, so it cannot inherit page-scoped rules. */
+.route-detail-drawer .drawer-icon.route-icon {
+  background: transparent !important;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  color: var(--primary-light);
+  box-shadow: none;
+}
+
+.route-detail-drawer .drawer-id-row {
   display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 24px;
-  margin-top: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.route-modal .modal-footer-modern .ant-btn {
-  height: 40px;
-  padding: 0 24px;
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 10px;
-  transition: all 0.2s ease;
-}
-
-.route-modal .modal-footer-modern .ant-btn-default {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-secondary);
-}
-
-.route-modal .modal-footer-modern .ant-btn-default:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: var(--text-primary);
-}
-
-.route-modal .modal-footer-modern .ant-btn-primary {
-  background: linear-gradient(135deg, var(--success-solid) 0%, var(--success-solid) 100%);
-  border: none;
-  box-shadow: 0 4px 12px rgba(61, 220, 151, 0.3);
-}
-
-.route-modal .modal-footer-modern .ant-btn-primary:hover {
-  box-shadow: 0 6px 20px rgba(61, 220, 151, 0.4);
-  transform: translateY(-1px);
-}
-
-/* ==================== Pagination ==================== */
-.pagination-container {
-  display: flex;
-  justify-content: center;
-  padding: var(--space-5) 0;
-}
-
-.pagination-container .ant-pagination-item {
-  border-radius: 8px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-}
-
-.pagination-container .ant-pagination-item-active {
-  background: rgba(61, 220, 151, 0.15);
-  border-color: var(--success-color);
-}
-
-.pagination-container .ant-pagination-item-active a {
-  color: var(--success-color);
-}
-
-/* ==================== Stats Bar ==================== */
-.stats-bar {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: 16px;
-  padding: 12px 20px;
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  margin-bottom: var(--space-6);
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 4px;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
-.stat-value {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.25;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: var(--text-muted);
+.route-detail-drawer .drawer-id.ant-typography {
+  display: inline-block;
+  min-width: 0;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
-.stat-divider {
-  border-color: var(--border-subtle);
-  height: 32px;
-}
-
-.text-green-600 { color: var(--success-color); }
-.text-red-600 { color: var(--error-color); }
-
-/* ==================== Create Button ==================== */
-.create-btn {
-  background: linear-gradient(135deg, var(--success-solid) 0%, var(--success-solid) 100%) !important;
-  border: none !important;
-  box-shadow: 0 4px 12px rgba(61, 220, 151, 0.3) !important;
-  transition: all 0.2s ease !important;
-}
-
-.create-btn:hover {
-  box-shadow: 0 6px 20px rgba(61, 220, 151, 0.4) !important;
-  transform: translateY(-1px);
+.route-detail-drawer .copy-btn.ant-btn {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  color: var(--text-caption);
+  flex-shrink: 0;
 }
 
 /* ==================== Responsive ==================== */
 @media (max-width: 768px) {
-  .routes-grid { grid-template-columns: 1fr; }
-
   .form-item-row {
     flex-direction: column;
     align-items: flex-start;
@@ -685,9 +516,4 @@
   .form-item-row .ant-input {
     width: 100% !important;
   }
-}
-
-@media (max-width: 480px) {
-  .route-icon { width: 32px; height: 32px; font-size: 14px; }
-  .route-name { font-size: var(--text-sm); }
 }
