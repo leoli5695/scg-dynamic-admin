@@ -8,7 +8,7 @@ import EditorNavigation from '../../instance-detail/EditorNavigation';
 import EditorCategorySwitch from '../../instance-detail/EditorCategorySwitch';
 import { useEditorStep } from '../../instance-detail/useEditorStep';
 import {
-  Alert, Button, Form, Input, Modal, Select  } from 'antd';
+  Alert, Button, Collapse, Form, Input, Modal, Select, Tag, Typography  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
   CloudServerOutlined, DeploymentUnitOutlined, EditOutlined, ExclamationCircleOutlined,
@@ -17,6 +17,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { ServiceCategory, ServiceDefinition, ServiceInstanceItem } from '../../../types/service';
 import { AI_PROVIDER_TYPES } from '../../../types/service';
+import { AI_PROVIDERS, getProviderMeta, hasCustomBaseUrl } from '../providers';
 import { isValidIP, isValidPort } from '../utils';
 import InstanceRow from './InstanceRow';
 import LoadBalancerSelect from './LoadBalancerSelect';
@@ -59,6 +60,19 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
 
   const category = (Form.useWatch('category', form) ?? (isEdit ? service?.category : 'NORMAL')) as ServiceCategory;
   const isAi = category === 'AI';
+
+  // Provider type drives the AI connection: the official base URL is resolved by
+  // the data plane from this type, so the URL input only exists as an advanced
+  // override for relays / self-hosted backends.
+  const providerType = Form.useWatch('providerType', form) ?? (isEdit ? service?.providerType : undefined);
+  const providerMeta = getProviderMeta(providerType);
+  const providerOptions = AI_PROVIDERS
+    .filter((p) => (AI_PROVIDER_TYPES as readonly string[]).includes(p.id))
+    .map((p) => ({ value: p.id, label: `${t(p.labelKey)}（${p.id}）` }));
+  const providerLabel = providerMeta ? t(providerMeta.labelKey) : t('services.provider_unknown');
+  const baseUrlAutoHint = providerMeta
+    ? t('services.base_url_auto_hint', { provider: providerLabel, url: providerMeta.defaultBaseUrl })
+    : t('services.base_url_helper');
 
   const handleInstanceChange = useCallback((index: number, patch: Partial<ServiceInstanceItem>) => {
     setInstances((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
@@ -144,7 +158,9 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           description: service?.description,
           category: service?.category || 'NORMAL',
           providerType: service?.providerType,
-          baseUrl: service?.baseUrl,
+          // Persisted provider-default URLs are data-plane details: normalize them
+          // back to "unset" so the operator only sees a real custom override.
+          baseUrl: hasCustomBaseUrl(service?.providerType, service?.baseUrl) ? service?.baseUrl : undefined,
         } : { loadBalancer: 'weighted', category: 'NORMAL' }}
       >
         <div className="editor-workspace">
@@ -211,7 +227,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                   placeholder={t('services.provider_type_placeholder')}
                   size="large"
                   showSearch
-                  options={AI_PROVIDER_TYPES.map((p) => ({ label: p, value: p }))}
+                  options={providerOptions}
                 />
               </Form.Item>
               <Form.Item
@@ -226,13 +242,30 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                   placeholder={isEdit ? t('services.api_key_rotate_placeholder') : t('services.api_key_placeholder')}
                 />
               </Form.Item>
-              <Form.Item
-                name="baseUrl"
-                label={t('services.base_url')}
-                tooltip={t('services.base_url_helper')}
-              >
-                <Input size="large" placeholder={t('services.base_url_placeholder')} />
-              </Form.Item>
+              <Collapse
+                ghost
+                className="advanced-collapse"
+                items={[{
+                  key: 'advanced',
+                  label: (
+                    <span>
+                      <span className="advanced-header-title">{t('services.advanced_options')}</span>
+                      <span className="advanced-header-hint">{t('services.advanced_hint')}</span>
+                    </span>
+                  ),
+                  children: (
+                    <>
+                      <Form.Item name="baseUrl" label={t('services.ai_custom_endpoint')}>
+                        <Input
+                          size="large"
+                          placeholder={providerMeta?.defaultBaseUrl || t('services.base_url_placeholder')}
+                        />
+                      </Form.Item>
+                      <Typography.Text type="secondary" className="form-extra-hint">{baseUrlAutoHint}</Typography.Text>
+                    </>
+                  ),
+                }]}
+              />
             </div>
           </div>
         )}

@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { ServiceDefinition } from '../../../types/service';
 import { getLoadBalancerLabelKey, getServiceStatus } from '../utils';
+import { getProviderMeta } from '../providers';
 import AiServiceConnection from './AiServiceConnection';
 
 const { Text, Title } = Typography;
@@ -29,6 +30,11 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
   const { t } = useTranslation();
   const isAi = service.category === 'AI';
   const status = getServiceStatus(service);
+  const providerMeta = getProviderMeta(service.providerType);
+  const providerLabel = providerMeta ? t(providerMeta.labelKey) : t('services.provider_unknown');
+  const protocolLabel = service.protocol === 'ANTHROPIC'
+    ? t('services.protocol.anthropic')
+    : t('services.protocol.openai_compat');
 
   const handleCopy = () => {
     navigator.clipboard.writeText(service.serviceId || service.name);
@@ -62,11 +68,13 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
         {/* Header */}
         <div className="drawer-header">
           <div className="drawer-header-left">
-            <div className="drawer-icon">{isAi ? <RobotOutlined /> : <DeploymentUnitOutlined />}</div>
+            <div className={`drawer-icon ${isAi ? 'ai' : ''}`}>{isAi ? <RobotOutlined /> : <DeploymentUnitOutlined />}</div>
             <div className="drawer-title-wrapper">
               <Title level={4} className="drawer-title">{service.name}</Title>
               <div className="drawer-id-row">
-                <Text type="secondary">{service.serviceId || service.name}</Text>
+                <Tooltip title={service.serviceId || service.name}>
+                  <Text type="secondary" className="drawer-id">{service.serviceId || service.name}</Text>
+                </Tooltip>
                 <Tooltip title={t('common.copy')}>
                   <Button
                     type="text"
@@ -87,10 +95,19 @@ const ServiceDetailDrawer: React.FC<ServiceDetailDrawerProps> = ({
           />
         </div>
 
-        {/* Status bar */}
+        {/* Status bar: provider identity for AI services, health for normal ones */}
         <div className="drawer-status-bar">
-          <Badge status={status.color} text={t(status.textKey, status.params)} />
-          {!isAi && <Tag color="blue">{t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted'))}</Tag>}
+          {isAi ? (
+            <>
+              <Tag className="provider-tag" variant="filled">{providerLabel}</Tag>
+              <Tag className="protocol-tag" variant="filled">{protocolLabel}</Tag>
+            </>
+          ) : (
+            <>
+              <Badge status={status.color} text={t(status.textKey, status.params)} />
+              <Tag color="blue">{t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted'))}</Tag>
+            </>
+          )}
         </div>
 
         {/* Description */}

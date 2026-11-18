@@ -3,7 +3,7 @@
  */
 import React, { memo, useCallback, useMemo } from 'react';
 import {
-  Alert, Badge, Button, Card, Popconfirm, Space, Tag, Tooltip, Typography  } from 'antd';
+  Badge, Button, Card, Popconfirm, Space, Tag, Tooltip, Typography  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
   CloudServerOutlined, CopyOutlined, DeleteOutlined, DeploymentUnitOutlined,
@@ -12,7 +12,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { ServiceDefinition } from '../../../types/service';
 import { getLoadBalancerLabelKey, getServiceStatus } from '../utils';
-import AiServiceConnection from './AiServiceConnection';
+import { getProviderMeta } from '../providers';
 import { palette } from '../../../styles/palette';
 
 const { Text } = Typography;
@@ -55,6 +55,12 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
     message.success(t('message.copy_success'));
   }, [t, service.serviceId, service.name]);
 
+  const providerMeta = getProviderMeta(service.providerType);
+  const providerLabel = providerMeta ? t(providerMeta.labelKey) : t('services.provider_unknown');
+  const protocolLabel = service.protocol === 'ANTHROPIC'
+    ? t('services.protocol.anthropic')
+    : t('services.protocol.openai_compat');
+
   return (
     <Card
       className={`service-card ${warningMessage ? 'service-card-warning' : ''}`}
@@ -62,22 +68,20 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
       style={{ minHeight: '260px', height: '100%' }}
     >
       {warningMessage && (
-        <Alert
-          type="warning"
-          showIcon
-          icon={<ExclamationCircleOutlined />}
-          title={warningMessage}
-          className="service-warning-alert"
-          style={{ marginBottom: 16, background: 'rgba(232, 180, 100, 0.08)', border: `1px solid rgba(232, 180, 100, 0.2)` }}
-        />
+        <div className="service-warning-strip">
+          <ExclamationCircleOutlined />
+          <span>{warningMessage}</span>
+        </div>
       )}
       <div className="service-card-header">
         <div className="service-info">
-          <div className="service-icon">{isAi ? <RobotOutlined /> : <DeploymentUnitOutlined />}</div>
+          <div className={`service-icon ${isAi ? 'ai' : ''}`}>{isAi ? <RobotOutlined /> : <DeploymentUnitOutlined />}</div>
           <div className="service-details">
             <Text strong className="service-name">{service.name}</Text>
             <div className="service-id-row">
-              <Text type="secondary" className="service-id">{service.serviceId || service.name}</Text>
+              <Tooltip title={service.serviceId || service.name}>
+                <Text type="secondary" className="service-id">{service.serviceId || service.name}</Text>
+              </Tooltip>
               <Tooltip title={t('common.copy')}>
                 <Button
                   type="text"
@@ -121,13 +125,23 @@ const ServiceCard: React.FC<ServiceCardProps> = memo(({
           </Popconfirm>
         </Space>
       </div>
-      <div className="service-meta">
-        <Badge status={status.color} text={t(status.textKey, status.params)} />
-        {!isAi && <Tag className="lb-tag">{t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted'))}</Tag>}
-      </div>
       {isAi ? (
-        <div className="instances-section" style={{ flex: 1 }}>
-          <AiServiceConnection service={service} />
+        <div className="service-meta ai-meta">
+          <Tag className="provider-tag" variant="filled">{providerLabel}</Tag>
+          <Tag className="protocol-tag" variant="filled">{protocolLabel}</Tag>
+        </div>
+      ) : (
+        <div className="service-meta">
+          <Badge status={status.color} text={t(status.textKey, status.params)} />
+          <Tag className="lb-tag">{t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted'))}</Tag>
+        </div>
+      )}
+      {isAi ? (
+        <div className="ai-card-body">
+          <Text type="secondary" className="ai-card-label">{t('services.api_key')}</Text>
+          <Tag color={service.credentialRef ? 'green' : 'default'} variant="filled" className="credential-tag">
+            {t(service.credentialRef ? 'services.credential_configured' : 'services.credential_none')}
+          </Tag>
         </div>
       ) : (
       <div className="instances-section" style={{ flex: 1 }}>
