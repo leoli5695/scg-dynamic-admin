@@ -93,6 +93,8 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
     predicates: (route?.predicates ?? []).map((p) => ({
       name: p.name,
       args: p.name === 'Method' ? extractMethods(p.args) : stringifyPredicateArgs(p.name, p.args),
+      // Kept out of the inputs: buildRoutePayload writes edits back into this shape.
+      originalArgs: p.args,
     })),
     grayRules: route?.grayRules?.rules ?? [],
     aiUpstreams: (route?.aiUpstreams ?? []).map((u) => ({

@@ -1,4 +1,5 @@
 import type { RouteResponse } from '../../../types/route';
+import { genkeyValues } from '../utils.ts';
 
 const firstValue = (value: string): string => {
   try {
@@ -12,7 +13,7 @@ const firstValue = (value: string): string => {
 export function debugDefaults(route: RouteResponse) {
   const predicates = route.predicates ?? [];
   const paths = predicates.find((p) => p.name === 'Path')?.args ?? {};
-  const pattern = paths.pattern || paths.patterns || paths._genkey_0 || Object.values(paths)[0] || '/';
+  const pattern = paths.pattern || paths.patterns || genkeyValues(paths)[0] || Object.values(paths)[0] || '/';
   const ai = route.category === 'AI';
   let path = firstValue(pattern).replace(/\{[^}]+\}/g, '1');
   if (path.includes('*')) {
@@ -21,17 +22,17 @@ export function debugDefaults(route: RouteResponse) {
   }
   if (!path.startsWith('/')) path = '/';
   const methods = predicates.find((p) => p.name === 'Method')?.args ?? {};
-  const method = firstValue(methods.methods || methods._genkey_0 || Object.values(methods)[0] || (ai ? 'POST' : 'GET')).toUpperCase();
+  const method = firstValue(methods.methods || genkeyValues(methods)[0] || Object.values(methods)[0] || (ai ? 'POST' : 'GET')).toUpperCase();
   const headers: Record<string, string> = {};
   for (const predicate of predicates) {
     const args = predicate.args ?? {};
     if (predicate.name === 'Host') {
-      const host = args.patterns || args.pattern || args._genkey_0;
+      const host = args.patterns || args.pattern || genkeyValues(args)[0];
       if (host) headers.Host = firstValue(host).replace(/\*+/g, 'debug').replace(/\{[^}]+\}/g, 'demo');
     }
     if (predicate.name === 'Header') {
-      const name = args.header || args.name || args._genkey_0;
-      const value = args.regexp || args._genkey_1 || '';
+      const name = args.header || args.name || genkeyValues(args)[0];
+      const value = args.regexp || genkeyValues(args)[1] || '';
       if (name) headers[name] = /^[\w .:/-]+$/.test(value) ? value : '';
     }
   }
