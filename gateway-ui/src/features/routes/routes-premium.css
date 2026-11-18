@@ -505,6 +505,225 @@
   flex-shrink: 0;
 }
 
+/* ==================== Route editor: plugin strip ==================== */
+.route-editor .editor-plugin-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(145, 169, 222, 0.2);
+  border-radius: 10px;
+  background: rgba(10, 16, 32, 0.4);
+}
+
+.route-editor .editor-plugin-strip-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--primary-light);
+}
+
+.route-editor .editor-plugin-strip-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.route-editor .editor-plugin-strip-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.route-editor .editor-plugin-strip-link.ant-btn {
+  flex-shrink: 0;
+  height: auto;
+  margin-left: auto;
+  padding: 0;
+  font-size: 12px;
+  color: var(--primary-light);
+}
+
+/* ==================== Route detail: configuration workbench ==================== */
+.route-detail-drawer .workbench-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.route-detail-drawer .workbench-title-row .section-title {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.route-detail-drawer .workbench-strategy {
+  padding: 10px 12px;
+  border: 1px solid rgba(145, 169, 222, 0.16);
+  border-radius: 10px;
+  background: rgba(10, 16, 32, 0.35);
+}
+
+.route-detail-drawer .workbench-strategy + .workbench-strategy {
+  margin-top: 8px;
+}
+
+.route-detail-drawer .workbench-strategy-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.route-detail-drawer .workbench-strategy-head .ant-btn {
+  margin-left: auto;
+}
+
+.route-detail-drawer .workbench-strategy-type {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.route-detail-drawer .workbench-strategy-name.ant-typography {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.route-detail-drawer .workbench-strategy-priority.ant-typography {
+  font-size: 12px;
+}
+
+.route-detail-drawer .workbench-kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 4px 18px;
+  margin: 8px 0 0;
+}
+
+.route-detail-drawer .workbench-kv-item {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.route-detail-drawer .workbench-kv-item dt {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.route-detail-drawer .workbench-kv-item dd {
+  margin: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.route-detail-drawer .workbench-kv-group {
+  margin-top: 8px;
+}
+
+.route-detail-drawer .workbench-kv-group-title {
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.route-detail-drawer .workbench-quota-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.route-detail-drawer .workbench-quota-table th,
+.route-detail-drawer .workbench-quota-table td {
+  padding: 5px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.route-detail-drawer .workbench-quota-table th {
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.route-detail-drawer .workbench-quota-table td {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.route-detail-drawer .workbench-quota-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.route-detail-drawer .workbench-strategy-note.ant-typography {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.route-detail-drawer .workbench-raw.ant-collapse {
+  margin-top: 4px;
+  background: transparent;
+}
+
+.route-detail-drawer .workbench-raw .ant-collapse-header {
+  padding: 4px 0 !important;
+  font-size: 12px;
+  color: var(--text-tertiary) !important;
+}
+
+.route-detail-drawer .workbench-raw .ant-collapse-content-box {
+  padding: 0 !important;
+}
+
+.route-detail-drawer .workbench-raw pre {
+  max-height: 220px;
+  margin: 4px 0 0;
+  overflow: auto;
+}
+
+.route-detail-drawer .workbench-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px dashed rgba(145, 169, 222, 0.22);
+  border-radius: 10px;
+}
+
+.route-detail-drawer .workbench-empty-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.route-detail-drawer .workbench-empty-tag.ant-tag {
+  margin: 0;
+  font-size: 11px;
+}
+
+.route-detail-drawer .workbench-empty-link.ant-btn {
+  height: auto;
+  margin-left: auto;
+  padding: 0;
+  font-size: 12px;
+}
+
 /* ==================== Responsive ==================== */
 @media (max-width: 768px) {
   .form-item-row {

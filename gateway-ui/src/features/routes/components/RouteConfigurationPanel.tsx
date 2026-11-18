@@ -1,16 +1,155 @@
 import { useRef, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Popconfirm, Select, Space, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Collapse, Dropdown, Popconfirm, Select, Space, Spin, Tag, Typography } from 'antd';
+import { ArrowRightOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { bindStrategyRoute, createStrategy, listAvailableStrategies, listEnabledStrategyTypes, unbindStrategyRoute, updateStrategy } from '../../../api/strategies';
 import { createAuthBinding, deleteAuthBinding, listAuthBindings, listAuthPolicies, updateAuthPolicy } from '../../../api/authPolicies';
 import { useRequest } from '../../../hooks/useRequest';
 import type { RouteResponse } from '../../../types/route';
-import type { StrategyDefinition } from '../../../types/strategy';
+import type { StrategyDefinition, StrategyTypeInfo } from '../../../types/strategy';
 import type { AuthPolicyDefinition } from '../../../types/authPolicy';
 import { message } from '../../../utils/antdStatic';
 import StrategyFormModal from '../../strategies/components/StrategyFormModal';
 import AuthPolicyFormModal from '../../auth-policies/components/AuthPolicyFormModal';
+import { fieldLabel } from '../../strategies/components/schemaLabels';
 import { effectiveStrategy, strategyRouteIds, strategySummary, WORKBENCH_TYPES } from '../configuration';
+
+type TFunc = (key: string, options?: Record<string, unknown>) => string;
+
+const EMPTY_VALUE = '—';
+
+const QUOTA_PERIOD_KEYS: Record<string, string> = {
+  MONTHLY: 'strategy.summary.quota_period_monthly',
+  DAILY: 'strategy.summary.quota_period_daily',
+  BOTH: 'strategy.summary.quota_period_both',
+};
+
+/** Locale fallbacks for summary keys the strategy type schema does not define. */
+const FIELD_LABEL_KEYS: Record<string, string> = {
+  enabled: 'routes.workbench.field.enabled',
+  authType: 'strategy.config.auth_type',
+  qps: 'strategy.config.qps',
+  burstCapacity: 'strategy.config.burst_capacity',
+  timeUnit: 'strategy.config.time_unit',
+  keyResolver: 'strategy.config.key_resolver',
+  keyType: 'routes.workbench.field.keyType',
+  globalQuota: 'strategy.config.quota_global',
+  tenantQuota: 'strategy.config.quota_client',
+  userQuota: 'strategy.config.quota_user',
+  ipQuota: 'strategy.config.quota_ip',
+  rejectStrategy: 'strategy.config.reject_strategy',
+  connectTimeout: 'strategy.config.connect_timeout',
+  responseTimeout: 'strategy.config.response_timeout',
+  'connect-timeout': 'strategy.config.connect_timeout',
+  'response-timeout': 'strategy.config.response_timeout',
+  failureRateThreshold: 'strategy.config.failure_rate',
+  slowCallRateThreshold: 'routes.workbench.field.slowCallRateThreshold',
+  slowCallDurationThreshold: 'routes.workbench.field.slowCallDurationThreshold',
+  waitDurationInOpenState: 'strategy.config.wait_duration',
+  slidingWindowSize: 'strategy.config.sliding_window',
+  minimumNumberOfCalls: 'routes.workbench.field.minimumNumberOfCalls',
+  defaultMonthlyQuota: 'strategy.summary.monthly_quota',
+  defaultDailyQuota: 'strategy.summary.daily_quota',
+  quotaPeriod: 'strategy.summary.quota_period',
+  windowLimitEnabled: 'routes.workbench.field.windowLimitEnabled',
+  tokenPerMinute: 'routes.workbench.field.tokenPerMinute',
+  tokenPerHour: 'routes.workbench.field.tokenPerHour',
+  globalTokenPerMinute: 'routes.workbench.field.globalTokenPerMinute',
+  preDeductStrategy: 'routes.workbench.field.preDeductStrategy',
+  tenantQuotas: 'strategy.config.tenant_quotas',
+  monthlyQuota: 'routes.workbench.quotaMonthly',
+  dailyQuota: 'routes.workbench.quotaDaily',
+  burstQuota: 'routes.workbench.field.burstQuota',
+};
+
+/** Schema label first, then the locale fallback, then the raw key. */
+function configLabel(key: string, typeInfo: StrategyTypeInfo | undefined, t: TFunc): string {
+  const schema = typeInfo?.configSchema;
+  const fields = [
+    ...(schema?.fields ?? []),
+    ...Object.values(schema?.subSchemas ?? {}).flatMap(sub => [...(sub.fields ?? []), ...(sub.ruleFields ?? [])]),
+  ];
+  const match = fields.find(field => field.name === key);
+  if (match) return fieldLabel(match);
+  const keyPath = FIELD_LABEL_KEYS[key];
+  return keyPath ? t(keyPath) : key;
+}
+
+function displayValue(key: string, value: unknown, t: TFunc): string {
+  if (value === null || value === undefined || value === '') return EMPTY_VALUE;
+  if (typeof value === 'boolean') return t(value ? 'common.enabled' : 'common.disabled');
+  if (key === 'quotaPeriod') {
+    const periodKey = QUOTA_PERIOD_KEYS[String(value)];
+    return periodKey ? t(periodKey) : String(value);
+  }
+  if (Array.isArray(value)) return value.length ? value.join(', ') : EMPTY_VALUE;
+  return String(value);
+}
+
+/** Readable summary: scalar key/value rows, nested groups and the tenant quota table. */
+function WorkbenchSummary({ summary, typeInfo, t }: {
+  summary: Record<string, unknown>;
+  typeInfo?: StrategyTypeInfo;
+  t: TFunc;
+}) {
+  const tenantQuotas = summary.tenantQuotas;
+  const tenantRows = tenantQuotas && typeof tenantQuotas === 'object'
+    ? Object.entries(tenantQuotas as Record<string, Record<string, unknown>>) : [];
+  const entries = Object.entries(summary).filter(([key]) => key !== 'tenantQuotas');
+  const scalars = entries.filter(([, value]) => value === null || typeof value !== 'object');
+  const groups = entries.filter(([, value]) => value !== null && typeof value === 'object');
+
+  return (
+    <>
+      {scalars.length > 0 && (
+        <dl className="workbench-kv">
+          {scalars.map(([key, value]) => (
+            <div className="workbench-kv-item" key={key}>
+              <dt>{configLabel(key, typeInfo, t)}</dt>
+              <dd>{displayValue(key, value, t)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {groups.map(([key, value]) => (
+        <div className="workbench-kv-group" key={key}>
+          <div className="workbench-kv-group-title">{configLabel(key, typeInfo, t)}</div>
+          <dl className="workbench-kv">
+            {Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => (
+              <div className="workbench-kv-item" key={childKey}>
+                <dt>{configLabel(childKey, typeInfo, t)}</dt>
+                <dd>{displayValue(childKey, childValue, t)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ))}
+      {tenantRows.length > 0 && (
+        <table className="workbench-quota-table">
+          <thead>
+            <tr>
+              <th>{t('routes.workbench.quotaTenant')}</th>
+              <th>{t('routes.workbench.quotaMonthly')}</th>
+              <th>{t('routes.workbench.quotaDaily')}</th>
+              <th>{t('routes.workbench.quotaPeriod')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tenantRows.map(([tenant, quota]) => (
+              <tr key={tenant}>
+                <td>{tenant}</td>
+                <td>{displayValue('monthlyQuota', quota?.monthlyQuota, t)}</td>
+                <td>{displayValue('dailyQuota', quota?.dailyQuota, t)}</td>
+                <td>{displayValue('quotaPeriod', quota?.quotaPeriod, t)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+}
 
 export default function RouteConfigurationPanel({ route, routes, instanceId, onRefresh }: {
   route: RouteResponse;
@@ -19,6 +158,7 @@ export default function RouteConfigurationPanel({ route, routes, instanceId, onR
   onRefresh: () => void;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const request = useRequest(async signal => {
     const [strategies, policies, bindings, types] = await Promise.all([
       listAvailableStrategies(instanceId, { signal }), listAuthPolicies({ instanceId }, { signal }),
@@ -60,34 +200,79 @@ export default function RouteConfigurationPanel({ route, routes, instanceId, onR
   const editingType = data?.types.find(type => type.typeCode === editingStrategy?.strategyType);
   const blocked = busy || request.loading || !!request.error || !data;
 
+  const typeInfoOf = (type: string) => data?.types.find(info => info.typeCode === type);
+  const typeLabel = (type: string) => typeInfoOf(type)?.typeName || t(`routes.workbench.${type}`);
+  const creatableTypes = (data?.types ?? []).filter(info => WORKBENCH_TYPES.includes(info.typeCode)
+    && (info.typeCode !== 'TOKEN_RATE_LIMITER' || route.category === 'AI'));
+  const timeoutMetadata = Object.fromEntries(['connect-timeout', 'response-timeout']
+    .filter(key => route.metadata?.[key] !== undefined).map(key => [key, route.metadata![key]]));
+  const configured: Array<{ type: string; strategy?: StrategyDefinition }> = WORKBENCH_TYPES.map(type => {
+    const strategy = effectiveStrategy(data?.strategies ?? [], route.id, type);
+    if (strategy) return { type, strategy };
+    if (type === 'TIMEOUT' && Object.keys(timeoutMetadata).length > 0) return { type, strategy: undefined };
+    return undefined;
+  }).filter((item): item is { type: string; strategy?: StrategyDefinition } => !!item);
+  const unconfigured = WORKBENCH_TYPES.filter(type => !configured.some(item => item.type === type));
+
   return <div className="drawer-section">
-    <div className="section-title">{t('routes.workbench.title')}</div>
+    <div className="workbench-title-row">
+      <div className="section-title">{t('routes.workbench.title')}</div>
+      <Dropdown
+        disabled={blocked}
+        trigger={['click']}
+        menu={{
+          items: creatableTypes.map(info => ({ key: info.typeCode, label: typeLabel(info.typeCode) })),
+          onClick: ({ key }) => setCreatingType(key),
+        }}
+      >
+        <Button size="small" icon={<PlusOutlined />} disabled={blocked}>{t('routes.workbench.create')}</Button>
+      </Dropdown>
+    </div>
     <Alert type="info" showIcon title={t('routes.workbench.configured')} description={t('routes.workbench.configuredHint')} style={{ marginBottom: 16 }} />
     {request.error && <Alert type="error" showIcon title={request.error.message}
       action={<Button onClick={request.run}>{t('common.retry')}</Button>} />}
     <Spin spinning={request.loading}>
       {data && !request.error && <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-        {WORKBENCH_TYPES.map(type => {
-          const strategy = effectiveStrategy(data.strategies, route.id, type);
-          const typeInfo = data.types.find(info => info.typeCode === type);
-          const metadataTimeout = type === 'TIMEOUT' ? Object.fromEntries(['connect-timeout', 'response-timeout']
-            .filter(key => route.metadata?.[key] !== undefined).map(key => [key, route.metadata![key]])) : {};
-          const summary = strategy ? strategySummary(strategy) : metadataTimeout;
-          return <Card size="small" key={type} title={typeInfo?.typeName || t(`routes.workbench.${type}`)} extra={<Space>
-            <Button size="small" disabled={blocked || !typeInfo || (type === 'TOKEN_RATE_LIMITER' && route.category !== 'AI')}
-              onClick={() => setCreatingType(type)}>{t('routes.workbench.create')}</Button>
-            {strategy && <Button size="small" disabled={blocked || !typeInfo} onClick={() => setEditingStrategy(strategy)}>{t('common.edit')}</Button>}
-          </Space>}>
-            {strategy ? <Space wrap>
-              <Typography.Text strong>{strategy.strategyName}</Typography.Text>
-              <Tag color={strategy.scope === 'GLOBAL' ? 'blue' : 'purple'}>{t(strategy.scope === 'GLOBAL' ? 'strategy.scope_global' : 'routes.workbench.shared')}</Tag>
-              <Typography.Text type="secondary">{t('strategy.priority')}: {strategy.priority}</Typography.Text>
-            </Space> : <Typography.Text type="secondary">{t(type === 'TIMEOUT' ? 'routes.workbench.timeoutFallback' : 'routes.workbench.notConfigured')}</Typography.Text>}
-            {Object.keys(summary).length > 0 && <Descriptions size="small" column={1} style={{ marginTop: 8 }} items={Object.entries(summary).map(([key, value]) => ({
-              key, label: key, children: <Typography.Text style={{ overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}</Typography.Text>,
-            }))} />}
-          </Card>;
-        })}
+        <div>
+          {configured.map(({ type, strategy }) => {
+            const typeInfo = typeInfoOf(type);
+            const summary = strategy ? strategySummary(strategy) : timeoutMetadata;
+            return <div className="workbench-strategy" key={type}>
+              <div className="workbench-strategy-head">
+                <span className="workbench-strategy-type">{typeLabel(type)}</span>
+                {strategy ? <>
+                  <Typography.Text strong className="workbench-strategy-name">{strategy.strategyName}</Typography.Text>
+                  <Tag color={strategy.scope === 'GLOBAL' ? 'blue' : 'purple'}>
+                    {t(strategy.scope === 'GLOBAL' ? 'strategy.scope_global' : 'routes.workbench.shared')}
+                  </Tag>
+                  <Typography.Text type="secondary" className="workbench-strategy-priority">
+                    {t('strategy.priority')}
+                    :
+                    {' '}
+                    {strategy.priority}
+                  </Typography.Text>
+                  <Button size="small" disabled={blocked || !typeInfo} onClick={() => setEditingStrategy(strategy)}>{t('common.edit')}</Button>
+                </> : <Tag>{t('routes.workbench.routeMetadata')}</Tag>}
+              </div>
+              <WorkbenchSummary summary={summary} typeInfo={typeInfo} t={t} />
+              {!strategy && <Typography.Text type="secondary" className="workbench-strategy-note">{t('routes.workbench.timeoutFallback')}</Typography.Text>}
+              {strategy && <Collapse ghost size="small" className="workbench-raw" items={[{
+                key: 'raw',
+                label: t('routes.workbench.rawJson'),
+                children: <pre>{JSON.stringify(summary, null, 2)}</pre>,
+              }]} />}
+            </div>;
+          })}
+          {unconfigured.length > 0 && <div className="workbench-empty">
+            <span className="workbench-empty-label">{t('routes.workbench.unconfigured')}</span>
+            {unconfigured.map(type => <Tag key={type} className="workbench-empty-tag">{typeLabel(type)}</Tag>)}
+            <Button type="link" size="small" className="workbench-empty-link" onClick={() => navigate(`/instances/${instanceId}/strategies`)}>
+              {t('routes.workbench.openStrategies')}
+              {' '}
+              <ArrowRightOutlined />
+            </Button>
+          </div>}
+        </div>
         <Alert type={auth && !usablePolicies.length ? 'warning' : 'info'} showIcon
           title={t(auth ? usablePolicies.length ? 'routes.workbench.authReady' : 'routes.workbench.authMissing' : 'routes.workbench.authOff')}
           description={t('routes.workbench.authHint')} />

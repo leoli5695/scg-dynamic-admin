@@ -9,10 +9,10 @@
 import React, { useMemo, useState } from 'react';
 import EditorCategorySwitch from '../../instance-detail/EditorCategorySwitch';
 import {
-  Alert, Button, Form, Input, Modal, Typography  } from 'antd';
+  Button, Form, Input, Modal  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
-  AppstoreAddOutlined, BranchesOutlined, CompassOutlined, EditOutlined, FileTextOutlined, LinkOutlined,
+  AppstoreAddOutlined, ArrowRightOutlined, BranchesOutlined, CompassOutlined, EditOutlined, FileTextOutlined,
   PlusOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -31,7 +31,6 @@ import ServiceBindingForm from './ServiceBindingForm';
 import AiUpstreamsForm from './AiUpstreamsForm';
 import GrayRulesForm from './GrayRulesForm';
 
-const { Text } = Typography;
 const { TextArea } = Input;
 
 interface RouteFormModalProps {
@@ -301,26 +300,20 @@ const RouteFormModal: React.FC<RouteFormModalProps> = ({
         </div>
 
         {/* Plugins — managed on the plugin binding page */}
-        <div className="form-section-modern editor-plugin-note">
-          <div className="section-header">
-            <AppstoreAddOutlined className="section-icon" />
-            <span className="section-title">{t('routes.plugins_section')}</span>
-          </div>
-          <div className="section-content">
-            <Alert
-              type="info"
-              showIcon
-              title={t('routes.plugins_guide_title')}
-              description={t('routes.plugins_guide_desc')}
-              style={{ marginBottom: 16 }}
-            />
-            <Button type="dashed" block icon={<LinkOutlined />} size="large" onClick={gotoPluginBindings}>
-              {t('routes.manage_plugin_bindings')}
-            </Button>
-            <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
-              {t('routes.plugins_hint')}
-            </Text>
-          </div>
+        <div className="editor-plugin-strip">
+          <AppstoreAddOutlined className="editor-plugin-strip-icon" />
+          <span className="editor-plugin-strip-label">{t('routes.plugins_section')}</span>
+          <span className="editor-plugin-strip-hint">{t('routes.plugins_strip_hint')}</span>
+          <Button
+            type="link"
+            size="small"
+            className="editor-plugin-strip-link"
+            onClick={gotoPluginBindings}
+          >
+            {t('routes.manage_plugin_bindings')}
+            {' '}
+            <ArrowRightOutlined />
+          </Button>
         </div>
         </div>
         <div className="modal-footer-modern">
