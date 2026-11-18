@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import copy from 'copy-to-clipboard';
 import type { RouteResponse } from '../../../types/route';
 import type { ServiceDefinition } from '../../../types/service';
-import { extractMethods, resolveServiceDisplayName, splitServiceUri } from '../utils';
+import { extractMethods, genkeyValues, resolveServiceDisplayName, splitServiceUri } from '../utils';
 import RouteActions from './RouteActions';
 
 const { Text } = Typography;
@@ -25,29 +25,18 @@ const { Text } = Typography;
 /** Known HTTP methods get their own hue; anything else stays neutral. */
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
-/** Shortcut YAML compiles to `_genkey_*` args; named keys win when present. */
-const shortcutValues = (args?: Record<string, string>): string[] => (
-  Object.keys(args ?? {})
-    .filter((key) => key.startsWith('_genkey_'))
-    .sort()
-    .map((key) => String(args![key] ?? ''))
-    .filter((value) => value.trim() !== '')
-);
-
 const pathOf = (args?: Record<string, string>): string => {
   const direct = args?.pattern || args?.patterns;
   if (direct) return String(direct);
-  return shortcutValues(args)[0] || '/**';
+  return genkeyValues(args).find((value) => value.trim() !== '') || '/**';
 };
 
-const methodsOf = (args?: Record<string, string>): string[] => {
-  const named = extractMethods(args);
-  if (named.length > 0) return named;
-  return shortcutValues(args)
+const methodsOf = (args?: Record<string, string>): string[] => (
+  extractMethods(args)
     .flatMap((value) => value.split(','))
     .map((value) => value.trim().toUpperCase())
-    .filter((value) => HTTP_METHODS.includes(value));
-};
+    .filter(Boolean)
+);
 
 interface RouteCardProps {
   route: RouteResponse;

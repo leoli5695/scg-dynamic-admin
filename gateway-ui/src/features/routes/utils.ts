@@ -23,6 +23,35 @@ export const UUID_PATTERN = /^[a-f0-9-]{36}$/i;
 // Predicate / filter args parsing (form string -> Map<String,String>)
 // ============================================================================
 
+/**
+ * Shortcut-form predicate args are stored as `_genkey_0`, `_genkey_1`, ...
+ * (Spring Cloud Gateway's shortcut YAML compiles to these; the data plane maps
+ * them back onto each factory's shortcutFieldOrder by position).
+ */
+export const GENKEY_PREFIX = '_genkey_';
+
+const genkeyIndex = (key: string): number => parseInt(key.slice(GENKEY_PREFIX.length), 10);
+
+/** `_genkey_N` keys of an args map, ascending by N. */
+export const sortedGenkeyKeys = (args?: Record<string, unknown>): string[] => (
+  Object.keys(args ?? {})
+    .filter((key) => key.startsWith(GENKEY_PREFIX) && Number.isFinite(genkeyIndex(key)))
+    .sort((a, b) => genkeyIndex(a) - genkeyIndex(b))
+);
+
+/** Values of shortcut-form args, in `_genkey_N` order. */
+export const genkeyValues = (args?: Record<string, unknown>): string[] => (
+  sortedGenkeyKeys(args).map((key) => String(args![key] ?? ''))
+);
+
+const hasGenkeyArgs = (args?: Record<string, unknown>): boolean => (
+  sortedGenkeyKeys(args).length > 0
+);
+
+const joinedGenkeyValues = (args?: Record<string, unknown>): string => (
+  genkeyValues(args).filter((value) => value.trim() !== '').join(', ')
+);
+
 export const parsePredicateArgs = (type: string, args: unknown): Record<string, string> => {
   if (!args || args === 'undefined' || args === 'null') {
     switch (type) {
@@ -83,7 +112,7 @@ export const buildMethodArgs = (methods: string[]): Record<string, string> => {
   return args;
 };
 
-/** Extract HTTP methods from predicate args (indexed keys / array / string). */
+/** Extract HTTP methods from predicate args (indexed keys / array / string / `_genkey_*`). */
 export const extractMethods = (args: Record<string, unknown> | string | undefined): string[] => {
   if (!args) return [];
   if (typeof args === 'string') return args.split(',').map((m) => m.trim());
@@ -95,7 +124,10 @@ export const extractMethods = (args: Record<string, unknown> | string | undefine
       .sort((a, b) => parseInt(a.split('.')[1], 10) - parseInt(b.split('.')[1], 10))
       .map((k) => String(args[k] ?? ''));
   }
-  return [];
+  return genkeyValues(args)
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
 };
 
 export const stringifyPredicateArgs = (
@@ -106,17 +138,97 @@ export const stringifyPredicateArgs = (
   if (typeof args === 'string') return args;
   switch (type) {
     case 'Path':
-      return String(args.pattern || '/**');
+      // Named keys win; shortcut-form args fall back to their `_genkey_N` values.
+      return String(args.pattern || args.patterns || joinedGenkeyValues(args) || '/**');
     case 'Host':
       // also support legacy singular "pattern"
-      return String(args.patterns || args.pattern || '');
+      return String(args.patterns || args.pattern || joinedGenkeyValues(args) || '');
     case 'Method':
       return extractMethods(args).join(', ');
-    case 'Header':
-      return `${args.header || args.name || ''}:${args.regexp || '.*'}`;
+    case 'Header': {
+      const genkey = genkeyValues(args);
+      const namedHeader = args.header ?? args.name;
+      const header = String(namedHeader ?? genkey[0] ?? '');
+      const regexp = String(args.regexp ?? (namedHeader == null ? genkey[1] : undefined) ?? '.*');
+      return `${header}:${regexp}`;
+    }
     default:
-      return String(args.value || '');
+      return String(args.value || joinedGenkeyValues(args) || '');
   }
+};
+
+/** Form value as it appears in the predicate input (Method holds an array). */
+const predicateFormDisplay = (type: string, formValue: unknown): string => (
+  type === 'Method' && Array.isArray(formValue)
+    ? formValue.map(String).join(', ')
+    : String(formValue ?? '')
+);
+
+/** Form value -> positional values for shortcut-form `_genkey_N` keys. */
+const genkeyFormValues = (type: string, formValue: unknown): string[] => {
+  if (type === 'Method' && Array.isArray(formValue)) {
+    return formValue.map(String).filter(Boolean);
+  }
+  if (type === 'Header') {
+    // "name:regexp" - the colon (not a comma) separates the two shortcut slots.
+    const parsed = parsePredicateArgs('Header', formValue);
+    return [parsed.header, parsed.regexp];
+  }
+  return String(formValue ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+};
+
+/**
+ * Rewrite an edited form value back into the predicate's original `_genkey_*`
+ * shape. The data plane resolves shortcut args by position, so publishing the
+ * named form instead would silently drop the configured values (the admin API
+ * and config center pass predicate args through verbatim).
+ */
+const overlayGenkeyArgs = (
+  type: string,
+  formValue: unknown,
+  original: Record<string, unknown>,
+): Record<string, string> => {
+  const keys = sortedGenkeyKeys(original);
+  const values = genkeyFormValues(type, formValue);
+  const result: Record<string, string> = {};
+  Object.entries(original).forEach(([key, value]) => {
+    if (!key.startsWith(GENKEY_PREFIX)) result[key] = String(value ?? '');
+  });
+  keys.forEach((key, index) => {
+    if (index < values.length) result[key] = values[index];
+  });
+  if (values.length > keys.length) {
+    const nextIndex = genkeyIndex(keys[keys.length - 1]) + 1;
+    values.slice(keys.length).forEach((value, offset) => {
+      result[`${GENKEY_PREFIX}${nextIndex + offset}`] = value;
+    });
+  }
+  return result;
+};
+
+/**
+ * Predicate args to publish for one form row.
+ *
+ * Editing a shortcut-form predicate must not change its stored shape: an
+ * untouched row keeps its args byte-for-byte, and an edited row updates the
+ * original `_genkey_N` entries (extra keys preserved). Named-form and newly
+ * added predicates keep the historical named output.
+ */
+export const buildPredicateArgs = (
+  type: string,
+  formValue: unknown,
+  original?: Record<string, unknown>,
+): Record<string, string> => {
+  if (original && hasGenkeyArgs(original)) {
+    if (predicateFormDisplay(type, formValue) === stringifyPredicateArgs(type, original)) {
+      return original as Record<string, string>;
+    }
+    return overlayGenkeyArgs(type, formValue, original);
+  }
+  return parsePredicateArgs(type, formValue);
 };
 
 export const parseFilterArgs = (type: string, args: unknown): Record<string, string> => {
@@ -433,7 +545,7 @@ export interface RouteFormValues {
   uri?: string;
   /** MULTI mode form rows. */
   services?: Array<Partial<RouteServiceBinding>>;
-  predicates?: Array<{ name: string; args?: unknown }>;
+  predicates?: Array<{ name: string; args?: unknown; originalArgs?: Record<string, string> }>;
   filters?: Array<{ name: string; args?: unknown }>;
   grayRules?: GrayRule[];
   /** Route category: NORMAL (default) or AI. */
@@ -462,7 +574,7 @@ export const buildRoutePayload = (
 ): RouteDefinition | null => {
   const predicates: RoutePredicate[] = (values.predicates || [])
     .filter((p) => p && p.name)
-    .map((p) => ({ name: p.name, args: parsePredicateArgs(p.name, p.args) }));
+    .map((p) => ({ name: p.name, args: buildPredicateArgs(p.name, p.args, p.originalArgs) }));
 
   if (predicates.length === 0) return null;
   if (!predicates.some((p) => p.name === 'Path')) return null;

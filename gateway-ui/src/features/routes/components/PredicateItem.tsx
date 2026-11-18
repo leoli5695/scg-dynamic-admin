@@ -49,6 +49,8 @@ const PredicateItem: React.FC<PredicateItemProps> = ({
           }}
           onChange={(value) => {
             form.setFieldValue(['predicates', name, 'args'], value === 'Method' ? [] : '');
+            // The stored args belong to the old predicate type; never write into them again.
+            form.setFieldValue(['predicates', name, 'originalArgs'], undefined);
           }}
           suffixIcon={<span style={{ color: palette.textTertiary, fontSize: '12px' }}>▼</span>}
         >
