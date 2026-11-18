@@ -512,3 +512,10 @@
 @media (prefers-reduced-motion: reduce) {
   .console-editor.ant-modal *, .console-editor.ant-modal *::before { animation: none !important; transition: none !important; }
 }
+
+/* Raw <input>/<textarea> elements must not draw the browser's square focus ring
+   inside our rounded field wrappers — the wrapper already renders focus. */
+.console-editor.ant-modal :is(input, textarea):focus,
+.console-editor.ant-modal :is(input, textarea):focus-visible {
+  outline: none !important;
+}

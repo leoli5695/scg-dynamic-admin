@@ -4,15 +4,13 @@
  * Body aligns with model/ServiceDefinition.java.
  */
 import React, { useCallback, useState } from 'react';
-import EditorNavigation from '../../instance-detail/EditorNavigation';
 import EditorCategorySwitch from '../../instance-detail/EditorCategorySwitch';
-import { useEditorStep } from '../../instance-detail/useEditorStep';
 import {
   Alert, Button, Collapse, Form, Input, Modal, Select, Tag, Typography  } from 'antd';
 import { message } from '../../../utils/antdStatic';
 import {
   CloudServerOutlined, DeploymentUnitOutlined, EditOutlined, ExclamationCircleOutlined,
-  PlusOutlined, RobotOutlined,
+  EyeInvisibleOutlined, EyeOutlined, PlusOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { ServiceCategory, ServiceDefinition, ServiceInstanceItem } from '../../../types/service';
@@ -54,8 +52,6 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     mode === 'edit' ? [...(service?.instances ?? [])] : [emptyInstance()],
   );
   const [submitting, setSubmitting] = useState(false);
-
-  const [activeStep, setActiveStep, stepDirection, visitedSteps] = useEditorStep();
   const isEdit = mode === 'edit';
 
   const category = (Form.useWatch('category', form) ?? (isEdit ? service?.category : 'NORMAL')) as ServiceCategory;
@@ -82,13 +78,14 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     setInstances((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const stepLabels = [t('services.basic_config'), t(isAi ? 'services.ai_config' : 'services.service_instances')];
-  const nextStep = async () => {
-    try {
-      await form.validateFields(['category', 'name', 'loadBalancer', 'description']);
-      setActiveStep((step) => Math.min(step + 1, stepLabels.length - 1));
-    } catch { /* Ant Design shows the field errors in the current section. */ }
-  };
+  const allDisabled = instances.length === 0 || instances.every((inst) => inst.enabled === false);
+
+  // Chrome injects its own un-styleable "reveal password" button into every
+  // type=password input, which duplicated antd's eye toggle. Text inputs masked
+  // with -webkit-text-security have no native affordance; browsers without
+  // support fall back to a regular password input.
+  const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const textSecuritySupported = typeof CSS !== 'undefined' && CSS.supports('-webkit-text-security', 'disc');
 
   const handleFinish = async (values: ServiceFormValues) => {
     if (!isAi) {
@@ -114,8 +111,6 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     }
   };
 
-  const allDisabled = instances.length === 0 || instances.every((inst) => inst.enabled === false);
-
   return (
     <Modal
       title={(
@@ -134,7 +129,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
       open
       onCancel={onCancel}
       footer={null}
-      width={1000}
+      width={720}
       className={`console-editor service-editor${isAi ? ' is-ai' : ''}`}
       destroyOnHidden
       mask={{ closable: false }}
@@ -148,10 +143,6 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         scrollToFirstError={{ behavior: 'smooth', focus: true }}
         disabled={submitting}
         onFinish={handleFinish}
-        onFinishFailed={({ errorFields }) => {
-          const field = String(errorFields[0]?.name[0] ?? '');
-          setActiveStep(['name', 'category', 'loadBalancer', 'description'].includes(field) ? 0 : 1);
-        }}
         initialValues={isEdit ? {
           name: service?.name,
           loadBalancer: service?.loadBalancer,
@@ -163,10 +154,8 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           baseUrl: hasCustomBaseUrl(service?.providerType, service?.baseUrl) ? service?.baseUrl : undefined,
         } : { loadBalancer: 'weighted', category: 'NORMAL' }}
       >
-        <div className="editor-workspace">
-        <EditorNavigation steps={stepLabels} active={activeStep} onChange={setActiveStep} />
-        <div className="editor-scroll" data-direction={stepDirection}>
-        <div className="form-section-modern" hidden={activeStep !== 0}>
+        <div className="editor-scroll">
+        <div className="form-section-modern">
           <div className="section-header">
             <DeploymentUnitOutlined className="section-icon" />
             <span className="section-title">{t('services.basic_config')}</span>
@@ -211,7 +200,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         </div>
 
         {isAi && (
-          <div className="form-section-modern" hidden={activeStep !== 1}>
+          <div className="form-section-modern">
             <div className="section-header">
               <RobotOutlined className="section-icon" />
               <span className="section-title">{t('services.ai_config')}</span>
@@ -236,11 +225,32 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                 rules={isEdit ? undefined : [{ required: true, message: t('services.api_key_required') }]}
                 tooltip={isEdit && service?.credentialRef ? t('services.credential_configured') : t('services.credential_none')}
               >
-                <Input.Password
-                  size="large"
-                  autoComplete="new-password"
-                  placeholder={isEdit ? t('services.api_key_rotate_placeholder') : t('services.api_key_placeholder')}
-                />
+                {textSecuritySupported ? (
+                  <Input
+                    size="large"
+                    type="text"
+                    autoComplete="new-password"
+                    placeholder={isEdit ? t('services.api_key_rotate_placeholder') : t('services.api_key_placeholder')}
+                    style={{ WebkitTextSecurity: apiKeyVisible ? 'none' : 'disc' } as React.CSSProperties}
+                    suffix={(
+                      <span
+                        className="secret-toggle"
+                        role="button"
+                        tabIndex={-1}
+                        aria-label={t('services.api_key')}
+                        onClick={() => setApiKeyVisible((v) => !v)}
+                      >
+                        {apiKeyVisible ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                      </span>
+                    )}
+                  />
+                ) : (
+                  <Input.Password
+                    size="large"
+                    autoComplete="new-password"
+                    placeholder={isEdit ? t('services.api_key_rotate_placeholder') : t('services.api_key_placeholder')}
+                  />
+                )}
               </Form.Item>
               <Collapse
                 ghost
@@ -270,8 +280,8 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           </div>
         )}
 
-        {!isAi && visitedSteps.includes(1) && (
-        <div className="form-section-modern" hidden={activeStep !== 1}>
+        {!isAi && (
+        <div className="form-section-modern">
           <div className="section-header">
             <CloudServerOutlined className="section-icon" />
             <span className="section-title">{t('services.service_instances')}</span>
@@ -314,18 +324,11 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         )}
 
         </div>
-        </div>
         <div className="modal-footer-modern">
-          <span className="editor-progress">{activeStep + 1} / {stepLabels.length}</span>
           <Button onClick={onCancel} disabled={submitting}>{t('common.cancel')}</Button>
-          {activeStep > 0 && <Button onClick={() => setActiveStep(activeStep - 1)} disabled={submitting}>{t('services.previous_step')}</Button>}
-          {activeStep < stepLabels.length - 1 ? (
-            <Button key="next" type="primary" htmlType="button" onClick={nextStep}>{t('services.next_step')}</Button>
-          ) : (
-            <Button key="submit" type="primary" htmlType="submit" loading={submitting} icon={isEdit ? <EditOutlined /> : <PlusOutlined />}>
-              {t(isEdit ? 'services.save_changes' : 'services.create')}
-            </Button>
-          )}
+          <Button type="primary" htmlType="submit" loading={submitting} icon={isEdit ? <EditOutlined /> : <PlusOutlined />}>
+            {t(isEdit ? 'services.save_changes' : 'services.create')}
+          </Button>
         </div>
       </Form>
     </Modal>
