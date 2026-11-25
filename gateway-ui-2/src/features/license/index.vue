@@ -144,7 +144,7 @@ const licenseColumns = computed(() => [
   { title: t('common.status'), dataIndex: 'status', key: 'status', width: 110 },
   { title: t('licenseUI.col_validity'), dataIndex: 'expiresAt', key: 'expiresAt', width: 180 },
   { title: t('licenseUI.col_feature_count'), dataIndex: 'features', key: 'features', width: 90 },
-  { title: t('common.actions'), key: 'actions', width: 70, align: 'right' },
+  { title: t('common.actions'), key: 'actions', width: 70, align: 'center' },
 ])
 
 const tablePagination = computed(() => ({

@@ -238,7 +238,7 @@ const columns = computed<ColumnsType<AuditRow>>(() => [
   { title: t('audit.operator'), dataIndex: 'operator', key: 'operator', width: 100 },
   { title: t('audit.ip_address'), dataIndex: 'ipAddress', key: 'ipAddress', width: 148, ellipsis: true },
   { title: t('audit.created_at'), dataIndex: 'createdAt', key: 'createdAt', width: 168 },
-  { title: t('common.actions'), key: 'actions', width: 120, fixed: 'right' },
+  { title: t('common.actions'), key: 'actions', width: 120, fixed: 'right', align: 'center' },
 ])
 
 const pagination = computed(() => ({

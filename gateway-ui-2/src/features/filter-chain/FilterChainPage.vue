@@ -314,7 +314,7 @@ const recordColumns = computed<ColumnsType<FilterChainRecord>>(() => [
   { title: t('filterChain.filters'), dataIndex: 'filterCount', key: 'filterCount', width: 100 },
   { title: t('filterChain.status'), key: 'status', width: 140 },
   { title: t('filterChain.time'), dataIndex: 'createdAt', key: 'createdAt', width: 110 },
-  { title: t('common.actions'), key: 'actions', width: 92, fixed: 'right' },
+  { title: t('common.actions'), key: 'actions', width: 92, fixed: 'right', align: 'center' },
 ])
 
 const executionColumns = computed<ColumnsType<FilterExecution>>(() => [

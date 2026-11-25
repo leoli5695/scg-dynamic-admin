@@ -110,7 +110,7 @@ const columns = computed<ColumnsType<FullChainListItem>>(() => [
   { title: t('trace.chain_status'), dataIndex: 'chainStatus', key: 'chainStatus', width: 200 },
   { title: t('trace.downstream_services'), key: 'services', width: 226 },
   { title: t('trace.time'), dataIndex: 'traceTime', key: 'traceTime', width: 110 },
-  { title: '', key: 'actions', width: 84, align: 'right' },
+  { title: '', key: 'actions', width: 84, align: 'center' },
 ])
 
 const tablePagination = computed(() => ({

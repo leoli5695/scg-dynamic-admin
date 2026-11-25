@@ -559,7 +559,7 @@ const columns = computed<ColumnsType>(() => [
     key: 'details',
     width: 64,
     fixed: 'right',
-    align: 'right',
+    align: 'center',
   },
 ])
 

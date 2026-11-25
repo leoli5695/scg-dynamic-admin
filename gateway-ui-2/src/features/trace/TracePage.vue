@@ -374,7 +374,7 @@ const columns = computed<ColumnsType<RequestTrace>>(() => {
         parseServerTime(a.traceTime).getTime() - parseServerTime(b.traceTime).getTime(),
     },
     { title: t('trace.replay_count'), dataIndex: 'replayCount', key: 'replayCount', width: 90 },
-    { title: '', key: 'actions', width: 84, fixed: 'right', align: 'right' },
+    { title: '', key: 'actions', width: 84, fixed: 'right', align: 'center' },
   ]
   return all.filter((column) => visibleColumns.value.includes(column.key as string))
 })

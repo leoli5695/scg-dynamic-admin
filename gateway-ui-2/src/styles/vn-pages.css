@@ -544,6 +544,12 @@
 .vnp-scope .ant-table-wrapper .ant-table-empty .ant-table-expanded-row-fixed,
 .vnp-portal .ant-table-wrapper .ant-table-empty .ant-table-expanded-row-fixed { color: var(--vn-ink-3); }
 
+/* Action icon groups sit centred in their column (not hugging the right edge). */
+.vnp-scope .ant-table-tbody .vn-iconbtn-group,
+.vnp-portal .ant-table-tbody .vn-iconbtn-group {
+  justify-content: center;
+}
+
 /* Tabs */
 .vnp-scope .ant-tabs.ant-tabs,
 .vnp-portal .ant-tabs.ant-tabs { color: var(--vn-ink); }

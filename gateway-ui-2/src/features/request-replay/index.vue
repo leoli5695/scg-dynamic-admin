@@ -291,7 +291,7 @@ const columns = computed<ColumnsType<RequestTrace>>(() => [
   { title: t('replay.status'), dataIndex: 'statusCode', key: 'statusCode', width: 92 },
   { title: t('replay.latency'), dataIndex: 'latencyMs', key: 'latencyMs', width: 100 },
   { title: t('replay.type'), dataIndex: 'traceType', key: 'traceType', width: 92 },
-  { title: t('common.actions'), key: 'actions', width: 92, fixed: 'right' },
+  { title: t('common.actions'), key: 'actions', width: 92, fixed: 'right', align: 'center' },
 ])
 </script>
 

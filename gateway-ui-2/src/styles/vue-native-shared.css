@@ -241,8 +241,8 @@
   white-space: nowrap;
 }
 
-.vn-scope .vn-table-actions-head {
-  text-align: right;
+.vn-scope .vn-table thead th.vn-table-actions-head {
+  text-align: center;
 }
 
 .vn-scope .vn-table tbody td {
@@ -264,7 +264,15 @@
 }
 
 .vn-scope .vn-table tbody td:last-child {
-  text-align: right;
+  text-align: center;
+}
+
+/* Action icons sit centred in the column (not flush right, which left a wide
+   empty gap before them). Flex + centre keeps the injected tooltip popup
+   (absolute, out of flow) from shifting the buttons on hover. */
+.vn-scope .vn-table tbody td:last-child .vn-iconbtn-group {
+  display: flex;
+  justify-content: center;
 }
 
 .vn-scope .vn-row-identity {

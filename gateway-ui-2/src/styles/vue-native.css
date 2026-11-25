@@ -490,12 +490,13 @@
   margin-left: 2px;
 }
 
-/* Row-action groups inside an antd table cell fill the cell and hug the right
-   edge, so every row action stays inline and right-aligned (no overflow menu).
-   Margin spacing above keeps injected tooltip siblings from shifting icons. */
+/* Row-action groups inside an antd table cell fill the cell and centre their
+   icons, so every row action stays inline with balanced whitespace (no overflow
+   menu, no right-hugging left gap). Margin spacing above keeps injected tooltip
+   siblings from shifting icons. */
 .vn-scope .ant-table-tbody > tr > td .vn-iconbtn-group {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 /* ==================== State panel (empty / error / loading) ================= */

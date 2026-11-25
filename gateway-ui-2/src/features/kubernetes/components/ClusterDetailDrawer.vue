@@ -71,7 +71,7 @@ const deploymentColumns = computed(() => [
   { title: t('k8s.deployment_name'), dataIndex: 'name', key: 'name' },
   { title: t('k8s.namespace'), dataIndex: 'namespace', key: 'namespace', width: 130 },
   { title: t('k8s.replicas'), dataIndex: 'replicas', key: 'replicas', width: 150 },
-  { title: t('common.actions'), key: 'actions', width: 90, align: 'right' },
+  { title: t('common.actions'), key: 'actions', width: 90, align: 'center' },
 ])
 
 const podColumns = computed(() => [
@@ -80,7 +80,7 @@ const podColumns = computed(() => [
   { title: t('k8s.phase'), dataIndex: 'phase', key: 'phase', width: 96 },
   { title: t('k8s.pod_ip'), dataIndex: 'podIP', key: 'podIP', width: 130 },
   { title: t('k8s.containers'), dataIndex: 'containers', key: 'containers' },
-  { title: t('common.actions'), key: 'actions', width: 70, align: 'right' },
+  { title: t('common.actions'), key: 'actions', width: 70, align: 'center' },
 ])
 
 async function loadResources(namespace: string) {
