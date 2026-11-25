@@ -12,6 +12,7 @@ import {
 import type { RoutePredicate, RouteResponse } from '@/types/route'
 import { extractMethods } from '../utils'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import RouteActions from './RouteActions.vue'
 
 const props = defineProps<{
@@ -42,10 +43,11 @@ function predicateValue(predicate: RoutePredicate): string {
   return JSON.stringify(predicate.args)
 }
 
-function handleCopyId(e: MouseEvent) {
+async function handleCopyId(e: MouseEvent) {
   e.stopPropagation()
-  navigator.clipboard.writeText(props.route.id || '')
-  message.success(t('message.copy_success'))
+  const ok = await copyText(props.route.id || '')
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 

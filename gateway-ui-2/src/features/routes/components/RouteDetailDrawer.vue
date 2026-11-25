@@ -12,6 +12,7 @@ import {
 } from '@/components/icons'
 import type { RouteResponse, RouteServiceBinding } from '@/types/route'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 
 const props = defineProps<{ route: RouteResponse }>()
 const emit = defineEmits<{
@@ -24,9 +25,10 @@ const { t } = useI18n()
 
 const isAi = computed(() => (props.route.category || 'NORMAL') === 'AI')
 
-function handleCopyId() {
-  navigator.clipboard.writeText(props.route.id || '')
-  message.success(t('message.copy_success'))
+async function handleCopyId() {
+  const ok = await copyText(props.route.id || '')
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 
 function grayRuleTarget(rule: { targetVersion: string }): string {

@@ -6,6 +6,7 @@
 import { useI18n } from 'vue-i18n'
 import { CopyOutlined } from '@/components/icons'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 
 const props = defineProps<{
   label?: string
@@ -14,10 +15,11 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-function copy() {
+async function copy() {
   if (!props.code) return
-  navigator.clipboard.writeText(props.code)
-  message.success(t('message.copy_success'))
+  const ok = await copyText(props.code)
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 

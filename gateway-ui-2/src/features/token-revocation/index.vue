@@ -30,6 +30,7 @@ import {
 } from '@/api/jwtRevocation'
 import type { RevocationRequest, RevocationResult } from '@/api/jwtRevocation'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import './token-revocation.css'
 
 type TargetMode = 'token' | 'jti'
@@ -160,9 +161,10 @@ async function runAction() {
   }
 }
 
-function copyId(id: string) {
-  navigator.clipboard.writeText(id)
-  message.success(t('message.copy_success'))
+async function copyId(id: string) {
+  const ok = await copyText(id)
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 

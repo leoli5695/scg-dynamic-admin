@@ -11,6 +11,7 @@ import {
   HddOutlined, InboxOutlined,
 } from '@/components/icons'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import type { DeployMode } from '@/api/accessLog'
 import {
   FLUENT_BIT_CUSTOM_CONFIG, FLUENT_BIT_DOCKER_CONFIG, FLUENT_BIT_K8S_CONFIG,
@@ -26,9 +27,10 @@ watch(() => props.activeDeployMode, (mode) => {
   if (mode) activeKey.value = mode
 })
 
-function copyConfig(text: string) {
-  navigator.clipboard.writeText(text)
-  message.success(t('access_log.config_copied'))
+async function copyConfig(text: string) {
+  const ok = await copyText(text)
+  if (ok) message.success(t('access_log.config_copied'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 

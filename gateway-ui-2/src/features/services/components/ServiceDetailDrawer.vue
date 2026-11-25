@@ -11,6 +11,7 @@ import {
 } from '@/components/icons'
 import type { ServiceDefinition, ServiceInstanceItem } from '@/types/service'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import VnBadge from '@/components/vn/VnBadge.vue'
 import VnIconButton from '@/components/vn/VnIconButton.vue'
 import { getCatalogStatus, getLoadBalancerLabelKey } from '../utils'
@@ -38,9 +39,10 @@ function instanceTone(inst: ServiceInstanceItem) {
   return inst.healthy !== false ? ('ok' as const) : ('err' as const)
 }
 
-function copyId() {
-  navigator.clipboard.writeText(displayId.value)
-  message.success(t('message.copy_success'))
+async function copyId() {
+  const ok = await copyText(displayId.value)
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 

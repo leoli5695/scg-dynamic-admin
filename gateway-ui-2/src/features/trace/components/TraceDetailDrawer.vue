@@ -14,6 +14,7 @@ import {
 } from '@/components/icons'
 import { getTraceById, type FilterChainExecution, type FilterExecutionBar, type RequestTrace } from '@/api/traces'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import {
   formatJson, getHeadersCount, getStatusTone, isBodyLarge, parsePercentage, toFilterExecutionBars,
 } from '../traceUtils'
@@ -93,15 +94,15 @@ function parseHeaders(raw?: string | null): unknown {
   }
 }
 
-function copyText(payload: unknown, successKey: string) {
-  navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
-    .then(() => message.success(t(successKey)))
-    .catch(() => message.error(t('common.error_request_failed')))
+async function copyPayload(payload: unknown, successKey: string) {
+  const ok = await copyText(JSON.stringify(payload, null, 2))
+  if (ok) message.success(t(successKey))
+  else message.error(t('message.copy_failed'))
 }
 
 function copyRequest() {
   if (!selectedTrace.value) return
-  copyText({
+  copyPayload({
     method: selectedTrace.value.method,
     uri: selectedTrace.value.uri,
     path: selectedTrace.value.path,
@@ -113,7 +114,7 @@ function copyRequest() {
 
 function copyResponse() {
   if (!selectedTrace.value) return
-  copyText({
+  copyPayload({
     statusCode: selectedTrace.value.statusCode,
     headers: parseHeaders(selectedTrace.value.responseHeaders),
     body: selectedTrace.value.responseBody,

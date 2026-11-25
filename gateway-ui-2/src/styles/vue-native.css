@@ -750,6 +750,18 @@
   color: var(--vn-ink-3);
 }
 
+/* antd's default clear glyph is rgba(0,0,0,.25) — black on a near-black field,
+   i.e. invisible. Give it a readable neutral that brightens on hover. */
+.vn-scope .ant-input-clear-icon,
+.vn-portal .ant-input-clear-icon {
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-input-clear-icon:hover,
+.vn-portal .ant-input-clear-icon:hover {
+  color: var(--vn-ink);
+}
+
 .vn-scope .ant-input-number .ant-input-number-input::placeholder,
 .vn-portal .ant-input-number .ant-input-number-input::placeholder {
   color: var(--vn-ink-3);

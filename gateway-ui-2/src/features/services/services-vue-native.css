@@ -224,6 +224,20 @@
   color: var(--vn-ink-2);
 }
 
+/* Overflow lives in the header so it survives the two-line clip on the list. */
+.vn-scope .vn-pool-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+
+.vn-scope .vn-pool-overflow {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink-3);
+}
+
 .vn-scope .vn-pool-body {
   flex: 1;
   min-height: 0;
@@ -269,12 +283,6 @@
 /* Disabled nodes read as inactive, not as failures. */
 .vn-scope .vn-endpoint.vn-ink-idle .vn-mono {
   color: var(--vn-ink-3);
-}
-
-.vn-scope .vn-endpoint-more {
-  color: var(--vn-ink-3);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
 }
 
 .vn-scope .vn-pool-empty {

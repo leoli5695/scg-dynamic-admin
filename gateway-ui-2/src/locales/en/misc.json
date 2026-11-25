@@ -44,5 +44,6 @@
   "message.load_strategies_failed": "Failed to load strategies: {{error}}",
   "message.route_uuid_not_found": "Route ID (UUID) not found",
   "message.copied_to_clipboard": "{{label}} copied to clipboard",
-  "message.copy_success": "Copied to clipboard"
+  "message.copy_success": "Copied to clipboard",
+  "message.copy_failed": "Copy failed, please copy manually"
 }

@@ -19,6 +19,7 @@ import type {
 } from '@/types/kubernetes'
 import { formatServerTime } from '@/utils/serverTime'
 import { message, modal } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import {
   clusterStatusTextKey, clusterStatusTone, nodeStatusTone, phaseTone,
 } from '../utils'
@@ -148,10 +149,11 @@ function handleDeleteDeployment(deployment: KubernetesDeploymentInfo) {
   })
 }
 
-function copyServerUrl() {
+async function copyServerUrl() {
   if (!props.cluster.serverUrl) return
-  navigator.clipboard.writeText(props.cluster.serverUrl)
-  message.success(t('k8s.copied'))
+  const ok = await copyText(props.cluster.serverUrl)
+  if (ok) message.success(t('k8s.copied'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 

@@ -4,7 +4,7 @@
  * instance-pool inset and a collapsed description. The left rail carries the
  * health tone so the grid reads at a glance without filled status pills.
  */
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   ApiOutlined, CloudServerOutlined, CopyOutlined, DeleteOutlined, DownOutlined,
@@ -12,6 +12,7 @@ import {
 } from '@/components/icons'
 import type { ServiceDefinition } from '@/types/service'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import VnBadge from '@/components/vn/VnBadge.vue'
 import VnIconButton from '@/components/vn/VnIconButton.vue'
 import VnPanel from '@/components/vn/VnPanel.vue'
@@ -35,7 +36,40 @@ const enabled = computed(() => instances.value.filter((i) => i.enabled !== false
 const healthyEnabled = computed(() => enabled.value.filter((i) => i.healthy !== false).length)
 const displayId = computed(() => props.service.serviceId || props.service.name)
 const shown = computed(() => instances.value.slice(0, 4))
-const overflow = computed(() => instances.value.length - shown.value.length)
+
+/**
+ * Chips wrap, and the pool clips at two lines, so how many are actually visible
+ * depends on card width and address length. Measure it rather than assume, and
+ * put the "+N" in the pool header where it can never be clipped.
+ */
+const poolList = useTemplateRef<HTMLElement>('poolList')
+const visibleChips = ref(instances.value.length)
+const overflow = computed(() => Math.max(0, instances.value.length - visibleChips.value))
+
+function measureVisible() {
+  const el = poolList.value
+  if (!el) {
+    visibleChips.value = instances.value.length
+    return
+  }
+  const limit = el.getBoundingClientRect().bottom + 1
+  let n = 0
+  for (const child of Array.from(el.children)) {
+    if (child.getBoundingClientRect().bottom <= limit) n++
+  }
+  visibleChips.value = n
+}
+
+let poolObserver: ResizeObserver | undefined
+onMounted(() => {
+  measureVisible()
+  if (poolList.value) {
+    poolObserver = new ResizeObserver(measureVisible)
+    poolObserver.observe(poolList.value)
+  }
+})
+onBeforeUnmount(() => poolObserver?.disconnect())
+watch(shown, () => nextTick(measureVisible))
 
 const probeTip = computed(() => {
   const parts: string[] = []
@@ -61,9 +95,10 @@ function instanceTone(inst: { enabled?: boolean; healthy?: boolean }) {
   return inst.healthy !== false ? 'ok' : 'err'
 }
 
-function copyId() {
-  navigator.clipboard.writeText(displayId.value)
-  message.success(t('message.copy_success'))
+async function copyId() {
+  const ok = await copyText(displayId.value)
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 
@@ -126,10 +161,13 @@ function copyId() {
     <VnPanel class="vn-pool">
       <div class="vn-pool-head">
         <span class="vn-label">{{ t(isAi ? 'services.endpoint' : 'services.instances') }}</span>
-        <span v-if="!isAi" class="vn-chip-num">{{ instances.length }}</span>
+        <span v-if="!isAi" class="vn-pool-count">
+          <span v-if="overflow > 0" class="vn-pool-overflow">+{{ overflow }}</span>
+          <span class="vn-chip-num">{{ instances.length }}</span>
+        </span>
       </div>
       <div class="vn-pool-body">
-        <div v-if="instances.length" class="vn-pool-list">
+        <div v-if="instances.length" ref="poolList" class="vn-pool-list">
           <a-tooltip
             v-for="(inst, idx) in shown"
             :key="inst.instanceId || `${inst.ip}:${inst.port}` || idx"
@@ -141,7 +179,6 @@ function copyId() {
               <span class="vn-mono">{{ inst.ip }}:{{ inst.port }}</span>
             </span>
           </a-tooltip>
-          <span v-if="overflow > 0" class="vn-endpoint vn-endpoint-more">+{{ overflow }}</span>
         </div>
         <span v-else class="vn-pool-empty">
           {{ isAi ? (service.baseUrl || service.providerType || '—') : t('services.no_instances_configured') }}

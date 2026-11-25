@@ -12,6 +12,7 @@ import {
 import type { ServiceDefinition } from '@/types/service'
 import { getLoadBalancerLabelKey, getServiceStatus } from '../utils'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 
 const props = defineProps<{ service: ServiceDefinition }>()
 const emit = defineEmits<{
@@ -53,10 +54,11 @@ const warningMessage = computed(() => {
   return null
 })
 
-function handleCopyId(e: MouseEvent) {
+async function handleCopyId(e: MouseEvent) {
   e.stopPropagation()
-  navigator.clipboard.writeText(props.service.serviceId || props.service.name)
-  message.success(t('message.copy_success'))
+  const ok = await copyText(props.service.serviceId || props.service.name)
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 

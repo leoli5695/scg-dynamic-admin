@@ -13,6 +13,7 @@ import {
 } from '@/components/icons'
 import type { AuthPolicyDefinition, RouteAuthBinding } from '@/types/authPolicy'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import { authToneClass, getAuthTypeDescKey, getAuthTypeLabel } from '../utils'
 
 const props = defineProps<{
@@ -47,10 +48,11 @@ const statusText = computed(() => (props.policy.enabled ? t('common.enabled') : 
 const visibleBindings = computed(() => props.bindings.slice(0, 3))
 const overflowCount = computed(() => Math.max(props.bindings.length - 3, 0))
 
-function copyId() {
+async function copyId() {
   if (!props.policy.policyId) return
-  navigator.clipboard.writeText(props.policy.policyId)
-  message.success(t('message.copy_success'))
+  const ok = await copyText(props.policy.policyId)
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 

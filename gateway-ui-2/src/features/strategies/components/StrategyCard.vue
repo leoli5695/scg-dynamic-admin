@@ -204,6 +204,7 @@ import {
 } from '@/components/icons'
 import type { StrategyTypeInfo } from '@/types/strategy'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import { toneForLegacyColor } from '../tones'
 import StrategyTypeIcon from './StrategyTypeIcon.vue'
 
@@ -229,9 +230,10 @@ const summary = computed(() => summarizeConfig(props.strategy, tr))
 const statusText = computed(() =>
   props.strategy.enabled ? t('common.enabled') : t('common.disabled'))
 
-function copyId() {
-  navigator.clipboard.writeText(props.strategy.strategyId)
-  message.success(t('message.copy_success'))
+async function copyId() {
+  const ok = await copyText(props.strategy.strategyId)
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 

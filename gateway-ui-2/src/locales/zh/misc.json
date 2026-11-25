@@ -44,5 +44,6 @@
   "message.load_strategies_failed": "加载策略失败: {{error}}",
   "message.route_uuid_not_found": "未找到路由 ID (UUID)",
   "message.copied_to_clipboard": "{{label}} 已复制到剪贴板",
-  "message.copy_success": "已复制到剪贴板"
+  "message.copy_success": "已复制到剪贴板",
+  "message.copy_failed": "复制失败，请手动复制"
 }

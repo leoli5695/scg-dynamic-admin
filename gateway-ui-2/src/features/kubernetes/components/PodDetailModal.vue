@@ -13,6 +13,7 @@ import {
 import { getPodDetail, getPodLogs, getPodYaml } from '@/api/kubernetes'
 import type { KubernetesPodDetail, KubernetesPodInfo } from '@/types/kubernetes'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import { phaseTone } from '../utils'
 
 const props = defineProps<{
@@ -152,9 +153,10 @@ function clearLogs() {
   loadLogs()
 }
 
-function copyYaml() {
-  navigator.clipboard.writeText(yaml.value)
-  message.success(t('k8s.copied'))
+async function copyYaml() {
+  const ok = await copyText(yaml.value)
+  if (ok) message.success(t('k8s.copied'))
+  else message.error(t('message.copy_failed'))
 }
 </script>
 
