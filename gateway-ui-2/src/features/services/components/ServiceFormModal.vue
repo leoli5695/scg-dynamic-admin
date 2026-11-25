@@ -12,7 +12,7 @@ import {
 } from '@/components/icons'
 import type { ServiceCategory, ServiceDefinition, ServiceInstanceItem } from '@/types/service'
 import { AI_PROVIDER_TYPES } from '@/types/service'
-import { isValidIP, isValidPort } from '../utils'
+import { isHttpUrl, isValidIP, isValidPort } from '../utils'
 import { message } from '@/utils/feedback'
 import InstanceRow from './InstanceRow.vue'
 import LoadBalancerSelect from './LoadBalancerSelect.vue'
@@ -61,13 +61,25 @@ const initialInstances = (): ServiceInstanceItem[] =>
 const formState = reactive<ServiceFormValues>(initialForm())
 const instances = ref<ServiceInstanceItem[]>(initialInstances())
 const submitting = ref(false)
+const replacingKey = ref(false)
+const keyStatus = computed(() => t(props.service?.credentialRef
+  ? 'services.credential_configured' : 'services.credential_none'))
+
+function toggleKeyReplacement() {
+  replacingKey.value = !replacingKey.value
+  formState.apiKey = undefined
+}
 
 watch(isOpen, (open) => {
-  if (!open) return
+  if (!open) {
+    formState.apiKey = undefined
+    return
+  }
   for (const key of Object.keys(formState)) delete (formState as Record<string, unknown>)[key]
   Object.assign(formState, initialForm())
   instances.value = initialInstances()
   submitting.value = false
+  replacingKey.value = false
 })
 
 const category = computed<ServiceCategory>(() => formState.category ?? (isEdit.value ? props.service?.category ?? 'NORMAL' : 'NORMAL'))
@@ -87,7 +99,12 @@ function handleRemoveInstance(index: number) {
 
 const allDisabled = computed(() => instances.value.length === 0 || instances.value.every((i) => i.enabled === false))
 
+async function validateBaseUrl(_rule: unknown, value?: string) {
+  if (!isHttpUrl(value)) throw new Error(t('services.base_url_invalid'))
+}
+
 async function handleFinish() {
+  if (submitting.value) return
   if (!isAi.value) {
     for (const inst of instances.value) {
       if (!isValidIP(inst.ip)) {
@@ -102,7 +119,7 @@ async function handleFinish() {
   }
   submitting.value = true
   try {
-    const ok = await props.onSubmit({ ...formState }, instances.value)
+    const ok = await props.onSubmit({ ...formState, baseUrl: formState.baseUrl?.trim() }, instances.value)
     if (ok) emit('cancel')
   } finally {
     submitting.value = false
@@ -118,7 +135,9 @@ async function handleFinish() {
     :style="{ top: '24px' }"
     :class="['service-modal', isEdit ? 'service-edit-modal' : 'service-create-modal']"
     wrap-class-name="vn-portal vn-modal"
-    :mask-closable="true"
+    :mask-closable="!submitting"
+    :keyboard="!submitting"
+    :closable="!submitting"
     @cancel="emit('cancel')"
   >
     <template #title>
@@ -144,7 +163,8 @@ async function handleFinish() {
           <div class="section-content">
             <div class="form-row form-row-identity">
               <a-form-item name="category" :label="t('services.category')" :tooltip="isEdit ? t('services.category_locked') : t('services.category_helper')" class="form-item-category">
-                <a-segmented v-model:value="formState.category" :options="categoryOptions" :disabled="isEdit" class="form-segmented" />
+                <div v-if="isEdit" class="vn-readonly">{{ t(isAi ? 'services.category_ai' : 'services.category_normal') }}</div>
+                <a-segmented v-else v-model:value="formState.category" :options="categoryOptions" class="form-segmented" />
               </a-form-item>
               <a-form-item
                 name="name"
@@ -152,7 +172,8 @@ async function handleFinish() {
                 :rules="isEdit ? undefined : [{ required: true, message: t('services.name_required') }]"
                 class="form-item-grow"
               >
-                <a-input v-model:value="formState.name" :placeholder="isEdit ? undefined : t('services.name_placeholder')" :disabled="isEdit" />
+                <div v-if="isEdit" class="vn-readonly vn-mono">{{ formState.name }}</div>
+                <a-input v-else v-model:value="formState.name" :placeholder="t('services.name_placeholder')" />
               </a-form-item>
               <a-form-item name="loadBalancer" :label="t('services.loadBalancer')" class="form-item-lb">
                 <LoadBalancerSelect v-model:value="formState.loadBalancer" />
@@ -177,12 +198,22 @@ async function handleFinish() {
             <a-form-item
               name="apiKey"
               :label="t('services.api_key')"
-              :rules="isEdit ? undefined : [{ required: true, message: t('services.api_key_required') }]"
-              :tooltip="isEdit && service?.credentialRef ? t('services.credential_configured') : t('services.credential_none')"
+              :rules="!isEdit || replacingKey ? [{ required: true, whitespace: true, message: t('services.api_key_required') }] : undefined"
             >
-              <a-input-password v-model:value="formState.apiKey" autocomplete="new-password" :placeholder="isEdit ? t('services.api_key_rotate_placeholder') : t('services.api_key_placeholder')" />
+              <div v-if="isEdit" class="vn-key-status">
+                <span>{{ keyStatus }}</span>
+                <a-button html-type="button" size="small" @click="toggleKeyReplacement">
+                  {{ t(replacingKey ? 'common.cancel' : 'services.replace_key') }}
+                </a-button>
+              </div>
+              <a-input-password v-if="!isEdit || replacingKey" v-model:value="formState.apiKey" autocomplete="new-password" :placeholder="t('services.api_key_placeholder')" />
             </a-form-item>
-            <a-form-item name="baseUrl" :label="t('services.base_url')" :tooltip="t('services.base_url_helper')">
+            <a-form-item
+              name="baseUrl"
+              :label="t('services.base_url')"
+              :tooltip="t('services.base_url_helper')"
+              :rules="[{ validator: validateBaseUrl }]"
+            >
               <a-input v-model:value="formState.baseUrl" :placeholder="t('services.base_url_placeholder')" />
             </a-form-item>
           </div>
@@ -223,7 +254,7 @@ async function handleFinish() {
       </div>
 
       <div class="modal-footer-modern">
-        <a-button @click="emit('cancel')">{{ t('common.cancel') }}</a-button>
+        <a-button :disabled="submitting" @click="emit('cancel')">{{ t('common.cancel') }}</a-button>
         <a-button type="primary" html-type="submit" :loading="submitting">
           <template #icon><EditOutlined v-if="isEdit" /><PlusOutlined v-else /></template>
           {{ t(isEdit ? 'common.update' : 'common.create') }}

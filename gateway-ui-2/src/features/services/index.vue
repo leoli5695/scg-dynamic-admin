@@ -28,7 +28,7 @@ import ServiceTile from './components/ServiceTile.vue'
 import ServiceTable from './components/ServiceTable.vue'
 import ServiceDetailDrawer from './components/ServiceDetailDrawer.vue'
 import ServiceFormModal, { type ServiceFormValues } from './components/ServiceFormModal.vue'
-import { serviceSignature, catalogHealth, type ServiceCatalogRow } from './utils'
+import { catalogHealth } from './utils'
 import '@/styles/vue-native.css'
 import './services-vue-native.css'
 
@@ -42,8 +42,18 @@ const { t } = useI18n()
 
 const instanceId = computed(() => route.params.instanceId as string | undefined)
 
-const view = ref<'grid' | 'table'>('grid')
-const selectedService = ref<ServiceDefinition | null>(null)
+const viewPreferenceKey = 'gateway.services.view'
+function readViewPreference(): 'grid' | 'table' | undefined {
+  try {
+    const value = localStorage.getItem(viewPreferenceKey)
+    return value === 'grid' || value === 'table' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const viewPreference = ref(readViewPreference())
+const selectedName = ref<string | null>(null)
 const editingService = ref<ServiceDefinition | null>(null)
 const createOpen = ref(false)
 const searchInput = useTemplateRef<{ focus: () => void }>('searchInput')
@@ -53,6 +63,12 @@ const servicesRequest = useRequest(
   { deps: [instanceId] },
 )
 const services = computed<ServiceDefinition[]>(() => servicesRequest.data.value ?? [])
+
+const selectedService = computed(() => services.value.find((s) => s.name === selectedName.value))
+
+function openDetails(service: ServiceDefinition) {
+  selectedName.value = service.name
+}
 
 const isAiService = (s: ServiceDefinition): boolean => s.category === 'AI'
 
@@ -73,7 +89,7 @@ watch(
     if (highlightId && services.value.length > 0) {
       const target = services.value.find((s) => s.serviceId === highlightId || s.name === highlightId)
       if (target) {
-        selectedService.value = target
+        openDetails(target)
         const query = { ...route.query }
         delete query.highlight
         delete query.from
@@ -91,12 +107,33 @@ onActivated(() => {
     activatedOnce = true
     return
   }
-  servicesRequest.run()
+  if (!servicesRequest.loading.value) servicesRequest.run()
 })
 
-const tileRows = computed<ServiceCatalogRow[]>(
-  () => filtered.value.map((service) => ({ service, sig: serviceSignature(service) })),
-)
+const pageSize = 24
+const view = computed({
+  get: () => viewPreference.value ?? (healthCounts.value.total > pageSize ? 'table' : 'grid'),
+  set: (value: 'grid' | 'table') => {
+    viewPreference.value = value
+    try { localStorage.setItem(viewPreferenceKey, value) } catch { /* storage is optional */ }
+  },
+})
+const page = ref(1)
+const pageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize)))
+const visibleServices = computed(() => {
+  const start = (Math.min(page.value, pageCount.value) - 1) * pageSize
+  return filtered.value.slice(start, start + pageSize)
+})
+
+watch([category, health, search], () => { page.value = 1 })
+watch(pageCount, (count) => { page.value = Math.min(page.value, count) })
+watch(instanceId, () => {
+  selectedName.value = null
+  editingService.value = null
+  createOpen.value = false
+  page.value = 1
+  servicesRequest.mutate([])
+}, { flush: 'sync' })
 
 const errorMessage = (error: unknown, fallbackKey: string): string =>
   (error instanceof ApiError && error.message ? error.message : t(fallbackKey))
@@ -124,9 +161,10 @@ async function handleCreate(values: ServiceFormValues, instances: ServiceInstanc
 async function handleUpdate(values: ServiceFormValues, instances: ServiceInstanceItem[]): Promise<boolean> {
   if (!editingService.value) return false
   const editing = editingService.value
+  const targetInstance = instanceId.value
   try {
     const isAi = (values.category || editing.category) === 'AI'
-    await updateService(editing.name, {
+    const saved = await updateService(editing.name, {
       name: editing.name,
       description: values.description,
       loadBalancer: values.loadBalancer || 'weighted',
@@ -134,18 +172,26 @@ async function handleUpdate(values: ServiceFormValues, instances: ServiceInstanc
       category: values.category || editing.category || 'NORMAL',
       ...(isAi ? {
         providerType: values.providerType ?? editing.providerType,
-        baseUrl: values.baseUrl ?? editing.baseUrl,
+        baseUrl: values.baseUrl ?? '',
         // apiKey is write-only: only sent when the operator rotated it.
         ...(values.apiKey ? { apiKey: values.apiKey } : {}),
         credentialRef: editing.credentialRef,
       } : {}),
-    }, instanceId.value)
+    }, targetInstance)
     message.success(t('message.update_success'))
-    servicesRequest.run()
-    if (selectedService.value?.name === editing.name) {
-      selectedService.value = { ...selectedService.value, ...values, name: editing.name, instances }
+    if (targetInstance !== instanceId.value) return true
+
+    const probeChanged = values.apiKey || saved?.providerType !== editing.providerType
+      || (saved?.baseUrl ?? '') !== (editing.baseUrl ?? '')
+    // Normal services need the list response to get authoritative node health.
+    if (!isAi || !saved?.name || servicesRequest.loading.value) {
+      servicesRequest.run()
+    } else {
+      const { apiKey: _apiKey, ...config } = saved
+      servicesRequest.mutate((current) => (current ?? []).map((service) => service.name === editing.name
+        ? { ...service, ...config, providerHealth: probeChanged ? undefined : service.providerHealth }
+        : service))
     }
-    editingService.value = null
     return true
   } catch (error) {
     message.error(errorMessage(error, 'message.update_failed'))
@@ -153,12 +199,16 @@ async function handleUpdate(values: ServiceFormValues, instances: ServiceInstanc
   }
 }
 
+// Keep service confirmations above the details drawer and its mask.
+const serviceConfirmationZIndex = 1200
+
 function handleDelete(service: ServiceDefinition) {
   modal.confirm({
     title: t('common.confirm'),
     content: t('message.confirm_delete_service', { name: service.name }),
     okText: t('common.delete'),
     okType: 'primary',
+    zIndex: serviceConfirmationZIndex,
     okButtonProps: { danger: true },
     cancelText: t('common.cancel'),
     onOk: () => removeService(service),
@@ -172,6 +222,7 @@ async function removeService(service: ServiceDefinition) {
     if ((usage ?? []).length > 0) {
       modal.error({
         title: t('common.error'),
+        zIndex: serviceConfirmationZIndex,
         content: `${t('message.service_in_use')}: ${usage.join(', ')}`,
         wrapClassName: 'vn-portal',
       })
@@ -180,14 +231,14 @@ async function removeService(service: ServiceDefinition) {
     await deleteService(service.name, instanceId.value)
     message.success(t('message.delete_success'))
     servicesRequest.run()
-    if (selectedService.value?.name === service.name) selectedService.value = null
+    if (selectedName.value === service.name) selectedName.value = null
   } catch (error) {
     message.error(errorMessage(error, 'message.delete_failed'))
   }
 }
 
 function openEditModal(service: ServiceDefinition) {
-  selectedService.value = null
+  selectedName.value = null
   editingService.value = service
 }
 
@@ -275,11 +326,16 @@ const statItems = computed<VnStatItem[]>(() => {
 
     <!-- Metrics, category and search share one tool row to save vertical space. -->
     <div class="vn-metarow">
-      <VnStatRail :items="statItems" :label="t('services.stats_services')" @select="selectStat" />
       <VnSegmented v-model="category" :options="categoryOptions" :label="t('services.category')" />
+      <VnStatRail
+        :items="statItems"
+        :label="t('services.stats_scope', { category: t(category === 'AI' ? 'services.tab_ai' : 'services.tab_normal') })"
+        @select="selectStat"
+      />
       <a-input
         ref="searchInput"
         v-model:value="search"
+        :aria-label="t('services.search_placeholder')"
         :placeholder="t('services.search_placeholder')"
         allow-clear
         class="vn-search"
@@ -287,7 +343,7 @@ const statItems = computed<VnStatItem[]>(() => {
         <template #prefix><SearchOutlined /></template>
       </a-input>
       <span class="vn-filterbar-spacer" />
-      <span class="vn-result-count">{{ t('services.results', { count: filtered.length }) }}</span>
+      <span class="vn-result-count" role="status">{{ t('services.results', { count: filtered.length }) }}</span>
       <a-button v-if="isFiltered" type="text" size="small" @click="resetFilters">
         {{ t('common.reset') }}
       </a-button>
@@ -334,34 +390,38 @@ const statItems = computed<VnStatItem[]>(() => {
 
     <!-- Catalog -->
     <template v-else>
-      <!-- Keyed by category: a whole-batch swap renders instantly instead of
-           animating two disjoint key sets against each other. Within a category
-           the same instance persists, so filtering still reflows smoothly. -->
-      <TransitionGroup v-if="view === 'grid'" :key="category" name="vn-item" tag="div" class="vn-grid">
+      <div v-if="view === 'grid'" class="vn-grid">
         <ServiceTile
-          v-for="row in tileRows"
-          :key="row.service.name"
-          v-memo="[row.sig]"
-          :service="row.service"
-          @detail="selectedService = $event"
+          v-for="service in visibleServices"
+          :key="service.name"
+          :service="service"
+          @detail="openDetails"
           @edit="openEditModal"
           @delete="handleDelete"
         />
-      </TransitionGroup>
+      </div>
       <ServiceTable
         v-else
-        :key="category"
-        :rows="tileRows"
-        @detail="selectedService = $event"
+        :is-ai="category === 'AI'"
+        :rows="visibleServices"
+        @detail="openDetails"
         @edit="openEditModal"
         @delete="handleDelete"
+      />
+      <a-pagination
+        v-if="pageCount > 1"
+        v-model:current="page"
+        :page-size="pageSize"
+        :total="filtered.length"
+        :show-size-changer="false"
+        class="vn-service-pagination"
       />
     </template>
 
     <ServiceDetailDrawer
       v-if="selectedService"
       :service="selectedService"
-      @close="selectedService = null"
+      @close="selectedName = null"
       @edit="openEditModal"
       @delete="handleDelete"
     />

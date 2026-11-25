@@ -1,19 +1,15 @@
 <script setup lang="ts">
-/**
- * Dense table view of the same catalog. A plain table rather than a-table:
- * rows are memoised on the service object, so re-filtering never re-renders
- * unchanged rows.
- */
 import { useI18n } from 'vue-i18n'
 import {
-  CloudServerOutlined, DeleteOutlined, EditOutlined, EyeOutlined, RobotOutlined,
+  CloudServerOutlined, EditOutlined, RobotOutlined,
 } from '@/components/icons'
 import type { ServiceDefinition } from '@/types/service'
 import VnBadge from '@/components/vn/VnBadge.vue'
 import VnIconButton from '@/components/vn/VnIconButton.vue'
-import { getCatalogStatus, getLoadBalancerLabelKey, type ServiceCatalogRow } from '../utils'
+import ServiceActionsMenu from './ServiceActionsMenu.vue'
+import { getCatalogStatus, getLoadBalancerLabelKey } from '../utils'
 
-defineProps<{ rows: ServiceCatalogRow[] }>()
+defineProps<{ rows: ServiceDefinition[]; isAi: boolean }>()
 const emit = defineEmits<{
   (e: 'detail', s: ServiceDefinition): void
   (e: 'edit', s: ServiceDefinition): void
@@ -32,17 +28,16 @@ const healthyOf = (s: ServiceDefinition) =>
       <thead>
         <tr>
           <th>{{ t('services.name') }}</th>
-          <th>{{ t('services.status') }}</th>
+          <th>{{ t(isAi ? 'services.provider_health' : 'services.status') }}</th>
           <th>{{ t('services.loadBalancer') }}</th>
-          <th>{{ t('services.instances') }}</th>
+          <th>{{ t(isAi ? 'services.provider_type' : 'services.instances') }}</th>
           <th class="vn-table-actions-head">{{ t('services.actions') }}</th>
         </tr>
       </thead>
-      <TransitionGroup name="vn-item" tag="tbody">
+      <tbody>
         <tr
-          v-for="{ service, sig } in rows"
+          v-for="service in rows"
           :key="service.name"
-          v-memo="[sig]"
           class="service-card vn-row"
         >
           <td>
@@ -52,7 +47,7 @@ const healthyOf = (s: ServiceDefinition) =>
                 <CloudServerOutlined v-else />
               </span>
               <div class="vn-row-names">
-                <span class="vn-row-name">{{ service.name }}</span>
+                <button type="button" class="vn-service-name" :title="service.name" @click="emit('detail', service)">{{ service.name }}</button>
                 <span class="vn-mono vn-row-id">{{ service.serviceId || service.name }}</span>
               </div>
             </div>
@@ -75,13 +70,12 @@ const healthyOf = (s: ServiceDefinition) =>
           </td>
           <td>
             <div class="vn-iconbtn-group">
-              <VnIconButton :icon="EyeOutlined" :label="t('common.detail')" @click="emit('detail', service)" />
               <VnIconButton :icon="EditOutlined" :label="t('common.edit')" @click="emit('edit', service)" />
-              <VnIconButton :icon="DeleteOutlined" :label="t('common.delete')" danger @click="emit('delete', service)" />
+              <ServiceActionsMenu @delete="emit('delete', service)" />
             </div>
           </td>
         </tr>
-      </TransitionGroup>
+      </tbody>
     </table>
   </div>
 </template>

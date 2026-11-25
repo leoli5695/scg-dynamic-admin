@@ -59,28 +59,6 @@ export const getLoadBalancerLabelKey = (lb: string): string => {
   }
 };
 
-/**
- * Everything a catalog row renders, flattened to a string. A refresh returns
- * fresh objects even when nothing changed; memoising on this instead of object
- * identity keeps unchanged rows from re-rendering.
- */
-export const serviceSignature = (s: ServiceDefinition): string => {
-  const instances = (s.instances || [])
-    .map((i) => `${i.ip}:${i.port}:${i.weight ?? 1}:${i.healthy !== false ? 1 : 0}:${i.enabled !== false ? 1 : 0}`)
-    .join(',');
-  const ph = s.providerHealth;
-  return [
-    s.name, s.serviceId ?? '', s.description ?? '', s.loadBalancer ?? '',
-    s.category ?? '', s.providerType ?? '', s.baseUrl ?? '', instances,
-    ph ? `${ph.status}:${ph.lastProbeAt ?? ''}:${ph.message ?? ''}` : '-',
-  ].join('|');
-};
-
-export interface ServiceCatalogRow {
-  service: ServiceDefinition;
-  sig: string;
-}
-
 export type CatalogHealth = 'healthy' | 'unhealthy' | 'unknown';
 
 /**
@@ -97,7 +75,7 @@ export const catalogHealth = (s: ServiceDefinition): CatalogHealth => {
     if (status === 'UNHEALTHY') return 'unhealthy';
     return 'unknown';
   }
-  return s.instances && s.instances.some((i) => i.healthy !== false) ? 'healthy' : 'unhealthy';
+  return s.instances && s.instances.some((i) => i.enabled !== false && i.healthy !== false) ? 'healthy' : 'unhealthy';
 };
 
 export interface CatalogStatus {
@@ -117,8 +95,8 @@ export const getCatalogStatus = (s: ServiceDefinition): CatalogStatus => {
     return {
       tone: health === 'healthy' ? 'ok' : health === 'unhealthy' ? 'err' : 'idle',
       textKey: health === 'healthy'
-        ? 'services.healthy'
-        : health === 'unhealthy' ? 'services.unhealthy' : 'services.not_probed',
+        ? 'services.provider_reachable'
+        : health === 'unhealthy' ? 'services.provider_unhealthy' : 'services.not_probed',
       detail: ph?.message ?? null,
       lastProbeAt: ph?.lastProbeAt ?? null,
     };
@@ -127,3 +105,14 @@ export const getCatalogStatus = (s: ServiceDefinition): CatalogStatus => {
   const tone = { success: 'ok', warning: 'warn', error: 'err', default: 'idle' } as const;
   return { tone: tone[legacy.color], textKey: legacy.textKey, params: legacy.params };
 };
+
+export function isHttpUrl(value?: string): boolean {
+  const url = value?.trim();
+  if (!url) return true;
+  if (!/^https?:\/\//i.test(url)) return false;
+  try {
+    return Boolean(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}

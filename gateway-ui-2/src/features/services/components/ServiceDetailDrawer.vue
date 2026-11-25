@@ -7,13 +7,14 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   ApiOutlined, CloseOutlined, CloudServerOutlined, CopyOutlined,
-  DeleteOutlined, EditOutlined, RobotOutlined, SwapOutlined,
+  EditOutlined, RobotOutlined,
 } from '@/components/icons'
 import type { ServiceDefinition, ServiceInstanceItem } from '@/types/service'
 import { message } from '@/utils/feedback'
 import { copyText } from '@/utils/clipboard'
 import VnBadge from '@/components/vn/VnBadge.vue'
 import VnIconButton from '@/components/vn/VnIconButton.vue'
+import ServiceActionsMenu from './ServiceActionsMenu.vue'
 import { getCatalogStatus, getLoadBalancerLabelKey } from '../utils'
 
 const props = defineProps<{ service: ServiceDefinition }>()
@@ -51,7 +52,8 @@ async function copyId() {
     :open="true"
     placement="right"
     :closable="false"
-    :width="480"
+    width="min(480px, 100vw)"
+    :aria-label="service.name"
     root-class-name="vn-portal vn-drawer"
     mask
     :mask-closable="true"
@@ -80,10 +82,7 @@ async function copyId() {
 
       <div class="vn-detail-scroll">
         <div class="vn-detail-pills">
-          <VnBadge :tone="tone">{{ t(status.textKey, status.params ?? {}) }}</VnBadge>
-          <span class="vn-chip">
-            <SwapOutlined />{{ t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted')) }}
-          </span>
+          <VnBadge v-if="!isAi" :tone="tone">{{ t(status.textKey, status.params ?? {}) }}</VnBadge>
           <span v-if="isAi" class="vn-chip">
             {{ t('services.category_ai') }}<template v-if="service.providerType"> · {{ service.providerType }}</template>
           </span>
@@ -94,49 +93,45 @@ async function copyId() {
         <section class="vn-detail-section">
           <div class="vn-detail-section-head">{{ t('services.basic_config') }}</div>
           <div class="vn-kv">
-            <div class="vn-kv-item vn-kv-wide">
-              <span class="vn-kv-label">ID</span>
-              <span class="vn-kv-value vn-mono">{{ displayId }}</span>
-            </div>
             <div class="vn-kv-item">
               <span class="vn-kv-label">{{ t('services.loadBalancer') }}</span>
               <span class="vn-kv-value">{{ t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted')) }}</span>
             </div>
-            <div class="vn-kv-item">
-              <span class="vn-kv-label">{{ t('services.instances') }}</span>
-              <span class="vn-kv-value">{{ healthyCount }} / {{ instances.length }}</span>
-            </div>
-            <template v-if="isAi">
-              <div class="vn-kv-item">
-                <span class="vn-kv-label">{{ t('services.provider_health') }}</span>
-                <span class="vn-kv-value">
-                  <VnBadge :tone="tone">{{ t(status.textKey, status.params ?? {}) }}</VnBadge>
-                </span>
-              </div>
-              <div class="vn-kv-item">
-                <span class="vn-kv-label">{{ t('services.last_probe') }}</span>
-                <span class="vn-kv-value">
-                  {{ status.lastProbeAt ? new Date(status.lastProbeAt).toLocaleString() : '—' }}
-                </span>
-              </div>
-              <div v-if="service.providerType" class="vn-kv-item">
-                <span class="vn-kv-label">{{ t('services.provider_type') }}</span>
-                <span class="vn-kv-value">{{ service.providerType }}</span>
-              </div>
-              <div v-if="service.baseUrl" class="vn-kv-item vn-kv-wide">
-                <span class="vn-kv-label">{{ t('services.base_url') }}</span>
-                <span class="vn-kv-value vn-mono">{{ service.baseUrl }}</span>
-              </div>
-            </template>
           </div>
-          <p v-if="isAi && status.detail" class="vn-probe-note">{{ status.detail }}</p>
         </section>
 
-        <section class="vn-detail-section">
+        <section v-if="isAi" class="vn-detail-section">
+          <div class="vn-detail-section-head"><RobotOutlined />{{ t('services.provider_probe') }}</div>
+          <div class="vn-kv">
+            <div class="vn-kv-item">
+              <span class="vn-kv-label">{{ t('services.provider_health') }}</span>
+              <span class="vn-kv-value">
+                <VnBadge :tone="tone">{{ t(status.textKey, status.params ?? {}) }}</VnBadge>
+              </span>
+            </div>
+            <div class="vn-kv-item">
+              <span class="vn-kv-label">{{ t('services.last_probe') }}</span>
+              <span class="vn-kv-value">
+                {{ status.lastProbeAt ? new Date(status.lastProbeAt).toLocaleString() : '—' }}
+              </span>
+            </div>
+            <div v-if="service.providerType" class="vn-kv-item">
+              <span class="vn-kv-label">{{ t('services.provider_type') }}</span>
+              <span class="vn-kv-value">{{ service.providerType }}</span>
+            </div>
+            <div v-if="service.baseUrl" class="vn-kv-item vn-kv-wide">
+              <span class="vn-kv-label">{{ t('services.base_url') }}</span>
+              <span class="vn-kv-value vn-mono">{{ service.baseUrl }}</span>
+            </div>
+          </div>
+          <p v-if="status.detail" class="vn-probe-note">{{ status.detail }}</p>
+        </section>
+
+        <section v-if="!isAi || instances.length" class="vn-detail-section">
           <div class="vn-detail-section-head">
             <ApiOutlined />
             <span>{{ t('services.instances') }}</span>
-            <span class="vn-count">{{ instances.length }}</span>
+            <span class="vn-count">{{ healthyCount }} / {{ instances.length }}</span>
           </div>
           <div v-if="instances.length > 0" class="vn-instance-list">
             <div v-for="(inst, idx) in instances" :key="inst.instanceId || idx" class="vn-instance-card">
@@ -161,9 +156,7 @@ async function copyId() {
         <a-button type="primary" @click="emit('edit', service)">
           <template #icon><EditOutlined /></template>{{ t('common.edit') }}
         </a-button>
-        <a-button danger @click="emit('delete', service)">
-          <template #icon><DeleteOutlined /></template>{{ t('common.delete') }}
-        </a-button>
+        <ServiceActionsMenu @delete="emit('delete', service)" />
       </div>
     </div>
   </a-drawer>
