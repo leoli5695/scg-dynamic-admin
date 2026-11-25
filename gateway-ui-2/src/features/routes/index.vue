@@ -7,7 +7,10 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { CompassOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons-vue'
+import {
+  CompassOutlined, ExclamationCircleOutlined, PlusOutlined, ReloadOutlined, RobotOutlined,
+  SearchOutlined,
+} from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { ApiError } from '@/api/http'
 import {
@@ -138,7 +141,8 @@ function handleDelete(record: RouteResponse) {
     title: t('common.confirm'),
     content: t('message.confirm_delete_route', { name: record.routeName, routeId: record.id || 'N/A' }),
     okText: t('common.delete'),
-    okType: 'danger',
+    okType: 'primary',
+    okButtonProps: { danger: true },
     cancelText: t('common.cancel'),
     onOk: async () => {
       if (!record.id) {
@@ -181,6 +185,13 @@ function openEditModal(record: RouteResponse) {
   selectedRoute.value = null
   editingRoute.value = record
 }
+
+function resetFilters() {
+  searchTerm.value = ''
+  statusFilter.value = 'all'
+  categoryTab.value = 'ALL'
+  currentPage.value = 1
+}
 </script>
 
 <template>
@@ -210,39 +221,82 @@ function openEditModal(record: RouteResponse) {
       </a-tab-pane>
     </a-tabs>
 
-    <a-spin :spinning="routesRequest.loading">
-      <a-card v-if="filteredRoutes.length === 0" class="empty-card" :bordered="false">
-        <a-empty :description="t('routes.empty_description')">
-          <template #image><CompassOutlined class="empty-icon" /></template>
-          <a-button type="primary" @click="createOpen = true">
-            <template #icon><PlusOutlined /></template>{{ t('routes.create_first') }}
+    <!-- Error state -->
+    <a-card
+      v-if="routesRequest.error.value && routes.length === 0"
+      :bordered="false"
+      class="route-state-card"
+    >
+      <div class="route-state">
+        <span class="route-state-icon is-error"><ExclamationCircleOutlined /></span>
+        <p class="route-state-title">{{ t('common.fetch_error') }}</p>
+        <p class="route-state-hint">{{ routesRequest.error.value.message }}</p>
+        <div class="route-state-actions">
+          <a-button type="primary" @click="routesRequest.run()">
+            <template #icon><ReloadOutlined /></template>
+            {{ t('common.refresh') }}
           </a-button>
-        </a-empty>
+        </div>
+      </div>
+    </a-card>
+
+    <!-- Initial loading skeleton -->
+    <div v-else-if="routesRequest.loading.value && routes.length === 0" class="routes-grid">
+      <a-card v-for="n in 6" :key="n" :bordered="false" class="route-skeleton-card">
+        <a-skeleton active :title="{ width: '55%' }" :paragraph="{ rows: 4 }" />
       </a-card>
-      <template v-else>
-        <div class="routes-grid">
-          <RouteCard
-            v-for="r in paginatedRoutes"
-            :key="r.id"
-            :route="r"
-            @edit="openEditModal"
-            @detail="selectedRoute = $event"
-            @toggle="handleToggle"
-            @delete="handleDelete"
-          />
-        </div>
-        <div v-if="filteredRoutes.length > pageSize" class="pagination-container">
-          <a-pagination
-            v-model:current="currentPage"
-            v-model:page-size="pageSize"
-            :total="filteredRoutes.length"
-            show-size-changer
-            show-quick-jumper
-            :show-total="(total: number) => t('routes.pagination_total', { total })"
-            :page-size-options="['12', '24', '48', '96']"
-          />
-        </div>
-      </template>
+    </div>
+
+    <!-- Empty / filtered-empty states -->
+    <a-card v-else-if="filteredRoutes.length === 0" :bordered="false" class="route-state-card">
+      <div class="route-state">
+        <span class="route-state-icon">
+          <SearchOutlined v-if="routes.length > 0" />
+          <CompassOutlined v-else />
+        </span>
+        <template v-if="routes.length === 0">
+          <p class="route-state-title">{{ t('routes.empty_description') }}</p>
+          <p class="route-state-hint">{{ t('routes.create_description') }}</p>
+          <div class="route-state-actions">
+            <a-button type="primary" @click="createOpen = true">
+              <template #icon><PlusOutlined /></template>
+              {{ t('routes.create_first') }}
+            </a-button>
+          </div>
+        </template>
+        <template v-else>
+          <p class="route-state-title">{{ t('routes.no_match') }}</p>
+          <p class="route-state-hint">{{ t('routes.no_match_hint') }}</p>
+          <div class="route-state-actions">
+            <a-button @click="resetFilters">{{ t('common.reset') }}</a-button>
+          </div>
+        </template>
+      </div>
+    </a-card>
+
+    <a-spin v-else :spinning="routesRequest.loading.value">
+      <div class="routes-grid">
+        <RouteCard
+          v-for="r in paginatedRoutes"
+          :key="r.id"
+          :route="r"
+          @edit="openEditModal"
+          @detail="selectedRoute = $event"
+          @toggle="handleToggle"
+          @delete="handleDelete"
+        />
+      </div>
+      <div v-if="filteredRoutes.length > pageSize" class="pagination-container">
+        <a-pagination
+          v-model:current="currentPage"
+          v-model:page-size="pageSize"
+          :total="filteredRoutes.length"
+          show-size-changer
+          show-quick-jumper
+          :show-total="(total: number) => t('routes.pagination_total', { total })"
+          :page-size-options="['12', '24', '48', '96']"
+        />
+      </div>
     </a-spin>
 
     <!-- Detail drawer -->
@@ -256,7 +310,7 @@ function openEditModal(record: RouteResponse) {
 
     <!-- Create modal -->
     <RouteFormModal
-      v-if="createOpen"
+      :open="createOpen"
       mode="create"
       :services="services"
       :nacos-services="nacosServices"
@@ -266,9 +320,9 @@ function openEditModal(record: RouteResponse) {
 
     <!-- Edit modal -->
     <RouteFormModal
-      v-if="editingRoute"
+      :open="!!editingRoute"
       mode="edit"
-      :route="editingRoute"
+      :route="editingRoute ?? undefined"
       :services="services"
       :nacos-services="nacosServices"
       :on-submit="handleUpdate"

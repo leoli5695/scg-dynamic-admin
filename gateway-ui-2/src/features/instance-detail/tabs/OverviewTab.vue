@@ -4,7 +4,7 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { LinkOutlined } from '@ant-design/icons-vue'
+import { LinkOutlined } from '@/components/icons'
 import {
   getEffectiveAccessUrl, getEffectiveNacosServerAddr, getSpecText, getStatusTextByName,
 } from '@/utils/instance'
@@ -21,48 +21,54 @@ const nacosAddr = computed(() =>
   instance.value.nacosServerAddr ? getEffectiveNacosServerAddr(instance.value) : detail.globalNacosAddr)
 
 const accessUrlSource = computed(() => {
-  if (instance.value.manualAccessUrl) return t('instance.access_url_manual') || '手动配置'
-  if (instance.value.discoveredAccessUrl) return t('instance.access_url_discovered') || 'K8s发现'
-  if (instance.value.reportedAccessUrl) return t('instance.access_url_reported') || '心跳上报'
-  return t('instance.access_url_default') || '默认'
+  if (instance.value.manualAccessUrl) return t('instance.access_url_manual')
+  if (instance.value.discoveredAccessUrl) return t('instance.access_url_discovered')
+  if (instance.value.reportedAccessUrl) return t('instance.access_url_reported')
+  return t('instance.access_url_default')
 })
 </script>
 
 <template>
-  <div class="instance-overview-stats">
-    <a-row :gutter="[24, 24]">
-      <a-col :xs="24" :md="12" :lg="6">
-        <a-card class="instance-stat-card" :bordered="false">
-          <a-statistic
-            :title="t('instance.status')"
-            :value="getStatusTextByName(instance.status ?? '', t)"
-            :value-style="{ color: isRunning ? 'var(--success-color)' : 'var(--warning-color)' }"
-          >
-            <template #prefix><a-badge :status="isRunning ? 'success' : 'warning'" /></template>
-          </a-statistic>
-        </a-card>
-      </a-col>
-      <a-col :xs="24" :md="12" :lg="6">
-        <a-card class="instance-stat-card" :bordered="false">
-          <a-statistic :title="t('instance.replicas')" :value="instance.replicas" suffix="Pods" :value-style="{ color: 'var(--primary-color)' }" />
-        </a-card>
-      </a-col>
-      <a-col :xs="24" :md="12" :lg="6">
-        <a-card class="instance-stat-card" :bordered="false">
-          <a-statistic :title="t('instance.spec')" :value="getSpecText(instance, t)" :value-style="{ color: 'var(--text-primary)' }" />
-        </a-card>
-      </a-col>
-      <a-col :xs="24" :md="12" :lg="6">
-        <a-card class="instance-stat-card" :bordered="false">
-          <HealthScorePopover />
-        </a-card>
-      </a-col>
-    </a-row>
+  <div class="overview-tab">
+    <div class="ov-grid">
+      <div class="card-base ov-card">
+        <span class="ov-label">{{ t('instance.status') }}</span>
+        <div :class="['ov-value', isRunning ? 'is-success' : 'is-warning']">
+          <i :class="['status-dot', isRunning ? 'status-dot-success' : 'status-dot-warning']" />
+          {{ getStatusTextByName(instance.status ?? '', t) }}
+        </div>
+        <span v-if="instance.statusMessage" class="ov-sub" :title="instance.statusMessage">
+          {{ instance.statusMessage }}
+        </span>
+      </div>
 
-    <a-card class="instance-info-section" :title="t('instance.basic_info')" :bordered="false">
-      <a-descriptions :column="{ xs: 1, sm: 2, md: 3 }">
+      <div class="card-base ov-card">
+        <span class="ov-label">{{ t('instance.replicas') }}</span>
+        <div class="ov-value">
+          {{ instance.replicas }}
+          <small>Pods</small>
+        </div>
+        <span class="ov-sub">{{ t('instance.deployment') }}: {{ instance.deploymentName || '-' }}</span>
+      </div>
+
+      <div class="card-base ov-card">
+        <span class="ov-label">{{ t('instance.spec') }}</span>
+        <div class="ov-value is-text">{{ getSpecText(instance, t) }}</div>
+        <span class="ov-sub">{{ instance.cpuCores || 0 }}C / {{ instance.memoryMB || 0 }}MB</span>
+      </div>
+
+      <div class="card-base ov-card ov-card-health">
+        <HealthScorePopover />
+      </div>
+    </div>
+
+    <div class="card-base ov-info">
+      <div class="ov-section-head">
+        <span class="ov-section-title">{{ t('instance.basic_info') }}</span>
+      </div>
+      <a-descriptions :column="{ xs: 1, sm: 2, md: 3 }" :colon="false">
         <a-descriptions-item :label="t('instance.instance_id')">
-          <a-typography-text copyable>{{ instance.instanceId }}</a-typography-text>
+          <a-typography-text copyable class="mono">{{ instance.instanceId }}</a-typography-text>
         </a-descriptions-item>
         <a-descriptions-item :label="t('instance.cluster')">{{ instance.clusterName }}</a-descriptions-item>
         <a-descriptions-item :label="t('instance.namespace')">{{ instance.namespace }}</a-descriptions-item>
@@ -72,14 +78,14 @@ const accessUrlSource = computed(() => {
         <a-descriptions-item :label="t('instance.image')">{{ instance.image }}</a-descriptions-item>
         <a-descriptions-item :label="t('instance.deployment')">{{ instance.deploymentName }}</a-descriptions-item>
         <a-descriptions-item :label="t('instance.access_url')">
-          <span v-if="!accessUrl" class="ant-typography" style="color: var(--text-secondary)">-</span>
+          <span v-if="!accessUrl" class="access-url-source">-</span>
           <a-space v-else direction="vertical" :size="0">
             <a-tooltip :title="t('instance.click_to_open')">
               <a :href="accessUrl" target="_blank" rel="noopener noreferrer" class="instance-access-url">
                 <LinkOutlined style="margin-right: 4px" />{{ accessUrl }}
               </a>
             </a-tooltip>
-            <span class="ant-typography" style="color: var(--text-secondary); font-size: 12px">({{ accessUrlSource }})</span>
+            <span class="access-url-source">({{ accessUrlSource }})</span>
           </a-space>
         </a-descriptions-item>
         <a-descriptions-item :label="t('instance.nacos_console')">
@@ -101,6 +107,6 @@ const accessUrlSource = computed(() => {
           {{ instance.description }}
         </a-descriptions-item>
       </a-descriptions>
-    </a-card>
+    </div>
   </div>
 </template>

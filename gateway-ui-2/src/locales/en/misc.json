@@ -9,6 +9,8 @@
   "resources.total_pods": "Total Pods",
   "resources.running_pods": "Running",
   "resources.containers": "Containers",
+  "resources.local_mode": "Local mode",
+  "resources.local_mode_desc": "This gateway instance runs locally without a Kubernetes cluster, so resource metrics are unavailable.",
   "message.confirm_delete": "Are you sure you want to delete this item?",
   "message.confirm_delete_service": "Are you sure you want to delete service \"{{name}}\"?",
   "message.confirm_delete_strategy": "Are you sure you want to delete strategy \"{{name}}\"?",

@@ -3,7 +3,7 @@
  * Search bar with title, search input, status filter, and create button.
  */
 import { useI18n } from 'vue-i18n'
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { BranchesOutlined, PlusOutlined, SearchOutlined } from '@/components/icons'
 
 export type RouteStatusFilter = 'all' | 'enabled' | 'disabled'
 
@@ -23,8 +23,11 @@ const { t } = useI18n()
 <template>
   <div class="page-header-modern">
     <div class="page-header-left">
-      <h3 class="page-title-main ant-typography">{{ t('routes.title') }}</h3>
-      <span class="ant-typography" style="color: var(--text-secondary)">{{ t('routes.page_description_helper') }}</span>
+      <h3 class="page-title-main has-glyph">
+        <span class="page-header-glyph" aria-hidden="true"><BranchesOutlined /></span>
+        {{ t('routes.title') }}
+      </h3>
+      <span class="page-subtitle">{{ t('routes.page_description_helper') }}</span>
     </div>
     <div class="page-header-right">
       <slot name="stats" />
@@ -36,15 +39,13 @@ const { t } = useI18n()
         @update:value="emit('update:searchTerm', $event)"
       >
         <template #suffix>
-          <a-button type="text" style="color: #94a3b8">
-            <template #icon><SearchOutlined /></template>
-          </a-button>
+          <SearchOutlined class="search-suffix-icon" />
         </template>
       </a-input>
       <a-select
         :value="statusFilter"
         :placeholder="t('routes.status_filter_placeholder')"
-        :style="{ width: '140px' }"
+        class="status-select"
         @change="emit('update:statusFilter', $event)"
       >
         <a-select-option value="all">{{ t('common.all') }}</a-select-option>

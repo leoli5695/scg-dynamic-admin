@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Avatar, Dropdown, Menu, MenuItem, Space } from 'ant-design-vue'
-import { LogoutOutlined, UserOutlined } from '@ant-design/icons-vue'
+import { LogoutOutlined, UserOutlined } from '@/components/icons'
 import { useAuthStore } from '@/stores/auth'
 import { message } from '@/utils/feedback'
 
@@ -25,7 +25,6 @@ async function handleLogout() {
     v-if="auth.user"
     v-model:open="open"
     placement="bottomRight"
-    arrow
     :trigger="['click']"
   >
     <template #overlay>
@@ -36,8 +35,8 @@ async function handleLogout() {
         </MenuItem>
       </Menu>
     </template>
-    <Space class="user-info" :style="{ cursor: 'pointer' }">
-      <Avatar :style="{ backgroundColor: '#165DFF' }" size="small">
+    <Space class="user-info" :size="8">
+      <Avatar class="user-avatar" size="small">
         <template #icon><UserOutlined /></template>
       </Avatar>
       <span class="username">{{ auth.user.nickname || auth.user.username }}</span>

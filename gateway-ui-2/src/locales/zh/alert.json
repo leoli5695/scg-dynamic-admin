@@ -60,5 +60,17 @@
   "alert.smtp_save_first": "请先保存配置",
   "alert.smtp_test_success": "测试邮件发送成功",
   "alert.smtp_test_error": "发送测试邮件失败",
-  "alert.last_error": "最近错误"
+  "alert.last_error": "最近错误",
+  "alert.subtitle": "为本实例配置通知收件人、告警阈值，并追踪每一次告警投递。",
+  "alert.current": "当前",
+  "alert.over_threshold": "超限",
+  "alert.items_total": "共 {{count}} 条",
+  "alert.load_failed": "告警配置加载失败",
+  "alert.load_failed_hint": "请检查网关连接后重试。",
+  "alert.metrics_unavailable": "指标暂不可用",
+  "alert.history_load_failed": "告警历史加载失败",
+  "alert.no_history": "暂无告警记录",
+  "alert.no_history_hint": "阈值超限并发出告警后，会在这里留下记录。",
+  "alert.recipients_hint": "收件人增删会立即保存。",
+  "alert.threshold_hint": "阈值在保存配置后生效。"
 }

@@ -1,0 +1,1041 @@
+/**
+ * "Vue Native" design layer — additive, opt-in via the `.vn-scope` class.
+ *
+ * Identity: flat matte surfaces instead of translucent gradient glass, a single
+ * Vue-green accent instead of a periwinkle→violet gradient, crisp opaque
+ * hairlines instead of glows, and a tighter 12/8/6 radius rhythm.
+ *
+ * Isolation contract (parallel sessions assert the existing global tokens):
+ *  - nothing here redefines a token in variables.css / login-theme.css /
+ *    iconography.css, and no rule matches an element outside `.vn-scope`
+ *    (page root) or `.vn-portal` (teleported antd modal/drawer/dropdown root);
+ *  - every antd override mirrors the global selector with an extra class, so
+ *    this layer wins on specificity and does not depend on CSS import order.
+ */
+
+/* ==================== Tokens ==================== */
+.vn-scope,
+.vn-portal {
+  /* Surfaces: opaque, stepped by lightness. No gradients, no blur. */
+  --vn-surface: #121826;
+  --vn-surface-sunken: #0e1420;
+  --vn-surface-raised: #1a2233;
+  --vn-surface-hover: #1d2637;
+
+  /* Opaque hairlines — readable at 1px without relying on alpha over glass. */
+  --vn-line: #253048;
+  --vn-line-soft: #1c2537;
+  --vn-line-strong: #35425e;
+
+  --vn-ink: #e6ebf5;
+  --vn-ink-2: #9aa7bd;
+  --vn-ink-3: #6f7d95;
+
+  /* Vue green. Filled only on primary actions; status uses the dot form. */
+  --vn-brand: #42d392;
+  --vn-brand-deep: #33a06f;
+  --vn-brand-ink: #06231a;
+  --vn-brand-soft: rgba(66, 211, 146, 0.12);
+  --vn-brand-line: rgba(66, 211, 146, 0.38);
+
+  --vn-ok: #42d392;
+  --vn-warn: #f0b429;
+  --vn-err: #f2555a;
+  --vn-info: #5b9cf8;
+  --vn-idle: #6f7d95;
+
+  --vn-r-panel: 12px;
+  --vn-r-control: 8px;
+  --vn-r-chip: 6px;
+
+  --vn-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --vn-shadow-2: 0 2px 10px -2px rgba(0, 0, 0, 0.34);
+  --vn-shadow-pop: 0 18px 44px -20px rgba(0, 0, 0, 0.7);
+
+  --vn-fast: 130ms;
+  --vn-ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --vn-glyph-sm: 13px;
+  --vn-glyph: 15px;
+  --vn-glyph-lg: 18px;
+  --vn-glyph-xl: 22px;
+  --vn-hit: 26px;
+
+  --vn-mono: 'JetBrains Mono', 'SF Mono', Monaco, Consolas, monospace;
+
+  color: var(--vn-ink);
+}
+
+/* ==================== Typography primitives ==================== */
+.vn-scope .vn-eyebrow {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .vn-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  color: var(--vn-ink);
+}
+
+.vn-scope .vn-lede {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .vn-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .vn-mono,
+.vn-portal .vn-mono {
+  font-family: var(--vn-mono);
+  font-size: 11.5px;
+  letter-spacing: -0.01em;
+}
+
+/* ==================== Toolbar (page header, sits outside any panel) ========== */
+.vn-scope .vn-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.vn-scope .vn-toolbar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.vn-scope .vn-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ==================== Panel ==================== */
+.vn-scope .vn-panel {
+  position: relative;
+  background: var(--vn-surface);
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-panel);
+  box-shadow: var(--vn-shadow-1);
+}
+
+.vn-scope .vn-panel-sunken {
+  background: var(--vn-surface-sunken);
+  border-color: var(--vn-line-soft);
+  box-shadow: none;
+}
+
+.vn-scope .vn-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+
+.vn-scope .vn-panel-body {
+  padding: 16px;
+}
+
+.vn-scope .vn-panel-flush > .vn-panel-body {
+  padding: 0;
+}
+
+.vn-scope .vn-panel-foot {
+  padding: 11px 16px;
+  border-top: 1px solid var(--vn-line-soft);
+}
+
+/* ==================== Stat rail: one panel, hairline-divided cells ========== */
+.vn-scope .vn-statrail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.vn-scope .vn-stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 16px 14px;
+  border: 0;
+  border-left: 1px solid var(--vn-line-soft);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--vn-fast) var(--vn-ease);
+}
+
+.vn-scope .vn-stat:first-child {
+  border-left: 0;
+}
+
+.vn-scope .vn-stat:hover {
+  background: var(--vn-surface-raised);
+}
+
+.vn-scope .vn-stat::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--vn-stat-accent, var(--vn-brand));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--vn-fast) var(--vn-ease);
+}
+
+.vn-scope .vn-stat.is-active::after {
+  transform: scaleX(1);
+}
+
+.vn-scope .vn-stat.is-active {
+  background: var(--vn-surface-raised);
+}
+
+.vn-scope .vn-stat-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vn-stat-accent, var(--vn-ink-3));
+  font-size: var(--vn-glyph-sm);
+}
+
+.vn-scope .vn-stat-value {
+  font-size: 24px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink);
+}
+
+.vn-scope .vn-stat-label {
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+/* ==================== Segmented control (native, replaces antd tabs) ======== */
+.vn-scope .vn-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+}
+
+.vn-scope .vn-seg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--vn-ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--vn-fast) var(--vn-ease),
+    color var(--vn-fast) var(--vn-ease);
+}
+
+.vn-scope .vn-seg-item:hover {
+  color: var(--vn-ink);
+  background: var(--vn-surface-raised);
+}
+
+.vn-scope .vn-seg-item.is-active {
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+}
+
+.vn-scope .vn-seg-item .anticon {
+  font-size: var(--vn-glyph-sm);
+}
+
+.vn-scope .vn-seg-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .vn-seg-item.is-active .vn-seg-count {
+  color: var(--vn-brand);
+}
+
+/* ==================== Filter bar ==================== */
+.vn-scope .vn-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.vn-scope .vn-filterbar-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.vn-scope .vn-result-count {
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.vn-scope .vn-search {
+  width: 260px;
+}
+
+/* ==================== Badge (dot + label, never a filled pill) ============== */
+.vn-scope .vn-badge,
+.vn-portal .vn-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 7px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-badge-line);
+  background: var(--vn-badge-soft);
+  color: var(--vn-badge-ink);
+  font-size: 11.5px;
+  font-weight: 550;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.vn-scope .vn-badge-dot,
+.vn-portal .vn-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.vn-scope .vn-tone-ok,
+.vn-portal .vn-tone-ok {
+  --vn-badge-ink: var(--vn-ok);
+  --vn-badge-soft: rgba(66, 211, 146, 0.10);
+  --vn-badge-line: rgba(66, 211, 146, 0.26);
+}
+
+.vn-scope .vn-tone-warn,
+.vn-portal .vn-tone-warn {
+  --vn-badge-ink: var(--vn-warn);
+  --vn-badge-soft: rgba(240, 180, 41, 0.10);
+  --vn-badge-line: rgba(240, 180, 41, 0.26);
+}
+
+.vn-scope .vn-tone-err,
+.vn-portal .vn-tone-err {
+  --vn-badge-ink: var(--vn-err);
+  --vn-badge-soft: rgba(242, 85, 90, 0.10);
+  --vn-badge-line: rgba(242, 85, 90, 0.28);
+}
+
+.vn-scope .vn-tone-info,
+.vn-portal .vn-tone-info {
+  --vn-badge-ink: var(--vn-info);
+  --vn-badge-soft: rgba(91, 156, 248, 0.10);
+  --vn-badge-line: rgba(91, 156, 248, 0.26);
+}
+
+.vn-scope .vn-tone-idle,
+.vn-portal .vn-tone-idle {
+  --vn-badge-ink: var(--vn-ink-2);
+  --vn-badge-soft: rgba(154, 167, 189, 0.08);
+  --vn-badge-line: var(--vn-line);
+}
+
+/* Semantic ink helpers — usable in page scope and in teleported portals. */
+.vn-scope .vn-ink-ok,
+.vn-portal .vn-ink-ok { color: var(--vn-ok); }
+.vn-scope .vn-ink-warn,
+.vn-portal .vn-ink-warn { color: var(--vn-warn); }
+.vn-scope .vn-ink-err,
+.vn-portal .vn-ink-err { color: var(--vn-err); }
+.vn-scope .vn-ink-info,
+.vn-portal .vn-ink-info { color: var(--vn-info); }
+.vn-scope .vn-ink-idle,
+.vn-portal .vn-ink-idle { color: var(--vn-ink-3); }
+
+/* Dot + text without badge chrome — for select options and dense rows. */
+.vn-scope .vn-dotlabel,
+.vn-portal .vn-dotlabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ==================== Meta chip (key/value fact, not a status) ============== */
+.vn-scope .vn-chip,
+.vn-portal .vn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-2);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.vn-scope .vn-chip .anticon,
+.vn-portal .vn-chip .anticon {
+  font-size: var(--vn-glyph-sm);
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .vn-chip-num {
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink);
+}
+
+/* ==================== Icon button ==================== */
+.vn-scope.vn-scope .ant-btn.vn-iconbtn.ant-btn,
+.vn-portal .ant-btn.vn-iconbtn.ant-btn {
+  width: var(--vn-hit);
+  height: var(--vn-hit);
+  min-width: var(--vn-hit);
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--vn-r-chip);
+  background: transparent;
+  color: var(--vn-ink-3);
+  box-shadow: none;
+}
+
+.vn-scope.vn-scope .ant-btn.vn-iconbtn.ant-btn .anticon,
+.vn-portal .ant-btn.vn-iconbtn.ant-btn .anticon {
+  font-size: var(--vn-glyph);
+  color: inherit;
+}
+
+.vn-scope.vn-scope .ant-btn.vn-iconbtn.ant-btn:not(:disabled):hover,
+.vn-portal .ant-btn.vn-iconbtn.ant-btn:not(:disabled):hover {
+  background: var(--vn-surface-hover);
+  border-color: var(--vn-line);
+  color: var(--vn-ink);
+}
+
+.vn-scope.vn-scope .ant-btn.vn-iconbtn.ant-btn-dangerous.ant-btn:not(:disabled),
+.vn-portal .ant-btn.vn-iconbtn.ant-btn-dangerous.ant-btn:not(:disabled) {
+  color: var(--vn-ink-3);
+}
+
+.vn-scope.vn-scope .ant-btn.vn-iconbtn.ant-btn-dangerous.ant-btn:not(:disabled):hover,
+.vn-portal .ant-btn.vn-iconbtn.ant-btn-dangerous.ant-btn:not(:disabled):hover {
+  background: rgba(242, 85, 90, 0.12);
+  border-color: rgba(242, 85, 90, 0.32);
+  color: var(--vn-err);
+}
+
+.vn-scope .vn-iconbtn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ==================== State panel (empty / error / loading) ================= */
+.vn-scope .vn-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 52px 24px;
+}
+
+.vn-scope .vn-state-glyph {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 6px;
+  border-radius: var(--vn-r-panel);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-3);
+  font-size: var(--vn-glyph-xl);
+}
+
+.vn-scope .vn-state-glyph.is-err {
+  border-color: rgba(242, 85, 90, 0.3);
+  background: rgba(242, 85, 90, 0.1);
+  color: var(--vn-err);
+}
+
+.vn-scope .vn-state-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--vn-ink);
+}
+
+.vn-scope .vn-state-hint {
+  margin: 0;
+  max-width: 440px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .vn-state-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ==================== Skeleton ==================== */
+.vn-scope .vn-skel {
+  border-radius: var(--vn-r-chip);
+  background: linear-gradient(90deg, var(--vn-surface-raised) 25%, var(--vn-surface-hover) 37%, var(--vn-surface-raised) 63%);
+  background-size: 400% 100%;
+  animation: vn-shimmer 1.4s ease infinite;
+}
+
+@keyframes vn-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vn-scope .vn-skel { animation: none; }
+}
+
+/* ==================== antd overrides — page scope ==================== */
+/* Each selector mirrors the global login-skin rule plus one class, so the new
+   layer wins without editing (or reordering) the shared stylesheets. */
+
+/* Cards: strip the glass gradient, the top hairline and the deep shadow. */
+.vn-scope .ant-card.ant-card {
+  background: var(--vn-surface);
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-panel);
+  box-shadow: var(--vn-shadow-1);
+}
+
+.vn-scope .ant-card.ant-card::before {
+  display: none;
+}
+
+.vn-scope .ant-card .ant-card-head {
+  border-bottom: 1px solid var(--vn-line-soft);
+  color: var(--vn-ink);
+}
+
+.vn-scope .card-base,
+.vn-scope .card-elevated {
+  background: var(--vn-surface);
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-panel);
+  box-shadow: var(--vn-shadow-1);
+}
+
+/* Buttons: solid Vue green, no gradient and no glow. */
+.vn-scope .ant-btn.ant-btn,
+.vn-portal .ant-btn.ant-btn {
+  border-radius: var(--vn-r-control);
+  font-weight: 550;
+  box-shadow: none;
+  transition:
+    background var(--vn-fast) var(--vn-ease),
+    border-color var(--vn-fast) var(--vn-ease),
+    color var(--vn-fast) var(--vn-ease);
+}
+
+.vn-scope .ant-btn.ant-btn-primary,
+.vn-portal .ant-btn.ant-btn-primary {
+  background: var(--vn-brand);
+  border: 1px solid var(--vn-brand);
+  color: var(--vn-brand-ink);
+  font-weight: 620;
+  box-shadow: none;
+}
+
+.vn-scope .ant-btn.ant-btn-primary:not(:disabled):hover,
+.vn-portal .ant-btn.ant-btn-primary:not(:disabled):hover {
+  background: #55e0a3;
+  border-color: #55e0a3;
+  color: var(--vn-brand-ink);
+  box-shadow: none;
+}
+
+.vn-scope .ant-btn.ant-btn-primary.ant-btn-dangerous,
+.vn-portal .ant-btn.ant-btn-primary.ant-btn-dangerous {
+  background: var(--vn-err);
+  border-color: var(--vn-err);
+  color: #2a0708;
+  box-shadow: none;
+}
+
+.vn-scope .ant-btn.ant-btn-primary.ant-btn-dangerous:not(:disabled):hover,
+.vn-portal .ant-btn.ant-btn-primary.ant-btn-dangerous:not(:disabled):hover {
+  background: #f77175;
+  border-color: #f77175;
+  color: #2a0708;
+}
+
+.vn-scope .ant-btn.ant-btn-default,
+.vn-portal .ant-btn.ant-btn-default {
+  background: var(--vn-surface-raised);
+  border-color: var(--vn-line);
+  color: var(--vn-ink);
+}
+
+.vn-scope .ant-btn.ant-btn-default:not(:disabled):hover,
+.vn-portal .ant-btn.ant-btn-default:not(:disabled):hover {
+  background: var(--vn-surface-hover);
+  border-color: var(--vn-line-strong);
+  color: var(--vn-ink);
+}
+
+.vn-scope .ant-btn.ant-btn-default.ant-btn-dangerous,
+.vn-portal .ant-btn.ant-btn-default.ant-btn-dangerous {
+  color: var(--vn-err);
+  border-color: rgba(242, 85, 90, 0.34);
+}
+
+.vn-scope .ant-btn.ant-btn-default.ant-btn-dangerous:not(:disabled):hover,
+.vn-portal .ant-btn.ant-btn-default.ant-btn-dangerous:not(:disabled):hover {
+  background: rgba(242, 85, 90, 0.12);
+  border-color: rgba(242, 85, 90, 0.5);
+  color: #f77175;
+}
+
+.vn-scope .ant-btn.ant-btn-text,
+.vn-portal .ant-btn.ant-btn-text {
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-btn.ant-btn-text:not(:disabled):hover,
+.vn-portal .ant-btn.ant-btn-text:not(:disabled):hover {
+  background: var(--vn-surface-hover);
+  color: var(--vn-ink);
+}
+
+.vn-scope .ant-btn.ant-btn-link,
+.vn-portal .ant-btn.ant-btn-link {
+  color: var(--vn-brand);
+}
+
+.vn-scope .ant-btn.ant-btn-link:not(:disabled):hover,
+.vn-portal .ant-btn.ant-btn-link:not(:disabled):hover {
+  color: #55e0a3;
+}
+
+.vn-scope .ant-btn.ant-btn-dashed,
+.vn-portal .ant-btn.ant-btn-dashed {
+  background: transparent;
+  border-color: var(--vn-line);
+  border-style: dashed;
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-btn.ant-btn-dashed:not(:disabled):hover,
+.vn-portal .ant-btn.ant-btn-dashed:not(:disabled):hover {
+  border-color: var(--vn-brand-line);
+  color: var(--vn-brand);
+  background: var(--vn-brand-soft);
+}
+
+/* Inputs: flat sunken fill, green focus ring. */
+.vn-scope .ant-input,
+.vn-scope .ant-input-affix-wrapper,
+.vn-scope .ant-input-number,
+.vn-scope .ant-picker,
+.vn-scope .ant-select .ant-select-selector,
+.vn-portal .ant-input,
+.vn-portal .ant-input-affix-wrapper,
+.vn-portal .ant-input-number,
+.vn-portal .ant-picker,
+.vn-portal .ant-select .ant-select-selector {
+  background: var(--vn-surface-sunken) !important;
+  border-color: var(--vn-line) !important;
+  border-radius: var(--vn-r-control) !important;
+  color: var(--vn-ink);
+}
+
+.vn-scope .ant-input::placeholder,
+.vn-scope .ant-select-selection-placeholder,
+.vn-portal .ant-input::placeholder,
+.vn-portal .ant-select-selection-placeholder {
+  color: var(--vn-ink-3) !important;
+}
+
+.vn-scope .ant-input:hover,
+.vn-scope .ant-input-affix-wrapper:hover,
+.vn-scope .ant-input-number:hover,
+.vn-scope .ant-picker:hover,
+.vn-scope .ant-select:not(.ant-select-disabled):hover .ant-select-selector,
+.vn-portal .ant-input:hover,
+.vn-portal .ant-input-affix-wrapper:hover,
+.vn-portal .ant-input-number:hover,
+.vn-portal .ant-picker:hover,
+.vn-portal .ant-select:not(.ant-select-disabled):hover .ant-select-selector {
+  border-color: var(--vn-line-strong) !important;
+}
+
+.vn-scope .ant-input:focus,
+.vn-scope .ant-input-focused,
+.vn-scope .ant-input-affix-wrapper-focused,
+.vn-scope .ant-input-number-focused,
+.vn-scope .ant-picker-focused,
+.vn-scope .ant-select-focused:not(.ant-select-disabled).ant-select:not(.ant-select-customize-input) .ant-select-selector,
+.vn-portal .ant-input:focus,
+.vn-portal .ant-input-focused,
+.vn-portal .ant-input-affix-wrapper-focused,
+.vn-portal .ant-input-number-focused,
+.vn-portal .ant-picker-focused,
+.vn-portal .ant-select-focused:not(.ant-select-disabled).ant-select:not(.ant-select-customize-input) .ant-select-selector {
+  border-color: var(--vn-brand) !important;
+  box-shadow: 0 0 0 3px var(--vn-brand-soft) !important;
+}
+
+.vn-scope .ant-input-affix-wrapper > input.ant-input,
+.vn-portal .ant-input-affix-wrapper > input.ant-input {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.vn-scope .ant-input-affix-wrapper .ant-input-suffix,
+.vn-portal .ant-input-affix-wrapper .ant-input-suffix {
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .ant-input-number .ant-input-number-input::placeholder,
+.vn-portal .ant-input-number .ant-input-number-input::placeholder {
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .ant-input-number-group-addon,
+.vn-scope .ant-input-group-addon,
+.vn-portal .ant-input-number-group-addon,
+.vn-portal .ant-input-group-addon {
+  background: var(--vn-surface-raised);
+  border-color: var(--vn-line);
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-input[disabled],
+.vn-scope .ant-input-disabled,
+.vn-portal .ant-input[disabled],
+.vn-portal .ant-input-disabled {
+  background: var(--vn-surface-raised) !important;
+  color: var(--vn-ink-3) !important;
+}
+
+/* Form labels */
+.vn-scope .ant-form-item .ant-form-item-label > label,
+.vn-portal .ant-form-item .ant-form-item-label > label {
+  color: var(--vn-ink-2);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.vn-scope .ant-form-item .ant-form-item-explain-error,
+.vn-portal .ant-form-item .ant-form-item-explain-error {
+  color: #ff8a8d;
+  font-size: 11px;
+}
+
+.vn-scope .ant-form-item .ant-form-item-extra,
+.vn-portal .ant-form-item .ant-form-item-extra {
+  color: var(--vn-ink-3);
+  font-size: 11px;
+}
+
+/* Tags used as plain meta get the flat chip treatment. */
+.vn-scope .ant-tag.ant-tag {
+  border-radius: var(--vn-r-chip);
+  border-color: var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-2);
+}
+
+/* Alerts */
+.vn-scope .ant-alert.ant-alert,
+.vn-portal .ant-alert.ant-alert {
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+}
+
+.vn-scope .ant-alert.ant-alert-warning,
+.vn-portal .ant-alert.ant-alert-warning {
+  border-color: rgba(240, 180, 41, 0.3);
+  background: rgba(240, 180, 41, 0.08);
+}
+
+.vn-scope .ant-alert.ant-alert-warning .ant-alert-message,
+.vn-portal .ant-alert.ant-alert-warning .ant-alert-message {
+  color: #f5cd6b;
+}
+
+/* Tooltip / dropdown / popover surfaces */
+.vn-portal.ant-select-dropdown,
+.vn-portal.ant-dropdown .ant-dropdown-menu,
+.vn-portal.ant-popover .ant-popover-inner,
+.vn-portal.ant-picker-dropdown .ant-picker-panel-container {
+  background: var(--vn-surface-raised);
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-control);
+  box-shadow: var(--vn-shadow-pop);
+}
+
+.vn-portal.ant-select-dropdown .ant-select-item {
+  color: var(--vn-ink-2);
+  border-radius: var(--vn-r-chip);
+}
+
+.vn-portal.ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+  font-weight: 600;
+}
+
+.vn-portal.ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: var(--vn-surface-hover);
+}
+
+.vn-tooltip.ant-tooltip .ant-tooltip-inner {
+  background: var(--vn-surface-raised);
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-chip);
+  color: var(--vn-ink);
+  font-size: 11.5px;
+  box-shadow: var(--vn-shadow-pop);
+}
+
+.vn-tooltip.ant-tooltip .ant-tooltip-arrow::before {
+  background: var(--vn-surface-raised);
+}
+
+/* Spin */
+.vn-scope .ant-spin.ant-spin,
+.vn-portal .ant-spin.ant-spin {
+  color: var(--vn-brand);
+}
+
+.vn-scope .ant-spin.ant-spin .ant-spin-dot-item,
+.vn-portal .ant-spin.ant-spin .ant-spin-dot-item {
+  background-color: var(--vn-brand);
+}
+
+.vn-scope .ant-spin-blur {
+  opacity: 0.45;
+  filter: none;
+}
+
+/* Segmented (antd) inside the form */
+.vn-scope .ant-segmented.ant-segmented,
+.vn-portal .ant-segmented.ant-segmented {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 3px;
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-segmented .ant-segmented-item,
+.vn-portal .ant-segmented .ant-segmented-item {
+  border-radius: 6px;
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-segmented .ant-segmented-item:hover,
+.vn-portal .ant-segmented .ant-segmented-item:hover {
+  color: var(--vn-ink);
+}
+
+.vn-scope .ant-segmented .ant-segmented-item-selected,
+.vn-portal .ant-segmented .ant-segmented-item-selected {
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+  box-shadow: none;
+}
+
+.vn-scope .ant-segmented .ant-segmented-thumb,
+.vn-portal .ant-segmented .ant-segmented-thumb {
+  background: var(--vn-brand-soft);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+/* ==================== antd overrides — teleported portals ==================== */
+.vn-portal .ant-modal .ant-modal-content {
+  background: var(--vn-surface);
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-panel);
+  box-shadow: var(--vn-shadow-pop);
+  padding: 0;
+}
+
+.vn-portal .ant-modal .ant-modal-content::before {
+  display: none;
+}
+
+.vn-portal .ant-modal .ant-modal-header {
+  background: transparent;
+  border-bottom: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-panel) var(--vn-r-panel) 0 0;
+  margin: 0;
+  padding: 14px 18px;
+}
+
+.vn-portal .ant-modal .ant-modal-title {
+  color: var(--vn-ink);
+}
+
+.vn-portal .ant-modal .ant-modal-body {
+  padding: 0;
+}
+
+.vn-portal .ant-modal .ant-modal-close {
+  color: var(--vn-ink-3);
+  top: 12px;
+  inset-inline-end: 12px;
+}
+
+.vn-portal .ant-modal .ant-modal-close:hover {
+  color: var(--vn-ink);
+  background: var(--vn-surface-hover);
+}
+
+.vn-portal .ant-modal-confirm .ant-modal-confirm-title {
+  color: var(--vn-ink);
+}
+
+.vn-portal .ant-modal-confirm .ant-modal-confirm-content {
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .ant-modal-confirm .ant-modal-body {
+  padding: 20px;
+}
+
+.vn-portal.ant-drawer .ant-drawer-content {
+  background: var(--vn-surface);
+}
+
+.vn-portal.ant-drawer .ant-drawer-header {
+  background: transparent;
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+
+.vn-portal.ant-drawer .ant-drawer-title {
+  color: var(--vn-ink);
+}
+
+.vn-portal.ant-drawer .ant-drawer-body {
+  padding: 0;
+}
+
+.vn-portal.ant-drawer .ant-drawer-footer {
+  border-top: 1px solid var(--vn-line-soft);
+}
+
+.vn-portal.ant-drawer .ant-drawer-mask {
+  background: rgba(4, 7, 14, 0.6);
+  backdrop-filter: none;
+}
+
+/* ==================== Vue Transition / TransitionGroup ==================== */
+.vn-fade-enter-active,
+.vn-fade-leave-active {
+  transition: opacity var(--vn-fast, 130ms) var(--vn-ease, ease);
+}
+
+.vn-fade-enter-from,
+.vn-fade-leave-to {
+  opacity: 0;
+}
+
+/* Catalog items: short rise-in, quick fade-out, smooth reflow on filter. */
+.vn-item-enter-active {
+  transition:
+    opacity 160ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 160ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.vn-item-leave-active {
+  transition: opacity 110ms ease;
+  position: absolute;
+}
+
+.vn-item-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.vn-item-leave-to {
+  opacity: 0;
+}
+
+.vn-item-move {
+  transition: transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vn-item-enter-active,
+  .vn-item-leave-active,
+  .vn-item-move {
+    transition: none;
+  }
+}
+
+/* Collapsible description */
+.vn-collapse-enter-active,
+.vn-collapse-leave-active {
+  transition:
+    opacity var(--vn-fast, 130ms) ease,
+    transform var(--vn-fast, 130ms) ease;
+}
+
+.vn-collapse-enter-from,
+.vn-collapse-leave-to {
+  opacity: 0;
+  transform: translateY(-3px);
+}

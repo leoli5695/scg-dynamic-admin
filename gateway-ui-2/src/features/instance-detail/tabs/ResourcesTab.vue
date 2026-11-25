@@ -4,7 +4,7 @@
  * Uses GET /api/instances/{id}/resource-metrics; handles local mode.
  */
 import { useI18n } from 'vue-i18n'
-import { ReloadOutlined } from '@ant-design/icons-vue'
+import { ReloadOutlined } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { getInstanceResourceMetrics } from '@/api/instances'
 import { useInstanceDetail } from '../context'
@@ -20,84 +20,88 @@ const metrics = metricsRequest.data
 </script>
 
 <template>
-  <a-card :bordered="false">
-    <div :style="{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }">
-      <h5 class="ant-typography" :style="{ margin: 0 }">{{ t('resources.title') || '集群资源监控' }}</h5>
-      <a-button :loading="metricsRequest.loading" @click="metricsRequest.run()">
+  <div class="card-base resources-panel">
+    <div class="panel-head">
+      <div class="panel-head-left">
+        <span class="panel-title">{{ t('resources.title') }}</span>
+      </div>
+      <a-button :loading="metricsRequest.loading.value" @click="metricsRequest.run()">
         <template #icon><ReloadOutlined /></template>
-        {{ t('common.refresh') || '刷新' }}
+        {{ t('common.refresh') }}
       </a-button>
     </div>
 
-    <div v-if="metricsRequest.loading && !metrics" :style="{ display: 'flex', justifyContent: 'center', padding: '40px' }">
+    <div v-if="metricsRequest.loading.value && !metrics" class="panel-state">
       <a-spin />
     </div>
-    <div v-else-if="!metrics" :style="{ textAlign: 'center', padding: '40px' }">
-      <span class="ant-typography" style="color: var(--text-secondary)">{{ t('resources.no_data') || '暂无资源数据' }}</span>
+    <div v-else-if="!metrics" class="panel-state">
+      {{ t('resources.no_data') }}
     </div>
-    <div v-else-if="metrics.mode === 'local'" :style="{ textAlign: 'center', padding: '40px' }">
-      <a-alert
-        type="info"
-        show-icon
-        :message="t('resources.local_mode') || '本地运行模式'"
-        :description="t('resources.local_mode_desc') || '此网关实例为本地启动，未关联 Kubernetes 集群，无法获取资源指标'"
-      />
-    </div>
+    <a-alert
+      v-else-if="metrics.mode === 'local'"
+      type="info"
+      show-icon
+      :message="t('resources.local_mode')"
+      :description="t('resources.local_mode_desc')"
+    />
     <template v-else>
       <!-- Nodes -->
-      <a-card :title="t('resources.nodes') || '节点'" size="small" :style="{ marginBottom: '16px' }">
-        <a-row :gutter="[16, 16]">
-          <a-col v-for="(node, idx) in metrics.nodes?.list" :key="idx" :xs="24" :sm="12" :md="8" :lg="6">
-            <a-card size="small" :bordered="false" :style="{ background: 'rgba(148,163,184,0.06)' }">
-              <a-space direction="vertical" size="small">
-                <span class="ant-typography" style="font-weight: 600">{{ node.name }}</span>
-                <a-badge :status="node.ready ? 'success' : 'error'" :text="node.ready ? 'Ready' : 'Not Ready'" />
-                <template v-if="node.allocatable">
-                  <span class="ant-typography" style="color: var(--text-secondary); font-size: 12px">CPU: {{ node.allocatable.cpu }}</span>
-                  <span class="ant-typography" style="color: var(--text-secondary); font-size: 12px">Memory: {{ node.allocatable.memory }}</span>
-                </template>
-              </a-space>
-            </a-card>
-          </a-col>
-        </a-row>
-        <div :style="{ marginTop: '16px' }">
-          <span class="ant-typography" style="color: var(--text-secondary)">
-            {{ t('resources.total_nodes') || '节点总数' }}: {{ metrics.nodes?.total || 0 }}
-          </span>
+      <section class="resource-section">
+        <div class="resource-section-head">
+          <span class="resource-section-title">{{ t('resources.nodes') }}</span>
+          <div class="resource-summary">
+            <span class="status-badge status-badge-neutral">
+              {{ t('resources.total_nodes') }}: {{ metrics.nodes?.total || 0 }}
+            </span>
+          </div>
         </div>
-      </a-card>
+        <div class="resource-grid">
+          <div v-for="(node, idx) in metrics.nodes?.list" :key="idx" class="resource-card">
+            <span class="resource-name" :title="node.name">{{ node.name }}</span>
+            <span :class="['status-badge', node.ready ? 'status-badge-success' : 'status-badge-error']">
+              <i :class="['status-dot', node.ready ? 'status-dot-success' : 'status-dot-error']" />
+              {{ node.ready ? 'Ready' : 'Not Ready' }}
+            </span>
+            <template v-if="node.allocatable">
+              <span class="resource-line">
+                <span class="label">CPU</span>{{ node.allocatable.cpu }}
+              </span>
+              <span class="resource-line">
+                <span class="label">MEM</span>{{ node.allocatable.memory }}
+              </span>
+            </template>
+          </div>
+        </div>
+      </section>
 
       <!-- Pods -->
-      <a-card :title="t('resources.pods') || 'Pods'" size="small">
-        <a-row :gutter="[16, 16]">
-          <a-col v-for="(pod, idx) in metrics.pods?.list" :key="idx" :xs="24" :sm="12" :md="8" :lg="6">
-            <a-card
-              size="small"
-              :bordered="false"
-              :style="{ background: pod.phase === 'Running' ? 'rgba(34,197,94,0.08)' : 'rgba(234,179,8,0.08)' }"
-            >
-              <a-space direction="vertical" size="small">
-                <span class="ant-typography" style="font-weight: 600; font-size: 12px">{{ pod.name }}</span>
-                <a-tag :color="pod.phase === 'Running' ? 'success' : 'warning'">{{ pod.phase }}</a-tag>
-                <span v-if="pod.podIP" class="ant-typography" style="color: var(--text-secondary); font-size: 12px">IP: {{ pod.podIP }}</span>
-                <span v-if="pod.containers" class="ant-typography" style="color: var(--text-secondary); font-size: 12px">
-                  {{ t('resources.containers') || '容器' }}: {{ pod.containers.length }}
-                </span>
-              </a-space>
-            </a-card>
-          </a-col>
-        </a-row>
-        <div :style="{ marginTop: '16px' }">
-          <a-space>
-            <span class="ant-typography" style="color: var(--text-secondary)">
-              {{ t('resources.total_pods') || 'Pod总数' }}: {{ metrics.pods?.total || 0 }}
+      <section class="resource-section">
+        <div class="resource-section-head">
+          <span class="resource-section-title">{{ t('resources.pods') }}</span>
+          <div class="resource-summary">
+            <span class="status-badge status-badge-neutral">
+              {{ t('resources.total_pods') }}: {{ metrics.pods?.total || 0 }}
             </span>
-            <span class="ant-typography" style="color: var(--text-secondary)">
-              {{ t('resources.running_pods') || '运行中' }}: {{ metrics.pods?.running || 0 }}
+            <span class="status-badge status-badge-success">
+              {{ t('resources.running_pods') }}: {{ metrics.pods?.running || 0 }}
             </span>
-          </a-space>
+          </div>
         </div>
-      </a-card>
+        <div class="resource-grid">
+          <div v-for="(pod, idx) in metrics.pods?.list" :key="idx" class="resource-card">
+            <span class="resource-name" :title="pod.name">{{ pod.name }}</span>
+            <span :class="['status-badge', pod.phase === 'Running' ? 'status-badge-success' : 'status-badge-warning']">
+              {{ pod.phase }}
+            </span>
+            <span v-if="pod.podIP" class="resource-line">
+              <span class="label">IP</span>{{ pod.podIP }}
+            </span>
+            <span v-if="pod.containers" class="resource-line">
+              <span class="label">{{ t('resources.containers') }}</span>{{ pod.containers.length }}
+            </span>
+          </div>
+        </div>
+      </section>
     </template>
-  </a-card>
+  </div>
 </template>

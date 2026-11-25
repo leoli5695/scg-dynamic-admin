@@ -1,5 +1,8 @@
 {
+  "replay.instanceMismatch": "This request belongs to another instance and cannot be replayed here.",
   "replay.title": "Request Replay Debugger",
+  "replay.eyebrow": "SAFE REQUEST REPLAY",
+  "replay.subtitle": "Rebuild, adjust and compare real requests in a controlled reproduction workflow.",
   "replay.load_error": "Failed to load traces",
   "replay.prepare_error": "Failed to prepare replay",
   "replay.execute_error": "Failed to execute replay",
@@ -22,6 +25,8 @@
   "replay.latency_diff": "Latency Diff",
   "replay.status_match": "Status Match",
   "replay.headers": "Headers",
+  "replay.add_header": "Add header",
+  "replay.remove_header": "Remove header",
   "replay.request_body": "Request Body",
   "replay.comparison": "Comparison",
   "replay.original_response": "Original Response",

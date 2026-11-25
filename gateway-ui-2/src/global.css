@@ -7,6 +7,10 @@
 @import './styles/animations.css';
 @import './styles/premium-ui.css';
 @import './styles/form-page.css';
+/* Login-aligned console skin — must stay last so it wins the cascade. */
+@import './styles/login-theme.css';
+/* Icon system — final layer; owns glyph ink, size rhythm and tiles. */
+@import './styles/iconography.css';
 
 /* ==================== Root Styles ==================== */
 :root {
@@ -28,7 +32,8 @@ body {
   place-items: flex-start;
   min-width: 320px;
   min-height: 100vh;
-  background: var(--bg-base);
+  /* Image lives in login-theme.css; keep the shorthand from resetting it. */
+  background-color: var(--bg-base);
   font-family: var(--font-sans);
 }
 
@@ -46,11 +51,11 @@ code, pre, .monospace {
 /* Global scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: var(--radius-full); }
-::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+::-webkit-scrollbar-thumb { background: rgba(145, 169, 222, 0.22); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: rgba(145, 169, 222, 0.34); }
 
 /* Selection */
-::selection { background: rgba(59, 130, 246, 0.24); color: var(--text-primary); }
+::selection { background: rgba(127, 157, 255, 0.35); color: var(--text-primary); }
 
 /* Page layout primitives shared across features (from legacy App.css). */
 .page-container {

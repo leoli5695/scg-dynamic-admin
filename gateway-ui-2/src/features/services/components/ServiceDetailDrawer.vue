@@ -1,15 +1,19 @@
 <script setup lang="ts">
 /**
- * Service detail drawer — status, description, upstream instances, actions.
+ * Service detail side panel — identity header, status line, nested fact and
+ * instance-pool panels, sticky action footer.
  */
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   ApiOutlined, CloseOutlined, CloudServerOutlined, CopyOutlined,
-  DeleteOutlined, EditOutlined,
-} from '@ant-design/icons-vue'
-import type { ServiceDefinition } from '@/types/service'
+  DeleteOutlined, EditOutlined, RobotOutlined, SwapOutlined,
+} from '@/components/icons'
+import type { ServiceDefinition, ServiceInstanceItem } from '@/types/service'
+import { message } from '@/utils/feedback'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
 import { getLoadBalancerLabelKey, getServiceStatus } from '../utils'
-import { message, modal } from '@/utils/feedback'
 
 const props = defineProps<{ service: ServiceDefinition }>()
 const emit = defineEmits<{
@@ -19,22 +23,26 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const status = getServiceStatus(props.service)
 
-function handleCopy() {
-  navigator.clipboard.writeText(props.service.serviceId || props.service.name)
-  message.success(t('message.copy_success'))
+const TONE = { success: 'ok', warning: 'warn', error: 'err', default: 'idle' } as const
+
+const status = computed(() => getServiceStatus(props.service))
+const tone = computed(() => TONE[status.value.color])
+const isAi = computed(() => props.service.category === 'AI')
+const instances = computed(() => props.service.instances || [])
+const healthyCount = computed(
+  () => instances.value.filter((i) => i.enabled !== false && i.healthy !== false).length,
+)
+const displayId = computed(() => props.service.serviceId || props.service.name)
+
+function instanceTone(inst: ServiceInstanceItem) {
+  if (inst.enabled === false) return 'idle' as const
+  return inst.healthy !== false ? ('ok' as const) : ('err' as const)
 }
 
-function handleDeleteClick() {
-  modal.confirm({
-    title: t('common.confirm'),
-    content: t('message.confirm_delete_service', { name: props.service.name }),
-    okText: t('common.delete'),
-    okType: 'danger',
-    cancelText: t('common.cancel'),
-    onOk: () => emit('delete', props.service),
-  })
+function copyId() {
+  navigator.clipboard.writeText(displayId.value)
+  message.success(t('message.copy_success'))
 }
 </script>
 
@@ -44,82 +52,103 @@ function handleDeleteClick() {
     placement="right"
     :closable="false"
     :width="480"
-    class="service-detail-drawer"
+    root-class-name="vn-portal vn-drawer"
     mask
     :mask-closable="true"
     :destroy-on-close="true"
-    :z-index="999"
     @close="emit('close')"
   >
-    <div class="drawer-content">
-      <!-- Header -->
-      <div class="drawer-header">
-        <div class="drawer-header-left">
-          <div class="drawer-icon"><CloudServerOutlined /></div>
-          <div class="drawer-title-wrapper">
-            <h4 class="drawer-title ant-typography">{{ service.name }}</h4>
-            <div class="drawer-id-row">
-              <span class="ant-typography" style="color: var(--text-secondary)">{{ service.serviceId || service.name }}</span>
-              <a-tooltip :title="t('common.copy')">
-                <a-button type="text" size="small" class="copy-btn" @click="handleCopy">
-                  <template #icon><CopyOutlined /></template>
-                </a-button>
+    <div class="vn-detail">
+      <div class="vn-detail-head">
+        <div class="vn-detail-head-left">
+          <span class="vn-detail-glyph" aria-hidden="true">
+            <RobotOutlined v-if="isAi" />
+            <CloudServerOutlined v-else />
+          </span>
+          <div style="min-width: 0">
+            <h4 class="vn-detail-title">{{ service.name }}</h4>
+            <div class="vn-detail-idrow">
+              <a-tooltip :title="displayId" overlay-class-name="vn-tooltip">
+                <span class="vn-mono vn-detail-id">{{ displayId }}</span>
               </a-tooltip>
+              <VnIconButton :icon="CopyOutlined" :label="t('common.copy_id')" inline @click="copyId" />
             </div>
           </div>
         </div>
-        <a-button type="text" class="drawer-close-btn" @click="emit('close')">
-          <template #icon><CloseOutlined /></template>
-        </a-button>
+        <VnIconButton :icon="CloseOutlined" :label="t('common.close')" @click="emit('close')" />
       </div>
 
-      <!-- Status bar -->
-      <div class="drawer-status-bar">
-        <a-badge :status="status.color" :text="t(status.textKey, status.params ?? {})" />
-        <a-tag color="blue">{{ t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted')) }}</a-tag>
-      </div>
-
-      <!-- Description -->
-      <div v-if="service.description" class="drawer-section">
-        <span class="ant-typography" style="color: var(--text-secondary)">{{ service.description }}</span>
-      </div>
-
-      <!-- Instances -->
-      <div class="drawer-section">
-        <div class="section-title">
-          <ApiOutlined /> {{ t('services.instances') }}<span class="count">{{ service.instances?.length || 0 }}</span>
+      <div class="vn-detail-scroll">
+        <div class="vn-detail-pills">
+          <VnBadge :tone="tone">{{ t(status.textKey, status.params ?? {}) }}</VnBadge>
+          <span class="vn-chip">
+            <SwapOutlined />{{ t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted')) }}
+          </span>
+          <span v-if="isAi" class="vn-chip">
+            {{ t('services.category_ai') }}<template v-if="service.providerType"> · {{ service.providerType }}</template>
+          </span>
         </div>
-        <div v-if="service.instances && service.instances.length > 0" class="instances-detail-list">
-          <div
-            v-for="(inst, idx) in service.instances"
-            :key="idx"
-            :class="['instance-detail-card', inst.healthy !== false && inst.enabled !== false ? 'healthy' : 'unhealthy']"
-          >
-            <div class="instance-main-info">
-              <div class="instance-address">
-                <span class="instance-dot" />
-                <span class="ant-typography" style="font-weight: 600">{{ inst.ip }}:{{ inst.port }}</span>
-              </div>
-              <div class="instance-badges">
-                <a-tag v-if="inst.enabled === false" color="red">{{ t('common.disabled') }}</a-tag>
-                <a-tag v-if="inst.healthy === false" color="orange">{{ t('services.unhealthy') }}</a-tag>
-                <a-tag v-if="inst.enabled !== false && inst.healthy !== false" color="green">{{ t('services.healthy') }}</a-tag>
-              </div>
+
+        <p v-if="service.description" class="vn-detail-desc">{{ service.description }}</p>
+
+        <section class="vn-detail-section">
+          <div class="vn-detail-section-head">{{ t('services.basic_config') }}</div>
+          <div class="vn-kv">
+            <div class="vn-kv-item vn-kv-wide">
+              <span class="vn-kv-label">ID</span>
+              <span class="vn-kv-value vn-mono">{{ displayId }}</span>
             </div>
-            <div class="instance-meta">
-              <span>{{ t('services.weight') }}: {{ inst.weight || 1 }}</span>
+            <div class="vn-kv-item">
+              <span class="vn-kv-label">{{ t('services.loadBalancer') }}</span>
+              <span class="vn-kv-value">{{ t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted')) }}</span>
+            </div>
+            <div class="vn-kv-item">
+              <span class="vn-kv-label">{{ t('services.instances') }}</span>
+              <span class="vn-kv-value">{{ healthyCount }} / {{ instances.length }}</span>
+            </div>
+            <template v-if="isAi">
+              <div v-if="service.providerType" class="vn-kv-item">
+                <span class="vn-kv-label">{{ t('services.provider_type') }}</span>
+                <span class="vn-kv-value">{{ service.providerType }}</span>
+              </div>
+              <div v-if="service.baseUrl" class="vn-kv-item vn-kv-wide">
+                <span class="vn-kv-label">{{ t('services.base_url') }}</span>
+                <span class="vn-kv-value vn-mono">{{ service.baseUrl }}</span>
+              </div>
+            </template>
+          </div>
+        </section>
+
+        <section class="vn-detail-section">
+          <div class="vn-detail-section-head">
+            <ApiOutlined />
+            <span>{{ t('services.instances') }}</span>
+            <span class="vn-count">{{ instances.length }}</span>
+          </div>
+          <div v-if="instances.length > 0" class="vn-instance-list">
+            <div v-for="(inst, idx) in instances" :key="inst.instanceId || idx" class="vn-instance-card">
+              <span :class="['vn-instance-addr', `vn-ink-${instanceTone(inst)}`]">
+                <i class="vn-badge-dot" aria-hidden="true" />
+                <span class="vn-mono">{{ inst.ip }}:{{ inst.port }}</span>
+              </span>
+              <span class="vn-instance-meta">
+                <span>{{ t('services.weight') }}: {{ inst.weight || 1 }}</span>
+                <VnBadge v-if="inst.enabled === false" tone="idle" :dot="false">{{ t('common.disabled') }}</VnBadge>
+                <VnBadge v-else :tone="inst.healthy !== false ? 'ok' : 'err'">
+                  {{ inst.healthy !== false ? t('services.healthy') : t('services.unhealthy') }}
+                </VnBadge>
+              </span>
             </div>
           </div>
-        </div>
-        <a-empty v-else :description="t('services.no_instances_configured')" />
+          <div v-else class="vn-detail-empty">{{ t('services.no_instances_configured') }}</div>
+        </section>
       </div>
 
-      <!-- Actions -->
-      <div class="drawer-actions">
+      <div class="vn-detail-actions">
         <a-button type="primary" @click="emit('edit', service)">
           <template #icon><EditOutlined /></template>{{ t('common.edit') }}
         </a-button>
-        <a-button danger @click="handleDeleteClick">
+        <a-button danger @click="emit('delete', service)">
           <template #icon><DeleteOutlined /></template>{{ t('common.delete') }}
         </a-button>
       </div>

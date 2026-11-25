@@ -5,7 +5,7 @@
  * array owned by the parent form.
  */
 import { useI18n } from 'vue-i18n'
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons-vue'
+import { DeleteOutlined, PlusOutlined } from '@/components/icons'
 import type { RouteServiceBinding } from '@/types/route'
 import type { ServiceDefinition } from '@/types/service'
 import { resolveServiceDisplayName } from '../utils'
@@ -39,58 +39,54 @@ function serviceIdOf(s: Partial<RouteServiceBinding>): string {
 </script>
 
 <template>
-  <div>
-    <a-divider />
-    <div :style="{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '12px' }">
+  <div class="gray-rules">
+    <div class="gray-rules-switch">
       <a-switch
         :checked="enabled"
         :checked-children="t('routes.gray_rules_enabled')"
         :un-checked-children="t('routes.gray_rules_disabled')"
-        @change="emit('update:enabled', $event)"
+        @change="emit('update:enabled', !!$event)"
       />
+      <span class="gray-rules-hint">{{ t('routes.gray_rules_helper') }}</span>
     </div>
 
     <template v-if="enabled">
-      <div
-        v-for="(rule, idx) in rules"
-        :key="idx"
-        :style="{ padding: '8px 10px', marginBottom: '6px', background: 'rgba(139,90,43,0.15)', borderRadius: '6px', border: '1px solid rgba(139,90,43,0.5)' }"
-      >
-        <div :style="{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap' }">
-          <a-select v-model:value="rule.type" :style="{ width: '85px', flexShrink: 0 }" :placeholder="t('routes.rule_type')" size="small">
-            <a-select-option value="HEADER">Header</a-select-option>
-            <a-select-option value="COOKIE">Cookie</a-select-option>
-            <a-select-option value="QUERY">Query</a-select-option>
-            <a-select-option value="WEIGHT">Weight%</a-select-option>
-          </a-select>
-          <a-input v-if="rule.type !== 'WEIGHT'" v-model:value="rule.name" :placeholder="t('routes.gray_rule_name')" :style="{ width: '90px', flexShrink: 0 }" size="small" />
-          <a-input-number v-if="rule.type === 'WEIGHT'" v-model:value="rule.value" :min="1" :max="100" placeholder="%" :style="{ width: '70px', flexShrink: 0 }" addon-after="%" size="small" />
-          <a-input v-else v-model:value="(rule.value as string)" :placeholder="t('routes.gray_rule_value')" :style="{ width: '90px', flexShrink: 0 }" size="small" />
-          <a-tooltip :title="t('routes.target_service_tooltip')">
-            <a-select
-              v-model:value="rule.targetVersion"
-              :style="{ width: '150px', flexShrink: 0 }"
-              :placeholder="t('routes.target_service')"
-              allow-clear
-              show-search
-              size="small"
-              popup-class-name="gray-rule-select-dropdown"
+      <div v-for="(rule, idx) in rules" :key="idx" class="gray-rule-row">
+        <a-select v-model:value="rule.type" :placeholder="t('routes.rule_type')" size="small" class="gray-rule-type">
+          <a-select-option value="HEADER">Header</a-select-option>
+          <a-select-option value="COOKIE">Cookie</a-select-option>
+          <a-select-option value="QUERY">Query</a-select-option>
+          <a-select-option value="WEIGHT">Weight%</a-select-option>
+        </a-select>
+        <a-input v-if="rule.type !== 'WEIGHT'" v-model:value="rule.name" :placeholder="t('routes.gray_rule_name')" size="small" class="gray-rule-input" />
+        <a-input-number v-if="rule.type === 'WEIGHT'" v-model:value="rule.value" :min="1" :max="100" placeholder="%" addon-after="%" size="small" class="gray-rule-weight" />
+        <a-input v-else v-model:value="(rule.value as string)" :placeholder="t('routes.gray_rule_value')" size="small" class="gray-rule-input" />
+        <a-tooltip :title="t('routes.target_service_tooltip')">
+          <a-select
+            v-model:value="rule.targetVersion"
+            :placeholder="t('routes.target_service')"
+            allow-clear
+            show-search
+            size="small"
+            class="gray-rule-target"
+            popup-class-name="gray-rule-select-dropdown"
+          >
+            <a-select-option
+              v-for="(s, sIdx) in configuredServices"
+              :key="sIdx"
+              :value="serviceIdOf(s)"
             >
-              <a-select-option
-                v-for="(s, sIdx) in configuredServices"
-                :key="sIdx"
-                :value="serviceIdOf(s)"
-              >
-                {{ resolveServiceDisplayName(s?.serviceName, serviceIdOf(s), services) }}
-              </a-select-option>
-            </a-select>
-          </a-tooltip>
-          <a-button v-if="rules.length > 1" type="text" danger @click="removeRule(idx)">
+              {{ resolveServiceDisplayName(s?.serviceName, serviceIdOf(s), services) }}
+            </a-select-option>
+          </a-select>
+        </a-tooltip>
+        <a-tooltip v-if="rules.length > 1" :title="t('common.delete')">
+          <a-button type="text" danger class="action-btn" :aria-label="t('common.delete')" @click="removeRule(idx)">
             <template #icon><DeleteOutlined /></template>
           </a-button>
-        </div>
+        </a-tooltip>
       </div>
-      <a-button type="dashed" block @click="addRule">
+      <a-button type="dashed" block class="add-predicate-btn-modern" @click="addRule">
         <template #icon><PlusOutlined /></template>{{ t('routes.add_gray_rule') }}
       </a-button>
     </template>

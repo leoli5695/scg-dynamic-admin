@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Select } from 'ant-design-vue'
-import { GlobalOutlined } from '@ant-design/icons-vue'
+import { GlobalOutlined } from '@/components/icons'
 
 const { locale } = useI18n()
 
@@ -26,8 +26,8 @@ function handleChange(value: unknown) {
   <Select
     :value="currentLang"
     :options="languages"
+    class="header-select"
     popup-class-name="language-switcher-dropdown"
-    :style="{ width: '120px' }"
     @change="handleChange"
   >
     <template #suffixIcon>
@@ -35,3 +35,9 @@ function handleChange(value: unknown) {
     </template>
   </Select>
 </template>
+
+<style scoped>
+.header-select {
+  width: 104px;
+}
+</style>

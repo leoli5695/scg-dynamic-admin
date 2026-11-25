@@ -4,18 +4,18 @@
  * straight from props. Payload follows model/RouteDefinition.java; enable/disable is
  * NOT part of the body (backend uses dedicated /enable and /disable endpoints).
  */
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { h } from 'vue'
 import {
   ApiOutlined, ClusterOutlined, EditOutlined, FileTextOutlined, LinkOutlined,
   PlusOutlined, RobotOutlined, RocketOutlined, ThunderboltOutlined,
-} from '@ant-design/icons-vue'
+} from '@/components/icons'
 import type { RouteCategory, RouteDefinition, RouteResponse, RoutingMode } from '@/types/route'
 import type { NacosDiscoveryServiceInfo, ServiceDefinition } from '@/types/service'
 import {
-  buildRoutePayload, modelMappingToPairs, stringifyPredicateArgs, sumWeights, toFormBinding,
+  buildRoutePayload, modelMappingToPairs, predicateArgsToForm, sumWeights, toFormBinding,
   type RouteFormValues,
 } from '../utils'
 import { message } from '@/utils/feedback'
@@ -29,6 +29,9 @@ const props = defineProps<{
   route?: RouteResponse
   services: ServiceDefinition[]
   nacosServices: NacosDiscoveryServiceInfo[]
+  /** Kept mounted by the page and toggled here (unmounting an open antd modal
+   *  leaks its dialog tree; see perf audit 2026-11-20). */
+  open?: boolean
   onSubmit: (body: RouteDefinition) => Promise<boolean>
 }>()
 const emit = defineEmits<{ (e: 'cancel'): void }>()
@@ -38,15 +41,18 @@ const router = useRouter()
 const route_ = useRoute()
 const instanceId = computed(() => route_.params.instanceId as string | undefined)
 
+const isOpen = computed(() => props.open !== false)
 const isEdit = computed(() => props.mode === 'edit')
 
 // Edit-time bindings with protocol-prefixed serviceIds for the Select.
-const initialBindings = isEdit.value
-  ? (props.route?.services ?? []).map((s) => toFormBinding(s, props.services, props.nacosServices))
-  : []
+function initialBindings() {
+  return isEdit.value
+    ? (props.route?.services ?? []).map((s) => toFormBinding(s, props.services, props.nacosServices))
+    : []
+}
 
-const formState = reactive<RouteFormValues>(
-  isEdit.value
+function initialForm(): RouteFormValues {
+  return isEdit.value
     ? {
       routeName: props.route?.routeName ?? '',
       order: props.route?.order,
@@ -57,10 +63,10 @@ const formState = reactive<RouteFormValues>(
       serviceNamespace: props.route?.serviceNamespace || '',
       serviceGroup: props.route?.serviceGroup || 'DEFAULT_GROUP',
       uri: props.route?.uri,
-      services: initialBindings,
+      services: initialBindings(),
       predicates: (props.route?.predicates ?? []).map((p) => ({
         name: p.name,
-        args: stringifyPredicateArgs(p.name, p.args as Record<string, unknown>),
+        args: predicateArgsToForm(p.name, p.args as Record<string, unknown>),
       })),
       grayRules: props.route?.grayRules?.rules ?? [],
       aiUpstreams: (props.route?.aiUpstreams ?? []).map((u) => ({
@@ -70,8 +76,10 @@ const formState = reactive<RouteFormValues>(
         matchType: p.matchType || 'PREFIX', value: p.value,
       })),
     }
-    : { routeName: '', order: 0, routingMode: 'SINGLE', category: 'NORMAL', predicates: [], services: [], grayRules: [], aiUpstreams: [], modelPredicates: [] },
-)
+    : { routeName: '', order: 0, routingMode: 'SINGLE', category: 'NORMAL', predicates: [], services: [], grayRules: [], aiUpstreams: [], modelPredicates: [] }
+}
+
+const formState = reactive<RouteFormValues>(initialForm())
 
 const category = computed<RouteCategory>(() => formState.category ?? (isEdit.value ? props.route?.category ?? 'NORMAL' : 'NORMAL'))
 const isAi = computed(() => category.value === 'AI')
@@ -81,8 +89,16 @@ const routingMode = computed<RoutingMode>(() => formState.routingMode || 'SINGLE
 const grayRulesEnabled = ref<boolean>(isEdit.value ? (props.route?.grayRules?.enabled || false) : false)
 const submitting = ref(false)
 
+watch(isOpen, (open) => {
+  if (!open) return
+  for (const key of Object.keys(formState)) delete (formState as Record<string, unknown>)[key]
+  Object.assign(formState, initialForm())
+  grayRulesEnabled.value = isEdit.value ? (props.route?.grayRules?.enabled || false) : false
+  submitting.value = false
+})
+
 // Live services list for the gray-rule target dropdown.
-const configuredServices = computed(() => (isEdit.value ? initialBindings : (formState.services ?? [])))
+const configuredServices = computed(() => formState.services ?? [])
 
 const categoryOptions = computed(() => [
   { value: 'NORMAL', label: h('span', {}, [h(ClusterOutlined, { style: 'margin-right:6px' }), t('routes.category_normal')]) },
@@ -157,11 +173,11 @@ function gotoPluginBindings() {
 
 <template>
   <a-modal
-    :open="true"
+    :open="isOpen"
     :footer="null"
-    :width="720"
+    :width="600"
+    :style="{ top: 'var(--space-6)' }"
     :class="['route-modal', isEdit ? 'route-edit-modal' : 'route-create-modal']"
-    :destroy-on-close="true"
     :mask-closable="true"
     @cancel="emit('cancel')"
   >
@@ -179,93 +195,94 @@ function gotoPluginBindings() {
       </div>
     </template>
 
-    <a-form :model="formState" layout="vertical" @finish="handleFinish">
-      <!-- Basic info -->
-      <div class="form-section-modern">
-        <div class="section-header">
-          <FileTextOutlined class="section-icon" />
-          <span class="section-title">{{ t('routes.basic_info') }}</span>
-        </div>
-        <div class="section-content">
-          <a-form-item :label="t('routes.category')" :tooltip="isEdit ? t('routes.category_locked') : t('routes.category_helper')">
-            <a-segmented v-model:value="formState.category" :options="categoryOptions" :disabled="isEdit" />
-          </a-form-item>
-          <a-form-item :label="t('routes.route_name')" :rules="isEdit ? undefined : [{ required: true }]">
-            <a-input v-model:value="formState.routeName" :placeholder="isEdit ? undefined : t('routes.route_name_placeholder')" :disabled="isEdit" size="large" />
-          </a-form-item>
-          <div class="form-row">
-            <a-form-item :label="t('routes.order')" class="form-item-half">
-              <a-input v-model:value="formState.order" type="number" placeholder="0" size="large" />
+    <a-form :model="formState" layout="vertical" class="route-form" @finish="handleFinish">
+      <div class="modal-scroll">
+        <!-- Basic info -->
+        <div class="form-section-modern">
+          <div class="section-header">
+            <FileTextOutlined class="section-icon" />
+            <span class="section-title">{{ t('routes.basic_info') }}</span>
+          </div>
+          <div class="section-content">
+            <a-form-item :label="t('routes.category')" :tooltip="isEdit ? t('routes.category_locked') : t('routes.category_helper')">
+              <a-segmented v-model:value="formState.category" :options="categoryOptions" :disabled="isEdit" class="form-segmented" />
+            </a-form-item>
+            <div class="form-row form-row-name">
+              <a-form-item :label="t('routes.route_name')" :rules="isEdit ? undefined : [{ required: true }]" class="form-item-grow">
+                <a-input v-model:value="formState.routeName" :placeholder="isEdit ? undefined : t('routes.route_name_placeholder')" :disabled="isEdit" />
+              </a-form-item>
+              <a-form-item :label="t('routes.order')" :tooltip="t('routes.order_helper')" class="form-item-order">
+                <a-input v-model:value="formState.order" type="number" placeholder="0" />
+              </a-form-item>
+            </div>
+            <a-form-item :label="t('routes.description_label')">
+              <a-textarea v-model:value="formState.description" :rows="2" :placeholder="t('routes.description_placeholder')" show-count :maxlength="500" />
             </a-form-item>
           </div>
-          <a-form-item :label="t('routes.description_label')">
-            <a-textarea v-model:value="formState.description" :rows="2" :placeholder="t('routes.description_placeholder')" show-count :maxlength="500" />
-          </a-form-item>
         </div>
-      </div>
 
-      <!-- Target configuration -->
-      <div class="form-section-modern">
-        <div class="section-header">
-          <RobotOutlined v-if="isAi" class="section-icon" /><ApiOutlined v-else class="section-icon" />
-          <span class="section-title">{{ isAi ? t('routes.ai_target_configuration') : t('routes.target_configuration') }}</span>
-          <span v-if="isAi" class="section-subtitle">{{ t('routes.ai_target_helper') }}</span>
+        <!-- Target configuration -->
+        <div class="form-section-modern">
+          <div class="section-header">
+            <RobotOutlined v-if="isAi" class="section-icon" /><ApiOutlined v-else class="section-icon" />
+            <span class="section-title">{{ isAi ? t('routes.ai_target_configuration') : t('routes.target_configuration') }}</span>
+            <span v-if="isAi" class="section-subtitle">{{ t('routes.ai_target_helper') }}</span>
+          </div>
+          <div class="section-content">
+            <AiUpstreamsForm v-if="isAi" :ai-services="aiServices" :ai-upstreams="formState.aiUpstreams ?? []" :model-predicates="formState.modelPredicates ?? []" />
+            <template v-else>
+              <ServiceBindingForm :form-state="formState" :services="services" :nacos-services="nacosServices" />
+              <GrayRulesForm
+                v-model:enabled="grayRulesEnabled"
+                :rules="formState.grayRules ?? []"
+                :configured-services="configuredServices"
+                :services="services"
+              />
+            </template>
+          </div>
         </div>
-        <div class="section-content">
-          <AiUpstreamsForm v-if="isAi" :ai-services="aiServices" :ai-upstreams="formState.aiUpstreams ?? []" :model-predicates="formState.modelPredicates ?? []" />
-          <template v-else>
-            <ServiceBindingForm :form-state="formState" :services="services" :nacos-services="nacosServices" />
-            <GrayRulesForm
-              v-model:enabled="grayRulesEnabled"
-              :rules="formState.grayRules ?? []"
-              :configured-services="configuredServices"
-              :services="services"
+
+        <!-- Predicates -->
+        <div class="form-section-modern">
+          <div class="section-header">
+            <ThunderboltOutlined class="section-icon" />
+            <span class="section-title">{{ t('routes.predicates_section') }}</span>
+            <span class="section-subtitle">{{ t('routes.at_least_one_path') }}</span>
+          </div>
+          <div class="section-content">
+            <PredicateItem
+              v-for="(p, idx) in formState.predicates"
+              :key="idx"
+              :predicate="p"
+              :index="idx"
+              @remove="removePredicate"
             />
-          </template>
+            <a-button type="dashed" block class="add-predicate-btn-modern" @click="addPredicate">
+              <template #icon><PlusOutlined /></template>{{ t('routes.add_predicate') }}
+            </a-button>
+          </div>
         </div>
-      </div>
 
-      <!-- Predicates -->
-      <div class="form-section-modern">
-        <div class="section-header">
-          <ThunderboltOutlined class="section-icon" />
-          <span class="section-title">{{ t('routes.predicates_section') }}</span>
-        </div>
-        <div class="section-content">
-          <PredicateItem
-            v-for="(p, idx) in formState.predicates"
-            :key="idx"
-            :predicate="p"
-            :index="idx"
-            @remove="removePredicate"
-          />
-          <a-button type="dashed" block size="large" class="add-predicate-btn-modern" @click="addPredicate">
-            <template #icon><PlusOutlined /></template>{{ t('routes.add_predicate') }}
-          </a-button>
-        </div>
-      </div>
-
-      <!-- Plugins — managed on the plugin binding page -->
-      <div class="form-section-modern">
-        <div class="section-header">
-          <RocketOutlined class="section-icon" />
-          <span class="section-title">{{ t('routes.plugins_section') }}</span>
-        </div>
-        <div class="section-content">
-          <a-alert type="info" show-icon :message="t('routes.plugins_guide_title')" :description="t('routes.plugins_guide_desc')" :style="{ marginBottom: '16px' }" />
-          <a-button type="dashed" block size="large" @click="gotoPluginBindings">
-            <template #icon><LinkOutlined /></template>{{ t('routes.manage_plugin_bindings') }}
-          </a-button>
-          <span class="ant-typography" :style="{ display: 'block', marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }">
-            {{ t('routes.plugins_hint') }}
-          </span>
+        <!-- Plugins — managed on the plugin binding page -->
+        <div class="form-section-modern">
+          <div class="section-header">
+            <RocketOutlined class="section-icon" />
+            <span class="section-title">{{ t('routes.plugins_section') }}</span>
+          </div>
+          <div class="section-content">
+            <a-alert type="info" show-icon :message="t('routes.plugins_guide_title')" :description="t('routes.plugins_guide_desc')" class="plugins-guide-alert" />
+            <a-button type="dashed" block class="add-predicate-btn-modern" @click="gotoPluginBindings">
+              <template #icon><LinkOutlined /></template>{{ t('routes.manage_plugin_bindings') }}
+            </a-button>
+            <span class="section-hint">{{ t('routes.plugins_hint') }}</span>
+          </div>
         </div>
       </div>
 
       <!-- Footer -->
       <div class="modal-footer-modern">
-        <a-button size="large" @click="emit('cancel')">{{ t('common.cancel') }}</a-button>
-        <a-button type="primary" size="large" html-type="submit" :loading="submitting">
+        <a-button @click="emit('cancel')">{{ t('common.cancel') }}</a-button>
+        <a-button type="primary" html-type="submit" :loading="submitting">
           <template #icon><EditOutlined v-if="isEdit" /><PlusOutlined v-else /></template>
           {{ t(isEdit ? 'common.update' : 'routes.create') }}
         </a-button>

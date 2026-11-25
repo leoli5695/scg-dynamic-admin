@@ -1,0 +1,479 @@
+/**
+ * Alerts tab styles.
+ * The login skin (styles/login-theme.css + variables.css + iconography.css)
+ * owns surfaces, borders, radii and colors. This file only adds layout and
+ * page-specific composition on top of the shared tokens.
+ */
+
+/* ==================== Page layout ==================== */
+.alert-page {
+  padding: 0;
+  min-height: 100%;
+}
+
+.alert-page .page-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.alert-loading {
+  display: flex;
+  justify-content: center;
+  padding: 80px 0;
+}
+
+/* ==================== Page-level state (error / loading) ==================== */
+.alert-state-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 56px var(--space-6);
+}
+
+.alert-state-icon {
+  width: var(--icon-state-size);
+  height: var(--icon-state-size);
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--space-2);
+  border-radius: 14px;
+  border: 1px solid var(--icon-tile-border);
+  background: var(--icon-state-bg);
+  box-shadow: var(--icon-tile-inset);
+  color: var(--icon-tile-ink);
+  font-size: var(--icon-glyph-xl);
+}
+
+.alert-state-icon.is-error {
+  border-color: color-mix(in srgb, var(--error-color) 30%, transparent);
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
+  color: var(--error-color);
+}
+
+.alert-state-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.alert-state-hint {
+  margin: 0;
+  max-width: 560px;
+  font-size: 12px;
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+
+/* ==================== Panels ==================== */
+.alert-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: stretch;
+  margin-bottom: var(--space-4);
+}
+
+.alert-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.alert-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.alert-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.alert-panel-title .anticon {
+  font-size: var(--icon-glyph);
+  color: var(--icon-ink);
+}
+
+.alert-panel-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.alert-panel-body {
+  padding: 18px 20px 20px;
+}
+
+.alert-metrics-panel .alert-panel-body {
+  flex: 1;
+}
+
+.alert-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ==================== Email settings ==================== */
+.alert-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.alert-field-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.alert-field-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 10px;
+}
+
+.alert-language-select {
+  width: 200px;
+}
+
+.alert-email-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  margin: 10px 0 14px;
+}
+
+.alert-email-pill.ant-tag {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.alert-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ==================== Current metrics ==================== */
+.alert-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+
+.alert-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.alert-metric-value {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.alert-metric-wide {
+  grid-column: 1 / -1;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.alert-metrics-loading {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+/* ==================== Inline error state (metrics / history) ==================== */
+.alert-inline-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 28px 12px;
+}
+
+.alert-inline-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--icon-tile-border);
+  background: var(--icon-state-bg);
+  box-shadow: var(--icon-tile-inset);
+  color: var(--icon-tile-ink);
+  font-size: var(--icon-glyph-lg);
+}
+
+.alert-inline-icon.is-error {
+  border-color: color-mix(in srgb, var(--error-color) 30%, transparent);
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
+  color: var(--error-color);
+}
+
+.alert-inline-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.alert-inline-hint {
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ==================== Threshold cards ==================== */
+.alert-thresh-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.alert-thresh-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-section);
+  transition:
+    border-color var(--duration-fast) var(--ease-default),
+    background var(--duration-fast) var(--ease-default);
+}
+
+.alert-thresh-card.is-over {
+  border-color: color-mix(in srgb, var(--warning-color) 36%, transparent);
+  background: color-mix(in srgb, var(--warning-color) 6%, var(--bg-section));
+}
+
+.alert-thresh-card.is-off {
+  opacity: 0.78;
+}
+
+.alert-thresh-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.alert-thresh-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.alert-thresh-badge {
+  flex-shrink: 0;
+  padding: 1px 7px !important;
+  font-size: 10px !important;
+}
+
+.alert-thresh-inputs {
+  display: flex;
+  gap: 8px;
+}
+
+.alert-thresh-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.alert-thresh-label {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alert-thresh-input.ant-input-number {
+  width: 100%;
+}
+
+.alert-thresh-foot {
+  margin-top: auto;
+}
+
+.alert-thresh-current {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alert-thresh-current b {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.alert-thresh-sep {
+  margin: 0 3px;
+  opacity: 0.6;
+}
+
+.alert-thresh-current.is-over-text,
+.alert-thresh-current.is-over-text b {
+  color: color-mix(in srgb, var(--warning-color) 72%, white);
+}
+
+/* ==================== Save row ==================== */
+.alert-save-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  margin: var(--space-4) 0;
+}
+
+/* ==================== History ==================== */
+.alert-history-body {
+  padding: 8px 20px 20px;
+}
+
+.alert-page .status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.alert-history-table .ant-table-tbody > tr > td.alert-col-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: -0.2px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.alert-history-table .ant-table-tbody > tr > td.alert-col-title {
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+
+.alert-history-title {
+  font-weight: 500;
+}
+
+.alert-detail-content p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.alert-detail-content p.alert-detail-error {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--error-color) 80%, white);
+}
+
+.alert-table-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 42px 20px;
+  text-align: center;
+}
+
+.alert-empty-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.alert-table-empty-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 1360px) {
+  .alert-thresh-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1080px) {
+  .alert-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .alert-thresh-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .alert-thresh-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .alert-thresh-inputs {
+    flex-direction: column;
+  }
+
+  .alert-save-row {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+}

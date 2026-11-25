@@ -1,0 +1,523 @@
+/**
+ * License page styles.
+ * The login skin (styles/login-theme.css + variables.css) owns surfaces, borders,
+ * radii and colors. This file only adds layout and page-specific composition.
+ * Drawer/modal content is teleported outside .license-page, so their rules are
+ * kept top-level with a license- prefix.
+ */
+
+/* ==================== Page layout ==================== */
+.license-page {
+  padding: 0;
+  min-height: 100%;
+}
+
+.license-page .license-page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.license-page .license-page-glyph {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--primary-light);
+  font-size: var(--text-base);
+}
+
+.license-page .license-page-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.license-page .license-page-name {
+  font-size: var(--text-2xl);
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.license-page .license-page-subtitle {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.license-page .license-alert {
+  margin-bottom: var(--space-4);
+}
+
+.license-page .license-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.license-page .license-tab-content {
+  padding-top: var(--space-1);
+}
+
+/* ==================== Overview: status + quota ==================== */
+.license-page .license-overview {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 2.2fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.license-page .license-status-card {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.license-page .license-edition {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.license-page .license-edition-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  font-size: 24px;
+}
+
+.license-page .license-edition-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.license-page .license-edition-name {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.license-page .license-edition-chip {
+  padding: 2px 10px;
+  font-size: 10px;
+  gap: 5px;
+}
+
+.license-page .license-summary-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.license-page .license-summary-note .is-error {
+  color: color-mix(in srgb, var(--error-color) 68%, #fff);
+}
+
+.license-page .license-quota-card {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.license-page .license-quota-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.license-page .license-quota-caption {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.license-page .license-quota-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.license-page .license-quota-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-section);
+}
+
+.license-page .license-quota-metric-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: #8fa1c0;
+}
+
+.license-page .license-quota-metric-head .anticon {
+  font-size: 14px;
+  color: var(--primary-light);
+}
+
+.license-page .license-quota-metric-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.license-page .license-quota-divider {
+  margin: 18px 0 14px;
+}
+
+/* ==================== Feature matrix ==================== */
+.license-page .license-matrix-card {
+  margin-top: var(--space-5);
+}
+
+.license-page .license-feature-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.license-page .license-matrix-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.license-page .license-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: var(--space-1);
+}
+
+.license-page .license-feature-item {
+  appearance: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 96px;
+  padding: 14px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-section);
+  transition:
+    border-color var(--duration-fast) var(--ease-default),
+    background var(--duration-fast) var(--ease-default),
+    transform var(--duration-fast) var(--ease-default);
+}
+
+.license-page .license-feature-item:hover {
+  border-color: color-mix(in srgb, var(--primary-color) 34%, transparent);
+  background: color-mix(in srgb, var(--primary-color) 6%, transparent);
+  transform: translateY(-1px);
+}
+
+.license-page .license-feature-item:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.license-page .license-feature-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--primary-light);
+  font-size: 16px;
+}
+
+.license-page .license-feature-item:not(.is-enabled) .license-feature-icon {
+  background: var(--bg-section);
+  color: var(--text-muted);
+}
+
+.license-page .license-feature-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.license-page .license-feature-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.license-page .license-feature-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.license-page .license-feature-desc {
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+.license-page .license-mini-chip {
+  padding: 1px 9px;
+  font-size: 10px;
+  line-height: 16px;
+  gap: 5px;
+}
+
+/* ==================== Manage tab table ==================== */
+.license-page .license-id-text {
+  font-size: 12px;
+}
+
+.license-page .license-validity {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.license-page .license-validity.is-expired {
+  color: color-mix(in srgb, var(--error-color) 68%, #fff);
+}
+
+/* ==================== Loading skeleton / error state ==================== */
+.license-page .license-skeleton {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 2.2fr);
+  gap: var(--space-4);
+}
+
+.license-page .license-skeleton-wide {
+  grid-column: 1 / -1;
+}
+
+.license-page .license-state-card.ant-card .ant-card-body {
+  padding: var(--space-12) var(--space-6);
+}
+
+.license-page .license-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+}
+
+.license-page .license-state-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--error-color) 30%, transparent);
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
+  color: var(--error-color);
+  font-size: 20px;
+  margin-bottom: var(--space-2);
+}
+
+.license-page .license-state-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.license-page .license-state-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+/* ==================== Tone helpers (shared by cards, table, drawer) ==================== */
+.license-tone-success {
+  color: #86efac;
+}
+
+.license-tone-primary {
+  color: var(--primary-light);
+}
+
+.license-tone-violet {
+  color: color-mix(in srgb, var(--accent-color) 72%, #fff);
+}
+
+/* Violet edition chip: no status-badge preset exists for the accent hue. */
+.license-chip-enterprise {
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 30%, transparent);
+  color: color-mix(in srgb, var(--accent-color) 72%, #fff);
+}
+
+/* ==================== Feature detail drawer (teleported) ==================== */
+.license-drawer-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.license-drawer-title .anticon {
+  color: var(--primary-light);
+  font-size: 16px;
+}
+
+.license-feature-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.license-detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.license-detail-chips .status-badge {
+  padding: 3px 11px;
+  font-size: 11px;
+  gap: 5px;
+}
+
+.license-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.license-detail-copy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--text-secondary);
+}
+
+.license-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.license-detail-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.license-detail-icon {
+  margin-top: 2px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.license-upgrade-alert {
+  margin-top: 4px;
+}
+
+/* ==================== Activate modal (teleported) ==================== */
+.license-activate-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-section);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.license-activate-hint .anticon {
+  margin-top: 2px;
+  color: var(--primary-light);
+}
+
+.license-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.license-modal-actions .license-file-upload {
+  margin-right: auto;
+}
+
+/* ==================== Responsive ==================== */
+@media (min-width: 1500px) {
+  .license-page .license-feature-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .license-page .license-overview,
+  .license-page .license-skeleton {
+    grid-template-columns: 1fr;
+  }
+
+  .license-page .license-quota-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .license-page .license-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .license-page .license-quota-grid {
+    grid-template-columns: 1fr;
+  }
+}

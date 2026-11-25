@@ -60,5 +60,17 @@
   "alert.smtp_save_first": "Please save configuration first",
   "alert.smtp_test_success": "Test email sent successfully",
   "alert.smtp_test_error": "Failed to send test email",
-  "alert.last_error": "Last Error"
+  "alert.last_error": "Last Error",
+  "alert.subtitle": "Recipients, thresholds and delivery history for this gateway instance.",
+  "alert.current": "Current",
+  "alert.over_threshold": "Exceeded",
+  "alert.items_total": "{{count}} items",
+  "alert.load_failed": "Failed to load alert configuration",
+  "alert.load_failed_hint": "Check the gateway connection and try again.",
+  "alert.metrics_unavailable": "Metrics unavailable",
+  "alert.history_load_failed": "Failed to load alert history",
+  "alert.no_history": "No alert history yet",
+  "alert.no_history_hint": "Threshold breaches will appear here once alerts are sent.",
+  "alert.recipients_hint": "Recipient changes save immediately.",
+  "alert.threshold_hint": "Thresholds apply after saving the configuration."
 }

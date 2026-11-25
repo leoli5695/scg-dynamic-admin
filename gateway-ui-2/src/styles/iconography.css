@@ -1,0 +1,316 @@
+/* ==========================================================================
+   Icon system (2026-11-20).
+   One stroke language for the whole console, derived from the login page
+   (features/auth/login.css): outlined glyphs, periwinkle ink, 32px gradient
+   tiles, 28px action hit areas, 16px glyph rhythm.
+   Loaded last from global.css; page stylesheets own their layout, this layer
+   owns glyph size, ink and tile treatments.
+   ========================================================================== */
+
+:root {
+  /* Ink — login page icon family: #a9c2ff highlights, slate-blue idle. */
+  --icon-ink: #8ea1bf;
+  --icon-ink-hover: #dbe5f7;
+  --icon-ink-accent: #a9c2ff;
+  --icon-ink-hover-bg: rgba(127, 157, 255, 0.10);
+
+  /* Rhythm */
+  --icon-glyph-sm: 14px;
+  --icon-glyph: 16px;
+  --icon-glyph-lg: 17px;
+  --icon-glyph-xl: 20px;
+  --icon-hit: 28px;
+  --icon-hit-radius: 9px;
+  --icon-group-gap: 8px;
+
+  /* Tiles */
+  --icon-tile-size: 32px;
+  --icon-tile-sm: 26px;
+  --icon-tile-radius: 11px;
+  --icon-tile-ink: #a9c2ff;
+  --icon-tile-bg: linear-gradient(135deg, rgba(105, 152, 239, 0.20), rgba(164, 146, 234, 0.13));
+  --icon-tile-border: rgba(145, 169, 222, 0.30);
+  --icon-tile-inset: inset 0 1px 0 rgba(210, 225, 255, 0.10);
+
+  /* Empty/state tiles */
+  --icon-state-size: 48px;
+  --icon-state-bg: linear-gradient(135deg, rgba(105, 152, 239, 0.16), rgba(164, 146, 234, 0.10));
+}
+
+/* ---------- Shared tile primitive ---------- */
+.icon-tile {
+  width: var(--icon-tile-size);
+  height: var(--icon-tile-size);
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--icon-tile-radius);
+  border: 1px solid var(--icon-tile-border);
+  background: var(--icon-tile-bg);
+  box-shadow: var(--icon-tile-inset);
+  color: var(--icon-tile-ink);
+  font-size: var(--icon-glyph-lg);
+}
+
+.icon-tile--sm {
+  width: var(--icon-tile-sm);
+  height: var(--icon-tile-sm);
+  border-radius: 9px;
+  font-size: var(--icon-glyph-sm);
+}
+
+.icon-tile--muted {
+  color: var(--text-muted);
+  background: var(--bg-section);
+  border-style: dashed;
+  box-shadow: none;
+}
+
+/* ---------- Sidebar ---------- */
+.app-layout .sidebar-premium .ant-menu-item .anticon {
+  font-size: var(--icon-glyph);
+  color: var(--icon-ink);
+}
+
+.app-layout .sidebar-premium .ant-menu-item:hover .anticon {
+  color: var(--icon-ink-hover);
+}
+
+.app-layout .sidebar-premium .ant-menu-item-selected .anticon {
+  color: var(--icon-ink-accent);
+}
+
+.app-layout .sidebar-collapse-btn .anticon {
+  font-size: var(--icon-glyph);
+}
+
+/* ---------- Tabs (instance console + category tabs) ---------- */
+.app-layout .ant-tabs .ant-tabs-tab .anticon {
+  font-size: var(--icon-glyph);
+}
+
+.app-layout .ant-tabs .ant-tabs-tab .ant-tabs-tab-btn > .anticon {
+  margin-inline-end: 6px;
+}
+
+.app-layout .ant-tabs .ant-tabs-tab .anticon,
+.app-layout .ant-tabs .ant-tabs-tab .anticon svg {
+  color: var(--icon-ink);
+}
+
+.app-layout .ant-tabs .ant-tabs-tab-active .anticon,
+.app-layout .ant-tabs .ant-tabs-tab-active .anticon svg {
+  color: var(--icon-ink-accent);
+}
+
+.instance-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.instance-tab-label .anticon {
+  font-size: var(--icon-glyph);
+  margin: 0;
+}
+
+/* ---------- Page headers ---------- */
+.page-title-main.has-glyph {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.page-header-glyph {
+  width: var(--icon-tile-size);
+  height: var(--icon-tile-size);
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--icon-tile-radius);
+  border: 1px solid var(--icon-tile-border);
+  background: var(--icon-tile-bg);
+  box-shadow: var(--icon-tile-inset);
+  color: var(--icon-tile-ink);
+  font-size: var(--icon-glyph);
+}
+
+.app-layout .instance-detail-icon {
+  font-size: var(--icon-glyph);
+  color: var(--icon-ink-accent);
+}
+
+/* ---------- Action icon buttons ---------- */
+.app-layout .ant-btn.action-btn.ant-btn,
+.app-layout .ant-btn.auth-icon-btn.ant-btn,
+.app-layout .ant-btn.cert-action-btn.ant-btn,
+.app-layout .ant-btn.plugin-action.ant-btn,
+.app-layout .ant-btn.instance-action-btn.ant-btn,
+.app-layout .ant-btn.auth-mini-btn.ant-btn,
+.app-layout .ant-btn.copy-btn.ant-btn,
+.app-layout .ant-btn.drawer-close-btn.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--icon-hit-radius);
+  color: var(--icon-ink);
+  box-shadow: none;
+}
+
+.app-layout .ant-btn.action-btn.ant-btn .anticon,
+.app-layout .ant-btn.auth-icon-btn.ant-btn .anticon,
+.app-layout .ant-btn.cert-action-btn.ant-btn .anticon,
+.app-layout .ant-btn.plugin-action.ant-btn .anticon,
+.app-layout .ant-btn.instance-action-btn.ant-btn .anticon,
+.app-layout .ant-btn.drawer-close-btn.ant-btn .anticon {
+  font-size: var(--icon-glyph);
+}
+
+/* Secondary affordances (copy / compact row remove) stay one step smaller. */
+.app-layout .ant-btn.copy-btn.ant-btn .anticon,
+.app-layout .ant-btn.auth-mini-btn.ant-btn .anticon,
+.app-layout .instance-row-header .action-btn.ant-btn .anticon {
+  font-size: var(--icon-glyph-sm);
+}
+
+.app-layout .ant-btn.copy-btn.ant-btn,
+.app-layout .ant-btn.auth-mini-btn.ant-btn {
+  color: var(--text-muted);
+}
+
+.app-layout .ant-btn.action-btn.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.auth-icon-btn.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.cert-action-btn.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.plugin-action.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.instance-action-btn.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.auth-mini-btn.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.copy-btn.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.drawer-close-btn.ant-btn:not(:disabled):hover {
+  color: var(--icon-ink-hover);
+  background: var(--icon-ink-hover-bg);
+}
+
+/* Destructive icons stay red; semantic ink comes from shared tokens. */
+.app-layout .ant-btn.action-btn.ant-btn-dangerous.ant-btn:not(:disabled),
+.app-layout .ant-btn.cert-action-btn.ant-btn-dangerous.ant-btn:not(:disabled),
+.app-layout .ant-btn.auth-icon-btn.ant-btn.delete.ant-btn:not(:disabled),
+.app-layout .ant-btn.instance-action-btn-danger.ant-btn:not(:disabled),
+.app-layout .ant-btn.plugin-action-danger.ant-btn:not(:disabled) {
+  color: var(--error-color);
+}
+
+.app-layout .ant-btn.action-btn.ant-btn-dangerous.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.cert-action-btn.ant-btn-dangerous.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.auth-icon-btn.ant-btn.delete.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.instance-action-btn-danger.ant-btn:not(:disabled):hover,
+.app-layout .ant-btn.plugin-action-danger.ant-btn:not(:disabled):hover {
+  color: var(--error-color);
+  background: color-mix(in srgb, var(--error-color) 12%, transparent);
+}
+
+/* Icon group rhythm: 28px hits, 8px apart, always centered. */
+.service-actions,
+.route-actions,
+.strategy-actions,
+.auth-card-actions,
+.cert-row-actions,
+.plugin-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--icon-group-gap);
+}
+
+/* ---------- Stat chips ---------- */
+body .stat-chip {
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--icon-glyph-sm);
+  color: var(--icon-ink);
+  line-height: 1;
+}
+
+.stat-chip-icon.text-green-600 { color: var(--success-color); }
+.stat-chip-icon.text-red-600 { color: var(--error-color); }
+.stat-chip-icon.text-blue-600 { color: var(--info-color); }
+.stat-chip-icon.text-amber-600 { color: var(--warning-color); }
+
+/* ---------- Modal / drawer header glyphs ---------- */
+.app-layout .anticon.modal-header-glyph,
+.modal-icon-wrapper,
+.strategy-modal-icon,
+.auth-modal-glyph,
+.upload-modal-icon,
+.cert-upload-icon-wrap,
+.cert-detail-icon {
+  width: var(--icon-tile-size);
+  height: var(--icon-tile-size);
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--icon-tile-radius);
+  border: 1px solid var(--icon-tile-border);
+  background: var(--icon-tile-bg);
+  box-shadow: var(--icon-tile-inset);
+  color: var(--icon-tile-ink);
+  font-size: var(--icon-glyph-lg);
+}
+
+.modal-title,
+.strategy-modal-title,
+.auth-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Empty / state glyphs ---------- */
+.app-layout .service-state-icon,
+.app-layout .route-state-icon,
+.app-layout .cert-state-icon,
+.app-layout .strategy-state-icon,
+.app-layout .auth-state-glyph,
+.app-layout .instances-empty-icon {
+  width: var(--icon-state-size);
+  height: var(--icon-state-size);
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid var(--icon-tile-border);
+  background: var(--icon-state-bg);
+  box-shadow: var(--icon-tile-inset);
+  color: var(--icon-tile-ink);
+  font-size: var(--icon-glyph-xl);
+}
+
+/* Semantic error states keep shared error ink. */
+.app-layout .service-state-icon.is-error,
+.app-layout .route-state-icon.is-error,
+.app-layout .cert-state-icon.is-error,
+.app-layout .strategy-state-icon.is-error,
+.app-layout .auth-state-glyph.is-error {
+  border-color: color-mix(in srgb, var(--error-color) 30%, transparent);
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
+  color: var(--error-color);
+}
+
+/* ---------- Inline section labels ---------- */
+.section-icon,
+.instances-title .anticon,
+.drawer-pill .anticon,
+.service-meta-pill .anticon,
+.route-meta-pill .anticon {
+  font-size: var(--icon-glyph-sm);
+  color: var(--icon-ink);
+}
+
+/* Primary button glyphs share the 16px rhythm. */
+.ant-btn.ant-btn > .anticon,
+.ant-btn.ant-btn > span > .anticon {
+  font-size: var(--icon-glyph);
+}

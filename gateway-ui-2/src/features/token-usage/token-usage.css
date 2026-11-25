@@ -1,0 +1,507 @@
+/**
+ * Token usage page, login-aligned skin (2026-11-20).
+ * Surfaces (panel gradient / border / hairline / shadow) come from the shared
+ * tokens in styles/variables.css + styles/login-theme.css. This file only keeps
+ * layout and page-specific composition.
+ */
+
+/* ==================== Page layout ==================== */
+.token-usage-page {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-8) var(--space-12);
+  min-height: calc(100vh - 64px);
+  color: var(--text-primary);
+}
+
+/* ==================== Page header ==================== */
+.token-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.token-page-heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.token-page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.token-page-title .lg-icon-tile {
+  font-size: 17px;
+}
+
+.token-page-subtitle {
+  margin: 0;
+  max-width: 860px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #95a3bc;
+}
+
+.token-page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* ==================== Pending / error alerts ==================== */
+.token-pending-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.token-pending-row .ant-alert {
+  flex: 1;
+  min-width: 0;
+}
+
+.token-error-alert {
+  margin-bottom: var(--space-4);
+}
+
+/* ==================== Metric cards ==================== */
+.token-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: 14px;
+}
+
+.token-metric.ant-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.token-metric.ant-card .ant-card-body {
+  padding: 18px 20px 16px;
+}
+
+.metric-blue { --metric-tone: var(--primary-light); }
+.metric-purple { --metric-tone: var(--accent-color); }
+.metric-amber { --metric-tone: var(--warning-color); }
+.metric-green { --metric-tone: var(--success-color); }
+
+.token-metric-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-metric .token-metric-icon {
+  color: var(--metric-tone, var(--primary-light));
+}
+
+.token-metric-value {
+  position: relative;
+  z-index: 1;
+  margin: 8px 0 4px;
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.token-metric-unit {
+  margin-left: 5px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.token-metric-caption {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.token-metric.has-spark .token-metric-value {
+  max-width: 72%;
+}
+
+.token-metric-spark {
+  position: absolute;
+  top: 44px;
+  right: 14px;
+  width: 38%;
+  height: 34px;
+  pointer-events: none;
+}
+
+.token-metric-accent {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  height: 2px;
+  pointer-events: none;
+}
+
+.token-metric-accent > i {
+  display: block;
+  height: 100%;
+}
+
+/* ==================== Financial-scope note ==================== */
+.token-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 2px 18px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.token-note .anticon {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ==================== Filters ==================== */
+.token-filter-card.ant-card {
+  margin-bottom: var(--space-5);
+}
+
+.token-filter-card.ant-card .ant-card-head {
+  min-height: 48px;
+}
+
+.token-filter-card.ant-card .ant-card-body {
+  padding: 18px 20px 20px;
+}
+
+.token-reset-btn.ant-btn {
+  padding-inline: 4px !important;
+  font-size: 11px !important;
+}
+
+.token-filters-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.token-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.token-filter-wide {
+  grid-column: span 2;
+}
+
+.token-filter-field > .ant-select,
+.token-filter-field > .ant-picker,
+.token-filter-field > .ant-input-search {
+  width: 100% !important;
+  min-width: 0;
+}
+
+.token-filter-field .ant-input-search .ant-input-affix-wrapper {
+  width: 100%;
+}
+
+.token-usage-page .token-filter-field > .ant-select .ant-select-selector,
+.token-usage-page .token-filter-field > .ant-picker {
+  min-height: 38px;
+}
+
+/* ==================== Empty / error state ==================== */
+.token-state-card {
+  margin-bottom: var(--space-5);
+}
+
+.token-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: 56px var(--space-6);
+}
+
+.token-state-icon {
+  width: var(--icon-state-size);
+  height: var(--icon-state-size);
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--space-2);
+  border-radius: 14px;
+  border: 1px solid var(--icon-tile-border);
+  background: var(--icon-state-bg);
+  box-shadow: var(--icon-tile-inset);
+  color: var(--icon-tile-ink);
+  font-size: var(--icon-glyph-xl);
+}
+
+.token-state-icon.is-error {
+  border-color: color-mix(in srgb, var(--error-color) 30%, transparent);
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
+  color: var(--error-color);
+}
+
+.token-state-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.token-state-hint {
+  margin: 0;
+  max-width: 560px;
+  font-size: 12px;
+  line-height: var(--leading-relaxed);
+  color: var(--text-muted);
+}
+
+.token-state .ant-btn {
+  margin-top: var(--space-4);
+}
+
+/* ==================== Charts ==================== */
+.token-charts-row {
+  margin-bottom: var(--space-4);
+}
+
+.token-charts-row .ant-card .ant-card-body {
+  padding: 14px 16px 10px;
+}
+
+.token-chart {
+  display: block;
+  width: 100%;
+}
+
+.token-chart-lg {
+  height: 260px;
+}
+
+.token-chart-md {
+  height: 240px;
+}
+
+/* ==================== Table ==================== */
+.token-table-card.ant-card .ant-card-body {
+  padding: 8px 20px 20px;
+}
+
+.token-tabs.ant-tabs .ant-tabs-nav {
+  margin-bottom: 10px;
+}
+
+.token-usage-page .ant-table {
+  font-variant-numeric: tabular-nums;
+}
+
+.token-usage-page .ant-table-tbody > tr > td {
+  font-size: 12px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+.token-usage-page .ant-table-tbody > tr > td.token-col-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: -0.2px;
+  color: var(--text-muted);
+}
+
+.token-usage-page .ant-table-tbody > tr > td.token-col-prompt {
+  color: var(--primary-light);
+}
+
+.token-usage-page .ant-table-tbody > tr > td.token-col-completion {
+  color: color-mix(in srgb, var(--accent-color) 72%, white);
+}
+
+.token-usage-page .ant-table-tbody > tr > td.token-col-total {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.token-status-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.token-status-group .status-badge {
+  border-width: 1px;
+  border-style: solid;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.token-detail-link.ant-btn {
+  height: auto;
+  padding: 0;
+  font-size: 12px;
+}
+
+/* ==================== Reconciliation drawer ==================== */
+.token-reconcile {
+  display: flex;
+  flex-direction: column;
+  color: var(--text-secondary);
+}
+
+.token-descriptions.ant-descriptions .ant-descriptions-item {
+  padding-bottom: 8px;
+}
+
+.token-drawer-section {
+  margin-top: var(--space-5);
+}
+
+.token-quota-loading {
+  min-height: 48px;
+}
+
+.token-quota-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: var(--space-4);
+}
+
+.token-command {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.token-command .ant-descriptions {
+  width: 100%;
+}
+
+.token-details {
+  width: 100%;
+}
+
+.token-details > summary {
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.token-details > summary:hover {
+  color: var(--text-primary);
+}
+
+.token-pre {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-section);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.token-command-spin {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0;
+}
+
+.token-reconcile-form.ant-form {
+  width: 100%;
+}
+
+.token-form-alert {
+  margin-bottom: 14px;
+}
+
+.token-number-input {
+  width: 100%;
+}
+
+.token-reconcile-form .ant-form-item {
+  margin-bottom: 14px;
+}
+
+.token-reconcile-form .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+.token-reconcile-form .ant-form-item-label > label {
+  font-size: 12px;
+  color: #c2cde0;
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 1280px) {
+  .token-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1000px) {
+  .token-filters-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .token-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .token-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .token-filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .token-filter-wide {
+    grid-column: auto;
+  }
+
+  .token-pending-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

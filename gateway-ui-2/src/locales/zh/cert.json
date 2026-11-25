@@ -47,6 +47,8 @@
   "cert.enable_confirm": "确定要启用此证书吗？",
   "cert.file_upload": "文件上传",
   "cert.text_input": "文本输入",
+  "cert.next_step": "下一步",
+  "cert.previous_step": "上一步",
   "cert.cert_file": "证书文件",
   "cert.key_file": "私钥文件",
   "cert.click_upload": "点击或拖拽上传证书文件",
@@ -55,5 +57,11 @@
   "cert.file_required": "请提供证书和私钥文件",
   "cert.type_pem": "PEM（证书 + 私钥）",
   "cert.type_jks": "JKS（Java Keystore）",
-  "cert.type_p12": "P12/PFX（PKCS#12）"
+  "cert.type_p12": "P12/PFX（PKCS#12）",
+  "cert.description": "上传、轮换并跟踪 HTTPS 监听使用的 TLS 证书",
+  "cert.empty": "暂无证书",
+  "cert.empty_hint": "上传 PEM 证书包或 Java 密钥库，即可为该网关提供 HTTPS 服务。",
+  "cert.step_basic": "类型与基本信息",
+  "cert.detail_section_cert": "证书信息",
+  "cert.detail_section_validity": "有效期"
 }

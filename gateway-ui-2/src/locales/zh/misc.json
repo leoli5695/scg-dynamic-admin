@@ -9,6 +9,8 @@
   "resources.total_pods": "Pod总数",
   "resources.running_pods": "运行中",
   "resources.containers": "容器",
+  "resources.local_mode": "本地运行模式",
+  "resources.local_mode_desc": "此网关实例为本地启动，未关联 Kubernetes 集群，无法获取资源指标",
   "message.confirm_delete": "确定要删除此项吗？",
   "message.confirm_delete_service": "确定要删除服务 \"{{name}}\" 吗？",
   "message.confirm_delete_strategy": "确定要删除策略 \"{{name}}\" 吗？",

@@ -185,3 +185,71 @@
   --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.10);
 }
+
+/* ==========================================================================
+   Login-aligned console palette (2026-11-20).
+   The public login page (features/auth/login.css) is the visual source of
+   truth for the whole console: deep navy canvas, periwinkle→violet accents,
+   translucent gradient panels with a 1px light border and a top hairline.
+   Values below only re-point existing tokens, so every page that already uses
+   var(--…) inherits the new look without touching page code.
+   ========================================================================== */
+:root {
+  --primary-color: #7f9dff;
+  --primary-hover: #93aefc;
+  --primary-light: #a9c0ff;
+  --accent-color: #a492ea;
+  --info-color: #7f9dff;
+
+  --bg-base: #080d19;
+  --bg-primary: #0a1120;
+  --bg-secondary: #0c1526;
+  --bg-card: #101a2e;
+  --bg-elevated: #101a2e;
+  --bg-hover: rgba(127, 157, 255, 0.10);
+  --bg-input: #0b1323;
+  --bg-section: rgba(148, 163, 184, 0.05);
+  --bg-table-head: rgba(255, 255, 255, 0.02);
+  --color-primary: #7f9dff;
+
+  --text-primary: #edf2ff;
+  --text-secondary: #a5b4cb;
+  --text-muted: #7d8dab;
+  --text-disabled: #4d5c74;
+
+  --border-subtle: rgba(132, 154, 196, 0.12);
+  --border-default: rgba(145, 169, 222, 0.22);
+  --border-strong: rgba(145, 169, 222, 0.38);
+  --border-color: rgba(145, 169, 222, 0.22);
+  --border-divider: rgba(132, 154, 196, 0.10);
+  --border-focus: #7ca7ff;
+
+  --gradient-card: linear-gradient(150deg, rgba(25, 36, 58, 0.94), rgba(16, 23, 39, 0.98) 65%);
+  --gradient-card-hover: linear-gradient(150deg, rgba(30, 43, 70, 0.96), rgba(18, 27, 46, 0.98) 65%);
+  --gradient-primary: linear-gradient(135deg, #6998ef, #a492ea);
+  --gradient-accent: linear-gradient(135deg, #8ab0ff, #b6a6f2);
+  --gradient-border: linear-gradient(135deg, rgba(105, 152, 239, 0.35), rgba(164, 146, 234, 0.22));
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 8px 22px -12px rgba(2, 6, 23, 0.75);
+  --shadow-lg: 0 18px 44px -24px rgba(2, 6, 23, 0.85);
+  --shadow-xl: 0 30px 80px -40px rgba(0, 0, 0, 0.9);
+  --shadow-card-hover: 0 18px 48px -28px rgba(2, 6, 23, 0.85), 0 0 0 1px rgba(127, 157, 255, 0.14);
+  --shadow-card-active: 0 22px 56px -30px rgba(2, 6, 23, 0.9), 0 0 0 1px rgba(127, 157, 255, 0.24);
+  --glow-primary: 0 12px 30px -14px rgba(126, 157, 251, 0.55);
+  --glow-accent: 0 12px 30px -14px rgba(164, 146, 234, 0.45);
+
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* Login-surface primitives shared by the console skin. */
+  --surface-panel: linear-gradient(150deg, rgba(25, 36, 58, 0.94), rgba(16, 23, 39, 0.98) 65%);
+  --surface-panel-hover: linear-gradient(150deg, rgba(30, 43, 70, 0.96), rgba(18, 27, 46, 0.98) 65%);
+  --surface-input: linear-gradient(180deg, #0c1425, #0e1729);
+  --border-panel: rgba(145, 169, 222, 0.23);
+  --border-input: rgba(126, 150, 193, 0.29);
+  --hairline-top: linear-gradient(90deg, transparent, rgba(145, 179, 255, 0.46), transparent);
+  --accent-soft: rgba(127, 157, 255, 0.14);
+}

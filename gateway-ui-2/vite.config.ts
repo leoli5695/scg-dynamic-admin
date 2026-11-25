@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type ProxyOptions } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // Admin API target for the dev/preview proxies. Override with VITE_ADMIN_API_TARGET
@@ -7,6 +7,21 @@ import vue from '@vitejs/plugin-vue'
 const apiTarget =
   loadEnv(process.env.NODE_ENV || 'development', process.cwd(), '').VITE_ADMIN_API_TARGET ||
   'http://localhost:9090'
+
+// The backend CORS allowlist only covers its own origin and the documented dev
+// ports, so requests proxied from other local ports (e.g. 3199) are rejected as
+// "Invalid CORS request". Present the browser's requests as same-origin to the
+// API target instead; this only affects the local dev/preview proxy.
+const apiProxy: ProxyOptions = {
+  target: apiTarget,
+  changeOrigin: true,
+  configure: (proxy) => {
+    const origin = new URL(apiTarget).origin
+    proxy.on('proxyReq', (proxyReq) => {
+      proxyReq.setHeader('origin', origin)
+    })
+  },
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -31,19 +46,13 @@ export default defineConfig(({ mode }) => ({
     port: 3001,
     host: '0.0.0.0',
     proxy: {
-      '/api': {
-        target: apiTarget,
-        changeOrigin: true,
-      },
+      '/api': apiProxy,
     },
   },
   preview: {
     port: 4174,
     proxy: {
-      '/api': {
-        target: apiTarget,
-        changeOrigin: true,
-      },
+      '/api': apiProxy,
     },
   },
   build: {

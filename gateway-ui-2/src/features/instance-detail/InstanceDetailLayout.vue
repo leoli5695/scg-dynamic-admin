@@ -9,21 +9,21 @@ import { computed, provide, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  AlertOutlined, ApartmentOutlined, AppstoreOutlined, ArrowLeftOutlined,
+  AlertOutlined, ApartmentOutlined, AppstoreAddOutlined, AppstoreOutlined, ArrowLeftOutlined,
   BellOutlined, BugOutlined, CloudServerOutlined, DashboardOutlined,
   DatabaseOutlined, DeploymentUnitOutlined, FileTextOutlined, FilterOutlined,
-  HistoryOutlined, HomeOutlined, KeyOutlined, LineChartOutlined, LinkOutlined,
-  LockOutlined, MedicineBoxOutlined, PauseCircleOutlined, PlayCircleOutlined,
-  PlusSquareOutlined, ReloadOutlined, RobotOutlined, RocketOutlined,
-  SafetyOutlined, StopOutlined, ThunderboltOutlined,
-} from '@ant-design/icons-vue'
+  FundOutlined, HistoryOutlined, HomeOutlined, LineChartOutlined, LinkOutlined,
+  LockOutlined, MedicineBoxOutlined, NodeIndexOutlined, PauseCircleOutlined,
+  PlayCircleOutlined, PlusSquareOutlined, ReloadOutlined, RobotOutlined,
+  SafetyCertificateOutlined, SafetyOutlined, StopOutlined, ThunderboltOutlined,
+} from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import {
   getInstanceByInstanceId, getInstanceConfig, startInstance, stopInstance,
 } from '@/api/instances'
 import { ApiError } from '@/api/http'
 import type { GatewayInstance } from '@/types/instance'
-import { getStatusColorByName, getStatusTextByName } from '@/utils/instance'
+import { getStatusTextByName } from '@/utils/instance'
 import { message } from '@/utils/feedback'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import UserMenu from '@/components/UserMenu.vue'
@@ -33,17 +33,19 @@ import './instance-detail.css'
 
 /** Tab key → icon mapping (order defines tab order). */
 const TAB_ICONS = {
-  overview: CloudServerOutlined,
+  overview: DashboardOutlined,
+  events: AlertOutlined,
+  resources: FundOutlined,
   services: AppstoreOutlined,
   routes: DeploymentUnitOutlined,
-  plugins: RocketOutlined,
+  plugins: AppstoreAddOutlined,
   plugin_bindings: LinkOutlined,
   strategies: SafetyOutlined,
   authentication: LockOutlined,
   token_revocation: StopOutlined,
-  certificates: KeyOutlined,
-  trace: LineChartOutlined,
-  monitor: DashboardOutlined,
+  certificates: SafetyCertificateOutlined,
+  trace: NodeIndexOutlined,
+  monitor: LineChartOutlined,
   alerts: BellOutlined,
   access_log: FileTextOutlined,
   audit_logs: HistoryOutlined,
@@ -53,8 +55,6 @@ const TAB_ICONS = {
   request_replay: BugOutlined,
   copilot: RobotOutlined,
   stress_test: ThunderboltOutlined,
-  events: AlertOutlined,
-  resources: DashboardOutlined,
   middleware: DatabaseOutlined,
 } as const
 
@@ -111,28 +111,42 @@ async function runLifecycle(action: () => Promise<unknown>, successKey: string, 
 }
 
 const statusText = computed(() => getStatusTextByName(instance.value?.status ?? '', t))
-const statusColor = computed(() => getStatusColorByName(instance.value?.status ?? ''))
+
+type StatusTone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
+const statusTone = computed<StatusTone>(() => {
+  switch (instance.value?.status) {
+    case 'Running':
+    case 'RUNNING': return 'success'
+    case 'Error':
+    case 'ERROR': return 'error'
+    case 'Stopped':
+    case 'STOPPED': return 'warning'
+    case 'Starting':
+    case 'Stopping':
+    case 'Creating': return 'info'
+    default: return 'neutral'
+  }
+})
 </script>
 
 <template>
-  <div v-if="instanceRequest.loading && !instance" style="display: flex; justify-content: center; align-items: center; min-height: 400px">
+  <div v-if="instanceRequest.loading && !instance" class="detail-state">
     <a-spin size="large" />
   </div>
 
-  <div
-    v-else-if="!instance"
-    style="display: flex; justify-content: center; align-items: center; min-height: 400px; padding: 24px"
-  >
-    <a-result status="warning" :title="t('instance.not_found') || '实例不存在'" sub-title="该实例可能已被删除或您没有访问权限">
-      <template #extra>
+  <div v-else-if="!instance" class="detail-state">
+    <div class="card-base detail-state-card">
+      <h2 class="detail-state-title">{{ t('instance.not_found') }}</h2>
+      <p class="detail-state-desc">{{ t('instance.not_found_hint') }}</p>
+      <div class="detail-state-actions">
         <a-button type="primary" @click="instanceRequest.run()">
-          <template #icon><ReloadOutlined /></template>刷新页面
+          <template #icon><ReloadOutlined /></template>{{ t('common.refresh') }}
         </a-button>
         <a-button @click="router.push('/instances')">
-          <template #icon><HomeOutlined /></template>返回列表
+          <template #icon><HomeOutlined /></template>{{ t('common.back') }}
         </a-button>
-      </template>
-    </a-result>
+      </div>
+    </div>
   </div>
 
   <div v-else class="instance-detail-page">
@@ -142,9 +156,23 @@ const statusColor = computed(() => getStatusColorByName(instance.value?.status ?
         <a-button type="text" class="instance-detail-back-btn" @click="router.push('/instances')">
           <template #icon><ArrowLeftOutlined /></template>
         </a-button>
-        <CloudServerOutlined class="instance-detail-icon" />
-        <h4 class="instance-detail-title ant-typography">{{ inst.instanceName }}</h4>
-        <a-tag class="instance-detail-status-tag" :color="statusColor">{{ statusText }}</a-tag>
+        <div class="instance-detail-heading">
+          <div class="instance-detail-title-row">
+            <CloudServerOutlined class="instance-detail-icon" />
+            <h1 class="instance-detail-title">{{ inst.instanceName }}</h1>
+            <span :class="['status-badge', 'instance-detail-status-tag', `status-badge-${statusTone}`]">
+              <i :class="['status-dot', `status-dot-${statusTone}`]" />
+              {{ statusText }}
+            </span>
+          </div>
+          <div class="instance-detail-meta">
+            <span class="mono">{{ inst.instanceId }}</span>
+            <span class="sep">/</span>
+            <span>{{ inst.clusterName }}</span>
+            <span class="sep">/</span>
+            <span>{{ inst.namespace }}</span>
+          </div>
+        </div>
       </div>
 
       <div class="instance-detail-header-right">
@@ -164,12 +192,12 @@ const statusColor = computed(() => getStatusColorByName(instance.value?.status ?
           <template #icon><PlayCircleOutlined /></template>{{ t('instance.start') }}
         </a-button>
         <a-tooltip :title="t('common.refresh')">
-          <a-button @click="instanceRequest.run()">
+          <a-button :loading="instanceRequest.loading.value" @click="instanceRequest.run()">
             <template #icon><ReloadOutlined /></template>
           </a-button>
         </a-tooltip>
         <LanguageSwitcher />
-        <span style="margin-left: 12px"><UserMenu /></span>
+        <span class="instance-detail-user"><UserMenu /></span>
       </div>
     </div>
 
@@ -177,7 +205,7 @@ const statusColor = computed(() => getStatusColorByName(instance.value?.status ?
     <a-tabs :active-key="activeTab" class="instance-detail-tabs" @change="handleTabChange">
       <a-tab-pane v-for="key in TAB_ORDER" :key="key">
         <template #tab>
-          <span>
+          <span class="instance-tab-label">
             <component :is="TAB_ICONS[key]" />
             {{ t(tabI18nKey(key)) }}
           </span>

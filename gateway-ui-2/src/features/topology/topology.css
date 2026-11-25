@@ -1,0 +1,675 @@
+/**
+ * Traffic topology styles.
+ * The login skin (styles/login-theme.css + variables.css + iconography.css)
+ * owns surfaces, borders, radii and colors. This file only adds layout, chart
+ * geometry, tooltip composition and the node legend; the page root stays
+ * transparent. SVG chart only — no canvas, no blur layers.
+ */
+
+/* ==================== Page layout ==================== */
+.topology-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 1460px;
+  margin-inline: auto;
+  min-height: 100%;
+  color: var(--text-primary);
+}
+
+.topology-page > .ant-alert {
+  margin: 0;
+}
+
+/* ==================== Header ==================== */
+.topology-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.topology-page-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.topology-page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.topology-page-title .lg-icon-tile {
+  font-size: var(--icon-glyph-lg);
+}
+
+.topology-page-subtitle {
+  margin: 0;
+  max-width: 860px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.topology-page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* ==================== Toolbar ==================== */
+.topology-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 18px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+}
+
+.topology-search {
+  width: min(290px, 100%);
+}
+
+.topology-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+
+.topology-range-select {
+  width: 132px;
+}
+
+.topology-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: color var(--duration-fast) var(--ease-default),
+    background var(--duration-fast) var(--ease-default);
+}
+
+.topology-toggle.is-emphasized {
+  border-color: var(--border-subtle);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.topology-toggle.is-emphasized > .anticon {
+  color: var(--icon-ink-accent);
+  font-size: var(--icon-glyph);
+}
+
+/* ==================== KPI cards ==================== */
+.topology-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.topology-kpi {
+  min-width: 0;
+  padding: 16px 18px 15px;
+}
+
+.topology-kpi strong {
+  display: block;
+  margin-top: 8px;
+  overflow: hidden;
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topology-kpi strong.is-error {
+  color: var(--error-color);
+}
+
+.topology-kpi strong em {
+  margin-left: 5px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.topology-kpi small {
+  display: block;
+  margin-top: 8px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==================== Canvas panel ==================== */
+.topology-canvas {
+  display: flex;
+  flex-direction: column;
+}
+
+.topology-canvas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 18px 22px 14px;
+}
+
+.topology-canvas-header h2 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.topology-canvas-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.topology-aggregate-badge {
+  border-color: color-mix(in srgb, var(--accent-color) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  color: var(--accent-color);
+}
+
+.topology-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--success-color);
+}
+
+.topology-live i {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--success-color);
+}
+
+.topology-chart-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 10px 22px;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.topology-visible-count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.topology-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 254px;
+  min-height: 560px;
+}
+
+.topology-workspace:has(> .topology-chart-region:only-child) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.topology-chart-region {
+  position: relative;
+  min-width: 0;
+}
+
+.topology-chart-viewport {
+  width: 100%;
+  height: 560px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.topology-chart {
+  position: relative;
+}
+
+.topology-state-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+}
+
+.topology-state-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ==================== Ranking aside ==================== */
+.topology-ranking {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 18px 15px 14px;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.topology-ranking-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0 4px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.topology-ranking-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.topology-ranking-header small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.topology-ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-block: 13px;
+}
+
+.topology-route-rank {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-default),
+    background var(--duration-fast) var(--ease-default);
+}
+
+.topology-route-rank:hover,
+.topology-route-rank.is-selected {
+  border-color: var(--border-default);
+  background: var(--bg-hover);
+}
+
+.topology-route-rank.is-selected {
+  box-shadow: inset 2px 0 var(--primary-color);
+}
+
+.topology-route-rank-topline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topology-route-position {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.topology-route-rank-topline strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topology-route-rank-topline em {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: normal;
+  color: var(--success-color);
+}
+
+.topology-route-rank-topline em.is-error {
+  color: var(--error-color);
+}
+
+.topology-route-rank-meta {
+  display: block;
+  margin: 5px 0 7px 26px;
+  overflow: hidden;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topology-route-rank-line {
+  display: block;
+  height: 2px;
+  margin-left: 26px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--border-subtle);
+}
+
+.topology-route-rank-line i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gradient-primary);
+}
+
+.topology-ranking-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 13px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.topology-ranking-summary > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 6px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--bg-section);
+}
+
+.topology-ranking-summary .anticon {
+  font-size: var(--icon-glyph-sm);
+  color: var(--icon-ink-accent);
+}
+
+.topology-ranking-summary span {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.topology-ranking-summary strong {
+  grid-column: 2;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* ==================== Legend ==================== */
+.topology-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding: 13px 22px;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+.topology-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.topology-legend-item i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--border-strong);
+}
+
+.topology-legend-item .legend-circle {
+  border-radius: var(--radius-full);
+}
+
+.topology-legend-item .legend-diamond {
+  transform: rotate(45deg);
+}
+
+.topology-legend-item .legend-diamond.is-disabled {
+  border-style: dashed;
+}
+
+.topology-legend-item .legend-rect {
+  border-radius: 2px;
+}
+
+/* ==================== Node context menu ==================== */
+.topology-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dropdown);
+}
+
+.topology-menu {
+  position: fixed;
+  z-index: calc(var(--z-dropdown) + 1);
+  min-width: 176px;
+  padding: 6px;
+  border-radius: var(--radius-lg);
+}
+
+.topology-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default),
+    color var(--duration-fast) var(--ease-default);
+}
+
+.topology-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.topology-menu-item .anticon {
+  font-size: var(--icon-glyph);
+  color: var(--icon-ink-accent);
+}
+
+.topology-menu-divider {
+  display: block;
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--border-subtle);
+}
+
+/* ==================== Chart tooltips (ECharts HTML) ==================== */
+.topology-page .topology-tip {
+  min-width: 190px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.topology-page .topology-tip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.topology-page .topology-tip-head i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.topology-page .topology-tip-title {
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.topology-page .topology-tip-kind {
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.topology-page .topology-tip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 3px;
+}
+
+.topology-page .topology-tip-label {
+  color: var(--text-secondary);
+}
+
+.topology-page .topology-tip-block {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.topology-page .topology-tip-section {
+  margin-bottom: 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.topology-page .topology-tip-highlight {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+}
+
+.topology-page .topology-tip-highlight strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.topology-page .topology-tip-instances {
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.topology-page .topology-tip-instance {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.topology-page .topology-tip-weight {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 1200px) {
+  .topology-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .topology-workspace {
+    grid-template-columns: minmax(0, 1fr) 224px;
+  }
+}
+
+@media (max-width: 900px) {
+  .topology-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .topology-ranking {
+    border-left: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .topology-ranking-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .topology-ranking-summary {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .topology-toolbar {
+    align-items: stretch;
+  }
+
+  .topology-search {
+    width: 100%;
+  }
+
+  .topology-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topology-canvas-header,
+  .topology-chart-hint {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .topology-ranking-list {
+    grid-template-columns: 1fr;
+  }
+}

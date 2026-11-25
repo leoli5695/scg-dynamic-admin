@@ -12,6 +12,13 @@ const EventsTab = () => import('@/features/instance-detail/tabs/EventsTab.vue')
 const ResourcesTab = () => import('@/features/instance-detail/tabs/ResourcesTab.vue')
 const ServicesPage = () => import('@/features/services/index.vue')
 const RoutesPage = () => import('@/features/routes/index.vue')
+const PluginsPage = () => import('@/features/plugins/index.vue')
+const CertificatesPage = () => import('@/features/certificates/index.vue')
+const StrategiesPage = () => import('@/features/strategies/index.vue')
+const TokenUsagePage = () => import('@/features/token-usage/TokenUsagePage.vue')
+const KubernetesPage = () => import('@/features/kubernetes/index.vue')
+const TracePage = () => import('@/features/trace/TracePage.vue')
+const AlertsPage = () => import('@/features/alert/index.vue')
 // Temporary stand-in for feature modules not yet ported (replaced in later stages).
 const Placeholder = () => import('@/components/PlaceholderPage.vue')
 
@@ -30,7 +37,7 @@ const routes: RouteRecordRaw[] = [
       { path: '', redirect: '/instances' },
       { path: 'instances', component: InstancesListPage },
       { path: 'instances/create', component: InstanceCreatePage },
-      { path: 'token-usage', component: Placeholder, meta: { title: 'Token Usage (Stage 4)' } },
+      { path: 'token-usage', component: TokenUsagePage },
       {
         path: 'instances/:instanceId',
         component: InstanceDetailLayout,
@@ -41,28 +48,28 @@ const routes: RouteRecordRaw[] = [
           // Remaining console tabs land in Stage 1 (services/routes) and later stages.
           { path: 'services', component: ServicesPage },
           { path: 'routes', component: RoutesPage },
-          { path: 'plugins', component: Placeholder, meta: { title: 'Plugins (Stage 2)' } },
-          { path: 'plugin_bindings', component: Placeholder, meta: { title: 'Plugin Bindings (Stage 2)' } },
-          { path: 'strategies', component: Placeholder, meta: { title: 'Strategies (Stage 2)' } },
-          { path: 'authentication', component: Placeholder, meta: { title: 'Auth Policies (Stage 2)' } },
-          { path: 'token_revocation', component: Placeholder, meta: { title: 'Token Revocation (Stage 2)' } },
-          { path: 'certificates', component: Placeholder, meta: { title: 'Certificates (Stage 2)' } },
-          { path: 'trace', component: Placeholder, meta: { title: 'Trace (Stage 3)' } },
-          { path: 'monitor', component: Placeholder, meta: { title: 'Monitor (Stage 3)' } },
-          { path: 'alerts', component: Placeholder, meta: { title: 'Alerts (Stage 3)' } },
-          { path: 'access_log', component: Placeholder, meta: { title: 'Access Log (Stage 3)' } },
-          { path: 'audit_logs', component: Placeholder, meta: { title: 'Audit Logs (Stage 3)' } },
-          { path: 'diagnostic', component: Placeholder, meta: { title: 'Diagnostic (Stage 3)' } },
-          { path: 'topology', component: Placeholder, meta: { title: 'Topology (Stage 3)' } },
-          { path: 'filter_chain', component: Placeholder, meta: { title: 'Filter Chain (Stage 3)' } },
-          { path: 'request_replay', component: Placeholder, meta: { title: 'Request Replay (Stage 3)' } },
+          { path: 'plugins', component: PluginsPage },
+          { path: 'plugin_bindings', component: () => import('@/features/plugin-bindings/index.vue') },
+          { path: 'strategies', component: StrategiesPage },
+          { path: 'authentication', component: () => import('@/features/auth-policies/index.vue') },
+          { path: 'token_revocation', component: () => import('@/features/token-revocation/index.vue') },
+          { path: 'certificates', component: CertificatesPage },
+          { path: 'trace', component: TracePage },
+          { path: 'monitor', component: () => import('@/features/monitor/MonitorPage.vue') },
+          { path: 'alerts', component: AlertsPage },
+          { path: 'access_log', component: () => import('@/features/access-log/index.vue') },
+          { path: 'audit_logs', component: () => import('@/features/audit-logs/AuditLogsPage.vue') },
+          { path: 'diagnostic', component: () => import('@/features/diagnostic/DiagnosticPage.vue') },
+          { path: 'topology', component: () => import('@/features/topology/TopologyPage.vue') },
+          { path: 'filter_chain', component: () => import('@/features/filter-chain/FilterChainPage.vue') },
+          { path: 'request_replay', component: () => import('@/features/request-replay/index.vue') },
           { path: 'copilot', component: Placeholder, meta: { title: 'Copilot (Stage 4)' } },
           { path: 'stress_test', component: Placeholder, meta: { title: 'Stress Test (Stage 4)' } },
           { path: 'middleware', component: Placeholder, meta: { title: 'Middleware (Stage 3)' } },
         ],
       },
-      { path: 'kubernetes', component: Placeholder, meta: { title: 'Kubernetes (Stage 4)' } },
-      { path: 'license', component: Placeholder, meta: { title: 'License (Stage 4)' } },
+      { path: 'kubernetes', component: KubernetesPage },
+      { path: 'license', component: () => import('@/features/license/index.vue') },
       { path: 'middleware-detail', component: Placeholder, meta: { title: 'Middleware Detail (Stage 3)' } },
     ],
   },

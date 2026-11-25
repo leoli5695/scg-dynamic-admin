@@ -5,7 +5,7 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DeleteOutlined } from '@ant-design/icons-vue'
+import { DeleteOutlined } from '@/components/icons'
 
 /** Form-row shape for a predicate (args is a string for Path/Host/Header, an array for Method). */
 interface PredicateRow {
@@ -36,7 +36,7 @@ function handleTypeChange(value: string) {
     <a-select
       :value="predicate.name"
       :placeholder="t('routes.predicate_type')"
-      :style="{ width: '150px', backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid rgba(148,163,184,0.15)' }"
+      class="predicate-type-select"
       @change="handleTypeChange"
     >
       <a-select-option value="Path">Path</a-select-option>
@@ -50,18 +50,20 @@ function handleTypeChange(value: string) {
       v-model:value="(predicate as any).args"
       mode="multiple"
       :placeholder="t('routes.select_methods')"
-      :style="{ width: '300px' }"
+      class="predicate-value-control"
       :options="METHOD_OPTIONS"
     />
     <a-input
       v-else
       v-model:value="(predicate as any).args"
       :placeholder="placeholders[predicateType] || 'value'"
-      :style="{ width: '300px' }"
+      class="predicate-value-control"
     />
 
-    <a-button type="text" danger :style="{ marginLeft: '8px' }" @click="emit('remove', index)">
-      <template #icon><DeleteOutlined /></template>{{ t('common.remove') }}
-    </a-button>
+    <a-tooltip :title="t('common.delete')">
+      <a-button type="text" danger class="action-btn" :aria-label="t('common.delete')" @click="emit('remove', index)">
+        <template #icon><DeleteOutlined /></template>
+      </a-button>
+    </a-tooltip>
   </div>
 </template>

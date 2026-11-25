@@ -70,6 +70,10 @@ const i18n = createI18n({
   fallbackLocale: 'en',
   missingWarn: false,
   fallbackWarn: false,
+  // Locale packs intentionally contain literal angle brackets (e.g. "<Config>"
+  // in the plugin guide) and every consumer renders translations as text — no
+  // v-html anywhere — so the intlify HTML-detection warning is a false positive.
+  warnHtmlMessage: false,
   messages: buildMessages(),
   // Resolve dotted keys as literal flat strings (i18next semantics). Falls back to
   // null so vue-i18n applies its missing-key / fallback-locale handling.

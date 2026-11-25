@@ -4,8 +4,8 @@
  */
 import { useI18n } from 'vue-i18n'
 import {
-  DeleteOutlined, EditOutlined, EyeOutlined, PlayCircleOutlined, StopOutlined,
-} from '@ant-design/icons-vue'
+  DeleteOutlined, EditOutlined, EyeOutlined, PauseCircleOutlined, PlayCircleOutlined,
+} from '@/components/icons'
 import type { RouteResponse } from '@/types/route'
 
 defineProps<{ route: RouteResponse }>()
@@ -20,33 +20,32 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <a-space>
-    <a-tooltip :title="t('common.edit')">
-      <a-button type="text" size="small" class="action-btn" @click="emit('edit', route)">
-        <template #icon><EditOutlined /></template>
-      </a-button>
-    </a-tooltip>
+  <div class="route-actions">
     <a-tooltip :title="t('common.detail')">
-      <a-button type="text" size="small" class="action-btn" @click="emit('detail', route)">
+      <a-button type="text" size="small" class="action-btn" :aria-label="t('common.detail')" @click="emit('detail', route)">
         <template #icon><EyeOutlined /></template>
       </a-button>
     </a-tooltip>
-    <a-tooltip :title="route.enabled ? t('common.disable') : t('common.enable')">
-      <a-button type="text" size="small" class="action-btn" @click="emit('toggle', route)">
-        <template #icon><StopOutlined v-if="route.enabled" /><PlayCircleOutlined v-else /></template>
+    <a-tooltip :title="t('common.edit')">
+      <a-button type="text" size="small" class="action-btn" :aria-label="t('common.edit')" @click="emit('edit', route)">
+        <template #icon><EditOutlined /></template>
       </a-button>
     </a-tooltip>
-    <a-popconfirm
-      :title="`${t('common.delete')}: ${route.routeName || route.id}`"
-      :ok-text="t('common.confirm')"
-      :cancel-text="t('common.cancel')"
-      @confirm="emit('delete', route)"
-    >
-      <a-tooltip :title="t('common.delete')">
-        <a-button type="text" size="small" danger class="action-btn">
-          <template #icon><DeleteOutlined /></template>
-        </a-button>
-      </a-tooltip>
-    </a-popconfirm>
-  </a-space>
+    <a-tooltip :title="route.enabled ? t('common.disable') : t('common.enable')">
+      <a-button
+        type="text"
+        size="small"
+        class="action-btn"
+        :aria-label="route.enabled ? t('common.disable') : t('common.enable')"
+        @click="emit('toggle', route)"
+      >
+        <template #icon><PauseCircleOutlined v-if="route.enabled" /><PlayCircleOutlined v-else /></template>
+      </a-button>
+    </a-tooltip>
+    <a-tooltip :title="t('common.delete')">
+      <a-button type="text" size="small" danger class="action-btn" :aria-label="t('common.delete')" @click="emit('delete', route)">
+        <template #icon><DeleteOutlined /></template>
+      </a-button>
+    </a-tooltip>
+  </div>
 </template>

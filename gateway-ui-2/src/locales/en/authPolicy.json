@@ -40,6 +40,7 @@
   "auth_policy.api_key_header_format": "API Key Header Format",
   "auth_policy.basic_header_format": "Basic Auth Header Format",
   "auth_policy.credentials": "Credentials",
+  "auth_policy.credentials_base64": "(Base64: {{value}})",
   "auth_policy.curl_alternative": "Alternative Curl",
   "auth_policy.oauth2_get_token": "Step 1: Get Access Token",
   "auth_policy.oauth2_use_token": "Step 2: Use Token in Request",

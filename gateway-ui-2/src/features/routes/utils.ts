@@ -118,6 +118,23 @@ export const stringifyPredicateArgs = (
   }
 };
 
+/**
+ * Predicate args as edited in the form: Method predicates are a string[] so the
+ * multi-select model stays an array (a comma string makes antd warn and lose the
+ * tag UI); every other predicate keeps the single-line string.
+ */
+export const predicateArgsToForm = (
+  type: string,
+  args: Record<string, unknown> | string | undefined,
+): string | string[] => {
+  if (type === 'Method') {
+    if (!args) return []
+    const methods = extractMethods(args as Record<string, unknown> | string)
+    return methods.filter(Boolean)
+  }
+  return stringifyPredicateArgs(type, args)
+}
+
 export const parseFilterArgs = (type: string, args: unknown): Record<string, string> => {
   if (!args || args === 'undefined' || args === 'null') {
     switch (type) {

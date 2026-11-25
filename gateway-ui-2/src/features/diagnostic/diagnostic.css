@@ -1,0 +1,478 @@
+/**
+ * Diagnostic page styles, login-aligned skin (2026-11-20).
+ * Surfaces (panel gradient / border / hairline / shadow), colours and radii come
+ * from the shared tokens in styles/variables.css + login-theme.css +
+ * iconography.css. This file only keeps layout and page-specific composition;
+ * the page root stays transparent. No canvas, no blur layers.
+ */
+
+.diagnostic-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 1460px;
+  margin-inline: auto;
+  min-height: 100%;
+  color: var(--text-primary);
+}
+
+.diagnostic-page > .ant-alert {
+  margin: 0;
+}
+
+/* ==================== Header ==================== */
+.diagnostic-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.diagnostic-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.diagnostic-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.diagnostic-title .lg-icon-tile {
+  font-size: 17px;
+}
+
+.diagnostic-subtitle {
+  margin: 0;
+  max-width: 860px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #95a3bc;
+}
+
+.diagnostic-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* ==================== Control strip ==================== */
+.diagnostic-control-strip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 9px 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-section);
+}
+
+.diagnostic-control-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.diagnostic-control-label .anticon {
+  color: var(--icon-ink-accent);
+  font-size: var(--icon-glyph-sm);
+}
+
+.diagnostic-interval-select {
+  width: 100px;
+}
+
+/* ==================== Score card ==================== */
+.diagnostic-score-card.ant-card {
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--accent-color) 9%, transparent), transparent 55%),
+    var(--surface-panel);
+}
+
+.diagnostic-score-card.ant-card .ant-card-body {
+  padding: 24px;
+}
+
+.diagnostic-score-layout {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.diagnostic-score-ring {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.diagnostic-score-number {
+  display: block;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.diagnostic-score-caption {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.diagnostic-score-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.diagnostic-score-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+/* ==================== Shared stat block ==================== */
+.diagnostic-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.diagnostic-stat-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8fa1c0;
+}
+
+.diagnostic-stat-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.diagnostic-stat-value em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.diagnostic-stat-status {
+  font-size: 16px;
+}
+
+.diagnostic-status-icon {
+  font-size: var(--icon-glyph);
+}
+
+.diagnostic-status-icon.is-success { color: var(--success-color); }
+.diagnostic-status-icon.is-warning { color: var(--warning-color); }
+.diagnostic-status-icon.is-error { color: var(--error-color); }
+.diagnostic-status-icon.is-neutral { color: var(--text-muted); }
+
+/* ==================== Recommendations ==================== */
+.diagnostic-recommendations {
+  margin-top: var(--space-4);
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--warning-color) 16%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--warning-color) 5%, transparent);
+}
+
+.diagnostic-recommendations-title {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.diagnostic-recommendations-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.diagnostic-recommendations-list li {
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ==================== Component grid ==================== */
+.diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.diagnostic-card-wide {
+  grid-column: 1 / -1;
+}
+
+.diagnostic-card.ant-card {
+  --status-tone: var(--primary-light);
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  transition: border-color var(--duration-fast) var(--ease-default);
+}
+
+.diagnostic-card.ant-card::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--status-tone);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.diagnostic-card.status-healthy { --status-tone: var(--success-color); }
+.diagnostic-card.status-warning { --status-tone: var(--warning-color); }
+.diagnostic-card.status-critical { --status-tone: var(--error-color); }
+.diagnostic-card.status-not_configured { --status-tone: var(--text-muted); }
+
+.diagnostic-card.ant-card .ant-card-head {
+  min-height: 52px;
+  padding-inline: 16px;
+}
+
+.diagnostic-card.ant-card .ant-card-body {
+  padding: 14px 16px 16px;
+}
+
+.diagnostic-card-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diagnostic-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.diagnostic-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diagnostic-card-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.diagnostic-metrics.ant-descriptions {
+  font-size: 12px;
+}
+
+.diagnostic-metrics.ant-descriptions .ant-descriptions-item-label {
+  font-size: 11px;
+  color: #8fa1c0;
+}
+
+.diagnostic-metrics.ant-descriptions .ant-descriptions-item-content {
+  font-size: 12px;
+  color: #dbe5f7;
+}
+
+.diagnostic-metric-value {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.diagnostic-metric-empty {
+  color: var(--text-muted);
+}
+
+.diagnostic-card-alert {
+  margin-top: 12px;
+}
+
+.diagnostic-card-alert.ant-alert {
+  border-radius: var(--radius-md);
+}
+
+.diagnostic-alert-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.diagnostic-alert-list li {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ==================== History trend card ==================== */
+.diagnostic-history-card.ant-card .ant-card-body {
+  padding-top: 6px;
+}
+
+.diagnostic-hours-select {
+  width: 128px;
+  margin-left: var(--space-4);
+}
+
+.diagnostic-tabs .ant-tabs-nav {
+  margin-bottom: var(--space-4);
+}
+
+.diagnostic-chart {
+  display: block;
+  width: 100%;
+  height: 300px;
+}
+
+.diagnostic-metrics-empty {
+  padding: 20px 0;
+}
+
+.diagnostic-empty-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.diagnostic-empty-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.diagnostic-divider {
+  height: 1px;
+  margin: var(--space-4) 0;
+  background: var(--border-subtle);
+}
+
+.diagnostic-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.diagnostic-compare-alert {
+  margin: 0;
+}
+
+/* ==================== Loading / empty states ==================== */
+.diagnostic-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 44px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.diagnostic-initial-state {
+  min-height: 260px;
+}
+
+.diagnostic-state-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.diagnostic-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.diagnostic-empty-icon {
+  display: grid;
+  place-items: center;
+  width: var(--icon-state-size);
+  height: var(--icon-state-size);
+  border-radius: 14px;
+  border: 1px solid var(--icon-tile-border);
+  background: var(--icon-state-bg);
+  color: var(--icon-tile-ink);
+  font-size: var(--icon-glyph-xl);
+}
+
+.diagnostic-empty-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ==================== Responsive ==================== */
+@media (max-width: 1100px) {
+  .diagnostic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .diagnostic-card-wide {
+    grid-column: auto;
+  }
+
+  .diagnostic-compare {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .diagnostic-compare-alert {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .diagnostic-header {
+    align-items: flex-start;
+  }
+
+  .diagnostic-score-layout {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .diagnostic-score-stats {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .diagnostic-control-strip {
+    justify-content: flex-start;
+  }
+
+  .diagnostic-compare {
+    grid-template-columns: 1fr;
+  }
+}

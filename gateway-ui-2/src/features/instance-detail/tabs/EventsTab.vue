@@ -5,7 +5,7 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ClockCircleOutlined, ReloadOutlined } from '@ant-design/icons-vue'
+import { ReloadOutlined } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { getInstanceEvents } from '@/api/instances'
 import { useInstanceDetail } from '../context'
@@ -22,57 +22,46 @@ const events = computed(() => eventsRequest.data.value?.events ?? [])
 const total = computed(() => eventsRequest.data.value?.total ?? 0)
 const warningCount = computed(() => eventsRequest.data.value?.warningCount ?? 0)
 const normalCount = computed(() => eventsRequest.data.value?.normalCount ?? 0)
+
+function eventStamp(event: { lastTimestamp?: string | null; firstTimestamp?: string | null }): string {
+  return event.lastTimestamp || event.firstTimestamp || '-'
+}
 </script>
 
 <template>
-  <a-card :bordered="false">
-    <div :style="{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }">
-      <a-space>
-        <a-badge :status="warningCount > 0 ? 'error' : 'success'" :text="`${warningCount} Warning`" />
-        <a-badge status="processing" :text="`${normalCount} Normal`" />
-        <span class="ant-typography" style="color: var(--text-secondary)">Total: {{ total }}</span>
-      </a-space>
-      <a-button :loading="eventsRequest.loading" @click="eventsRequest.run()">
+  <div class="card-base events-panel">
+    <div class="panel-head">
+      <div class="panel-head-left">
+        <span class="panel-title">{{ t('menu.events') }}</span>
+        <span class="status-badge status-badge-error">{{ warningCount }} Warning</span>
+        <span class="status-badge status-badge-success">{{ normalCount }} Normal</span>
+        <span class="panel-count">{{ t('common.total') }}: {{ total }}</span>
+      </div>
+      <a-button :loading="eventsRequest.loading.value" @click="eventsRequest.run()">
         <template #icon><ReloadOutlined /></template>
-        {{ t('common.refresh') || '刷新' }}
+        {{ t('common.refresh') }}
       </a-button>
     </div>
 
-    <div v-if="eventsRequest.loading && events.length === 0" :style="{ display: 'flex', justifyContent: 'center', padding: '40px' }">
+    <div v-if="eventsRequest.loading && events.length === 0" class="events-state">
       <a-spin />
     </div>
-    <div v-else-if="events.length === 0" :style="{ textAlign: 'center', padding: '40px' }">
-      <span class="ant-typography" style="color: var(--text-secondary)">{{ t('events.no_events') || '暂无事件数据' }}</span>
+    <div v-else-if="events.length === 0" class="events-state">
+      {{ t('events.no_events') }}
     </div>
-    <div v-else :style="{ maxHeight: '500px', overflowY: 'auto' }">
-      <a-card
-        v-for="(event, idx) in events"
-        :key="idx"
-        size="small"
-        :bordered="false"
-        :class="event.type === 'Warning' ? 'event-card-warning' : 'event-card-normal'"
-        :style="{ marginBottom: '8px' }"
-      >
-        <a-row :gutter="16">
-          <a-col :span="2">
-            <a-tag :color="event.type === 'Warning' ? 'error' : 'success'">{{ event.type }}</a-tag>
-          </a-col>
-          <a-col :span="3">
-            <a-tag color="blue">{{ event.reason }}</a-tag>
-          </a-col>
-          <a-col :span="14">
-            <span class="ant-typography">{{ event.message }}</span>
-          </a-col>
-          <a-col :span="5">
-            <a-space direction="vertical" size="small">
-              <span class="ant-typography" style="color: var(--text-secondary); font-size: 12px">
-                <ClockCircleOutlined /> {{ event.objectName }}
-              </span>
-              <span class="ant-typography" style="color: var(--text-secondary); font-size: 12px">Count: {{ event.count }}</span>
-            </a-space>
-          </a-col>
-        </a-row>
-      </a-card>
+    <div v-else class="event-list events-scroll">
+      <div v-for="(event, idx) in events" :key="idx" class="event-row">
+        <span :class="['status-badge', event.type === 'Warning' ? 'status-badge-error' : 'status-badge-success']">
+          {{ event.type }}
+        </span>
+        <span class="event-reason" :title="event.reason">{{ event.reason }}</span>
+        <span class="event-message">{{ event.message }}</span>
+        <span class="event-meta">
+          <span class="mono" :title="event.objectName">{{ event.objectName }}</span>
+          <span>{{ eventStamp(event) }}</span>
+          <span>× {{ event.count }}</span>
+        </span>
+      </div>
     </div>
-  </a-card>
+  </div>
 </template>

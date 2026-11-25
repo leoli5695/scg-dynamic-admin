@@ -47,6 +47,8 @@
   "cert.enable_confirm": "Enable this certificate?",
   "cert.file_upload": "File Upload",
   "cert.text_input": "Text Input",
+  "cert.next_step": "Next",
+  "cert.previous_step": "Previous",
   "cert.cert_file": "Certificate File",
   "cert.key_file": "Private Key File",
   "cert.click_upload": "Click or drag to upload certificate file",
@@ -55,5 +57,11 @@
   "cert.file_required": "Please provide certificate and key files",
   "cert.type_pem": "PEM (Certificate + Private Key)",
   "cert.type_jks": "JKS (Java Keystore)",
-  "cert.type_p12": "P12/PFX (PKCS#12)"
+  "cert.type_p12": "P12/PFX (PKCS#12)",
+  "cert.description": "Upload, rotate and track TLS certificates for HTTPS listeners",
+  "cert.empty": "No certificates uploaded",
+  "cert.empty_hint": "Upload a PEM bundle or a Java keystore to serve HTTPS on this gateway.",
+  "cert.step_basic": "Type & Basic Info",
+  "cert.detail_section_cert": "Certificate",
+  "cert.detail_section_validity": "Validity"
 }

@@ -1,0 +1,787 @@
+/**
+ * Services page composition on the Vue-native layer.
+ * Layout only — surfaces, ink, radii and control chrome come from
+ * styles/vue-native.css. Nothing here leaks outside `.vn-scope` / `.vn-portal`.
+ */
+
+.vn-services {
+  padding: 0;
+  min-height: 100%;
+}
+
+/* ==================== Catalog grid ==================== */
+.vn-scope .vn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* 1600-class viewports read four-up; 1440 stays three-up. */
+@media (min-width: 1500px) {
+  .vn-scope .vn-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .vn-scope .vn-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ==================== Tile ==================== */
+.vn-scope .vn-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 12px 16px;
+  overflow: hidden;
+  transition:
+    border-color var(--vn-fast) var(--vn-ease),
+    background var(--vn-fast) var(--vn-ease);
+}
+
+/* Health rail: the only place a status colour fills an area. */
+.vn-scope .vn-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--vn-rail);
+}
+
+.vn-scope .vn-rail-ok { --vn-rail: var(--vn-ok); }
+.vn-scope .vn-rail-warn { --vn-rail: var(--vn-warn); }
+.vn-scope .vn-rail-err { --vn-rail: var(--vn-err); }
+.vn-scope .vn-rail-idle { --vn-rail: var(--vn-line-strong); }
+
+.vn-scope .vn-tile:hover {
+  border-color: var(--vn-line-strong);
+  background: var(--vn-surface-raised);
+}
+
+.vn-scope .vn-tile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vn-scope .vn-tile-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vn-scope .vn-tile-glyph {
+  font-size: var(--vn-glyph-lg);
+  line-height: 1;
+  margin-top: 1px;
+  flex: none;
+}
+
+.vn-scope .vn-tile-names {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.vn-scope .vn-tile-name {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  color: var(--vn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-scope .vn-tile-idrow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vn-scope .vn-tile-id {
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+.vn-scope .vn-tile-idrow .vn-iconbtn {
+  --vn-hit: 20px;
+  --vn-glyph: 12px;
+}
+
+.vn-scope .vn-tile-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vn-scope .vn-tile-warning {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid rgba(240, 180, 41, 0.26);
+  background: rgba(240, 180, 41, 0.08);
+  color: #f5cd6b;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* Nested instance pool — VnPanel drops it to the sunken surface automatically. */
+.vn-scope .vn-pool {
+  margin-top: auto;
+}
+
+.vn-scope .vn-pool .vn-panel-body {
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vn-scope .vn-pool-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vn-scope .vn-pool-head .vn-chip-num {
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .vn-pool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.vn-scope .vn-endpoint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+  color: var(--vn-ink-2);
+  line-height: 1.5;
+}
+
+.vn-scope .vn-endpoint .vn-mono {
+  font-size: 11px;
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .vn-endpoint-more {
+  color: var(--vn-ink-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vn-scope .vn-pool-empty {
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-scope .vn-tile-desc {
+  border-top: 1px solid var(--vn-line-soft);
+  padding-top: 8px;
+}
+
+.vn-scope .vn-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+  cursor: pointer;
+  transition: color var(--vn-fast) var(--vn-ease);
+}
+
+.vn-scope .vn-disclosure:hover {
+  color: var(--vn-brand);
+}
+
+.vn-scope .vn-chevron {
+  font-size: 12px;
+  transition: transform var(--vn-fast) var(--vn-ease);
+}
+
+.vn-scope .vn-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.vn-scope .vn-tile-desc-text {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--vn-ink-2);
+}
+
+/* ==================== Table view ==================== */
+.vn-scope .vn-tablewrap {
+  overflow: hidden;
+}
+
+.vn-scope .vn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.vn-scope .vn-table thead th {
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+  background: var(--vn-surface-sunken);
+  border-bottom: 1px solid var(--vn-line);
+  white-space: nowrap;
+}
+
+.vn-scope .vn-table-actions-head {
+  text-align: right;
+}
+
+.vn-scope .vn-table tbody td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--vn-line-soft);
+  vertical-align: middle;
+}
+
+.vn-scope .vn-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.vn-scope .vn-row {
+  transition: background var(--vn-fast) var(--vn-ease);
+}
+
+.vn-scope .vn-row:hover {
+  background: var(--vn-surface-raised);
+}
+
+.vn-scope .vn-table tbody td:last-child {
+  text-align: right;
+}
+
+.vn-scope .vn-row-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.vn-scope .vn-row-glyph {
+  font-size: var(--vn-glyph);
+  color: var(--vn-ink-3);
+  flex: none;
+}
+
+.vn-scope .vn-row-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vn-scope .vn-row-name {
+  font-weight: 600;
+  color: var(--vn-ink);
+}
+
+.vn-scope .vn-row-id {
+  color: var(--vn-ink-3);
+  font-size: 11px;
+}
+
+.vn-scope .vn-row-dim {
+  color: var(--vn-ink-2);
+}
+
+/* ==================== Loading skeleton ==================== */
+.vn-scope .vn-skel-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.vn-scope .vn-skel-line {
+  height: 10px;
+}
+
+.vn-scope .vn-skel-block {
+  height: 54px;
+}
+
+/* ==================== Create / edit modal ==================== */
+.vn-portal.vn-modal .ant-modal {
+  max-width: calc(100vw - 32px);
+  padding-bottom: 0;
+}
+
+.vn-portal.vn-modal .ant-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 86vh;
+}
+
+.vn-portal.vn-modal .ant-modal .ant-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.vn-portal .vn-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.vn-portal .vn-modal-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vn-portal .vn-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vn-portal .vn-modal-head-glyph {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-brand-line);
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+  font-size: var(--vn-glyph);
+}
+
+.vn-portal .vn-modal-title {
+  font-size: 14.5px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  color: var(--vn-ink);
+}
+
+.vn-portal .vn-modal-subtitle {
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+  margin-top: 1px;
+}
+
+/* Sections are nested flat panels, not bordered fieldsets. */
+.vn-portal .form-section-modern {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 12px;
+}
+
+.vn-portal .section-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.vn-portal .section-header .section-icon {
+  font-size: var(--vn-glyph-sm);
+  color: var(--vn-brand);
+}
+
+.vn-portal .section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .section-subtitle {
+  font-size: 11px;
+  color: var(--vn-ink-3);
+  margin-left: auto;
+}
+
+.vn-portal .section-content .ant-form-item {
+  margin-bottom: 10px;
+}
+
+.vn-portal .section-content > .ant-form-item:last-child,
+.vn-portal .section-content > .form-row:last-child .ant-form-item {
+  margin-bottom: 0;
+}
+
+.vn-portal .form-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.vn-portal .form-row-identity .form-item-category {
+  flex: none;
+}
+
+.vn-portal .form-row-identity .form-item-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.vn-portal .form-row-identity .form-item-lb {
+  flex: none;
+  width: 148px;
+}
+
+.vn-portal .ant-form-item .ant-form-item-label {
+  padding-bottom: 3px;
+}
+
+.vn-portal .modal-footer-modern {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 11px 18px;
+  border-top: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+
+/* Instance rows */
+.vn-portal .instances-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vn-portal .instance-row-modern {
+  background: var(--vn-surface);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 9px 10px 10px;
+}
+
+.vn-portal .instance-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+
+.vn-portal .instance-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .instance-index {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.vn-portal .instance-row-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 0.9fr 0.8fr 1fr;
+  gap: 8px;
+}
+
+.vn-portal .instance-row-grid .ant-form-item {
+  margin-bottom: 0;
+}
+
+.vn-portal .instance-row-grid .ant-form-item-label > label {
+  font-size: 10.5px;
+}
+
+.vn-portal .add-instance-btn-modern.ant-btn {
+  width: 100%;
+  height: 32px;
+}
+
+.vn-portal .modal-instances-warning.ant-alert {
+  margin-bottom: 8px;
+}
+
+/* Load-balancer option rows */
+.vn-portal .option-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 0;
+}
+
+.vn-portal .option-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.vn-portal .option-title {
+  font-size: 12.5px;
+  color: var(--vn-ink);
+}
+
+.vn-portal .option-desc {
+  font-size: 11px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .option-icon {
+  font-size: var(--vn-glyph);
+  color: var(--vn-brand);
+}
+
+/* ==================== Detail drawer ==================== */
+.vn-portal.vn-drawer.ant-drawer .ant-drawer-content-wrapper {
+  box-shadow: var(--vn-shadow-pop);
+}
+
+.vn-portal .vn-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.vn-portal .vn-detail-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+
+.vn-portal .vn-detail-head-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.vn-portal .vn-detail-glyph {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-brand);
+  font-size: var(--vn-glyph-lg);
+}
+
+.vn-portal .vn-detail-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  color: var(--vn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .vn-detail-idrow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.vn-portal .vn-detail-id {
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .vn-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vn-portal .vn-detail-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vn-portal .vn-detail-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-detail-section {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 12px;
+}
+
+.vn-portal .vn-detail-section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-detail-section-head .anticon {
+  font-size: var(--vn-glyph-sm);
+  color: var(--vn-brand);
+}
+
+.vn-portal .vn-detail-section-head .vn-count {
+  margin-left: auto;
+  color: var(--vn-ink-3);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.vn-portal .vn-kv {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.vn-portal .vn-kv-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vn-portal .vn-kv-wide {
+  grid-column: 1 / -1;
+}
+
+.vn-portal .vn-kv-label {
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .vn-kv-value {
+  font-size: 12.5px;
+  color: var(--vn-ink);
+  overflow-wrap: anywhere;
+}
+
+.vn-portal .vn-instance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vn-portal .vn-instance-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+
+.vn-portal .vn-instance-addr {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* Tone belongs to the dot; the address itself stays neutral. */
+.vn-portal .vn-instance-addr .vn-mono {
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-instance-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .vn-detail-empty {
+  font-size: 12px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .vn-detail-actions {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+
+.vn-portal .vn-detail-actions .ant-btn {
+  flex: 1;
+}

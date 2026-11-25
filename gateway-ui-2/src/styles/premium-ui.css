@@ -149,7 +149,7 @@
 .input-clean:focus {
   border-color: var(--border-focus);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px rgba(96, 149, 255, 0.12);
 }
 
 /* ==================== Section Divider ==================== */
@@ -371,7 +371,7 @@
 .btn-premium { background: var(--primary-color); border: none; color: #fff; font-weight: 600; border-radius: var(--radius-md); }
 .btn-premium:hover { background: var(--primary-hover); box-shadow: none; transform: none; }
 .input-premium { background: var(--bg-input); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); }
-.input-premium:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+.input-premium:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(96, 149, 255, 0.12); }
 .animate-fade-in { animation: fadeIn var(--duration-normal) var(--ease-out); }
 .animate-slide-up { animation: slideUp var(--duration-normal) var(--ease-out); }
 .animate-slide-down { animation: fadeIn var(--duration-normal) var(--ease-out); }
@@ -384,3 +384,194 @@
 .scrollbar-premium::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-premium::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: var(--radius-full); }
 .scrollbar-premium::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+/* ==================== Inline stat chips (shared by all list pages) ==================== */
+.stat-chips-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.stat-chip {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-section);
+  transition: background var(--duration-fast) var(--ease-default),
+    border-color var(--duration-fast) var(--ease-default);
+  user-select: none;
+}
+
+.stat-chip:not(.stat-chip-static) {
+  cursor: pointer;
+}
+
+.stat-chip:not(.stat-chip-static):hover {
+  background: var(--bg-hover);
+}
+
+.stat-chip-active {
+  border-color: var(--primary-color);
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.stat-chip-value {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.stat-chip-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Semantic text utilities used by stat chips and inline labels. */
+.text-green-600 { color: var(--success-color) !important; }
+.text-red-600 { color: var(--error-color) !important; }
+.text-blue-600 { color: var(--primary-color) !important; }
+.text-amber-600 { color: var(--warning-color) !important; }
+
+/* ==================== Shared modern page header (services/routes and peers) ==================== */
+.page-header-modern {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+  padding: 0;
+}
+
+.page-header-modern .page-header-left {
+  gap: var(--space-1);
+}
+
+.page-title-main {
+  margin: 0 !important;
+  font-size: var(--text-2xl) !important;
+  font-weight: var(--weight-semibold) !important;
+  letter-spacing: -0.02em;
+  color: var(--text-primary) !important;
+  line-height: var(--leading-tight);
+}
+
+.page-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* ant-design-vue v4 puts the class on the affix wrapper when a suffix/clear icon exists. */
+.search-input {
+  width: 280px;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.search-input.ant-input-affix-wrapper {
+  padding: 0 var(--space-3);
+  background: var(--surface-input);
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.search-input.ant-input-affix-wrapper:hover {
+  border-color: rgba(128, 158, 215, 0.48);
+  background: var(--surface-input);
+}
+
+.search-input.ant-input-affix-wrapper-focused,
+.search-input.ant-input-affix-wrapper:focus-within {
+  border-color: #7ca7ff;
+  box-shadow: 0 0 0 3px rgba(96, 149, 255, 0.12);
+}
+
+.search-input .ant-input {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  box-shadow: none;
+  padding-right: 0;
+}
+
+.search-input .ant-input::placeholder {
+  color: #7183a0;
+}
+
+/* Bare input fallback (no suffix/clear => the class lands on <input>). */
+input.ant-input.search-input {
+  background: var(--surface-input);
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  color: var(--text-primary);
+}
+
+input.ant-input.search-input::placeholder {
+  color: #7183a0;
+}
+
+input.ant-input.search-input:hover {
+  border-color: rgba(128, 158, 215, 0.48);
+  background: var(--surface-input);
+}
+
+input.ant-input.search-input:focus {
+  border-color: #7ca7ff;
+  box-shadow: 0 0 0 3px rgba(96, 149, 255, 0.12);
+}
+
+.search-input .ant-input-suffix {
+  margin-left: var(--space-2);
+}
+
+.search-input .ant-input-suffix .ant-btn-text {
+  color: var(--text-muted);
+  padding: var(--space-1);
+}
+
+.search-input .ant-input-suffix .ant-btn-text:hover {
+  color: var(--primary-color);
+  background: var(--bg-hover);
+}
+
+.search-input .ant-input-clear-icon {
+  color: var(--text-muted);
+}
+
+.create-btn {
+  height: 40px;
+  border-radius: var(--radius-md);
+  font-weight: var(--weight-semibold);
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: #ffffff;
+}
+
+.create-btn:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+@media (max-width: 768px) {
+  .page-header-modern {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-header-right {
+    width: 100%;
+  }
+
+  .search-input {
+    flex: 1;
+    width: auto;
+  }
+}

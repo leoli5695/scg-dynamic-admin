@@ -3,11 +3,14 @@
  * Compact inline stat chips rendered inside a page header's right side.
  * Chips are optionally clickable (active ring) when they double as filters.
  */
+import type { Component } from 'vue'
+
 export interface InlineStatChipItem {
   key: string
   value: number
   label: string
   tone?: 'green' | 'red' | 'blue' | 'amber'
+  icon?: Component
   active?: boolean
   onClick?: () => void
 }
@@ -34,6 +37,11 @@ const TONE_CLASS: Record<NonNullable<InlineStatChipItem['tone']>, string> = {
       ]"
       @click="item.onClick?.()"
     >
+      <component
+        :is="item.icon"
+        v-if="item.icon"
+        :class="['stat-chip-icon', item.tone ? TONE_CLASS[item.tone] : '']"
+      />
       <span :class="['stat-chip-value', item.tone ? TONE_CLASS[item.tone] : '']">{{ item.value }}</span>
       <span class="stat-chip-label">{{ item.label }}</span>
     </div>

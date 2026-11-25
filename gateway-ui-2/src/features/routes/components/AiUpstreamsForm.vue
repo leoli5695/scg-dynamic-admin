@@ -7,7 +7,7 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DeleteOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons-vue'
+import { DeleteOutlined, PlusOutlined, RobotOutlined } from '@/components/icons'
 import type { ServiceDefinition } from '@/types/service'
 
 interface ModelMappingPair { key?: string; value?: string }
@@ -51,73 +51,68 @@ function removePredicate(index: number) {
 <template>
   <div>
     <!-- AI service upstreams -->
-    <div
-      v-for="(up, idx) in aiUpstreams"
-      :key="idx"
-      :style="{ padding: '10px 12px', marginBottom: '8px', borderRadius: '6px', border: '1px solid rgba(148,163,184,0.2)' }"
-    >
-      <div :style="{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'nowrap' }">
+    <div v-for="(up, idx) in aiUpstreams" :key="idx" class="upstream-card">
+      <div class="upstream-head">
+        <span class="upstream-index">{{ t('routes.ai_upstream') }} {{ idx + 1 }}</span>
+        <a-tooltip :title="t('common.delete')">
+          <a-button type="text" danger class="action-btn" :aria-label="t('common.delete')" @click="removeUpstream(idx)">
+            <template #icon><DeleteOutlined /></template>
+          </a-button>
+        </a-tooltip>
+      </div>
+      <div class="upstream-controls">
         <a-select
           v-model:value="up.provider"
           :placeholder="t('routes.ai_select_service')"
-          :style="{ width: '300px', flexShrink: 0 }"
+          class="upstream-service-select"
           show-search
           option-filter-prop="label"
           :options="serviceOptions"
           :not-found-content="t('routes.ai_no_services')"
         />
-        <a-input-number v-model:value="up.weight" :min="1" :max="100" :style="{ width: '100px', flexShrink: 0 }" addon-after="%" />
-        <a-button type="text" danger :style="{ flexShrink: 0, padding: '4px' }" @click="removeUpstream(idx)">
-          <template #icon><DeleteOutlined /></template>
-        </a-button>
+        <a-input-number v-model:value="up.weight" :min="1" :max="100" class="upstream-weight" addon-after="%" />
       </div>
 
       <!-- Per-upstream model mapping -->
-      <div :style="{ marginTop: '10px' }">
-        <div :style="{ fontSize: '12px', opacity: 0.75, marginBottom: '4px' }" :title="t('routes.ai_model_mapping_hint')">
+      <div class="mapping-block">
+        <div class="mapping-title" :title="t('routes.ai_model_mapping_hint')">
           {{ t('routes.ai_model_mapping') }}
         </div>
-        <div
-          v-for="(mm, mmIdx) in (up.modelMappingPairs ?? [])"
-          :key="mmIdx"
-          :style="{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'nowrap' }"
-        >
-          <a-input v-model:value="mm.key" :placeholder="t('routes.ai_model_mapping_key')" size="small" :style="{ flex: 1 }" />
-          <span :style="{ opacity: 0.5, flexShrink: 0 }">→</span>
-          <a-input v-model:value="mm.value" :placeholder="t('routes.ai_model_mapping_value')" size="small" :style="{ flex: 1 }" />
-          <a-button type="text" danger size="small" :style="{ flexShrink: 0, padding: '2px' }" @click="removeMapping(up, mmIdx)">
+        <div v-for="(mm, mmIdx) in (up.modelMappingPairs ?? [])" :key="mmIdx" class="mapping-row">
+          <a-input v-model:value="mm.key" :placeholder="t('routes.ai_model_mapping_key')" size="small" class="mapping-input" />
+          <span class="mapping-arrow">→</span>
+          <a-input v-model:value="mm.value" :placeholder="t('routes.ai_model_mapping_value')" size="small" class="mapping-input" />
+          <a-button type="text" danger size="small" class="action-btn" :aria-label="t('common.delete')" @click="removeMapping(up, mmIdx)">
             <template #icon><DeleteOutlined /></template>
           </a-button>
         </div>
-        <a-button type="link" size="small" :style="{ padding: 0 }" @click="addMapping(up)">
+        <a-button type="link" size="small" class="inline-add-btn" @click="addMapping(up)">
           <template #icon><PlusOutlined /></template>{{ t('routes.ai_add_model_mapping') }}
         </a-button>
       </div>
     </div>
-    <a-button type="dashed" block @click="addUpstream">
+    <a-button type="dashed" block class="add-predicate-btn-modern" @click="addUpstream">
       <template #icon><PlusOutlined /></template>{{ t('routes.ai_add_upstream') }}
     </a-button>
 
     <!-- Model predicates -->
-    <div :style="{ marginTop: '16px' }">
-      <div :style="{ marginBottom: '8px', fontWeight: 500 }">
-        <RobotOutlined :style="{ marginRight: '6px' }" />{{ t('routes.ai_model_predicates') }}
+    <div class="model-predicates">
+      <div class="subsection-title">
+        <RobotOutlined />{{ t('routes.ai_model_predicates') }}
       </div>
-      <div
-        v-for="(mp, mpIdx) in modelPredicates"
-        :key="mpIdx"
-        :style="{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'nowrap' }"
-      >
-        <a-select v-model:value="mp.matchType" :style="{ width: '120px', flexShrink: 0 }">
+      <div v-for="(mp, mpIdx) in modelPredicates" :key="mpIdx" class="model-predicate-row">
+        <a-select v-model:value="mp.matchType" class="model-match-type">
           <a-select-option value="PREFIX">{{ t('routes.ai_match_prefix') }}</a-select-option>
           <a-select-option value="EXACT">{{ t('routes.ai_match_exact') }}</a-select-option>
         </a-select>
-        <a-input v-model:value="mp.value" :placeholder="t('routes.ai_model_value_placeholder')" :style="{ flex: 1 }" />
-        <a-button type="text" danger :style="{ flexShrink: 0, padding: '4px' }" @click="removePredicate(mpIdx)">
-          <template #icon><DeleteOutlined /></template>
-        </a-button>
+        <a-input v-model:value="mp.value" :placeholder="t('routes.ai_model_value_placeholder')" class="model-match-value" />
+        <a-tooltip :title="t('common.delete')">
+          <a-button type="text" danger class="action-btn" :aria-label="t('common.delete')" @click="removePredicate(mpIdx)">
+            <template #icon><DeleteOutlined /></template>
+          </a-button>
+        </a-tooltip>
       </div>
-      <a-button type="dashed" block @click="addPredicate">
+      <a-button type="dashed" block class="add-predicate-btn-modern" @click="addPredicate">
         <template #icon><PlusOutlined /></template>{{ t('routes.ai_add_model_predicate') }}
       </a-button>
     </div>
