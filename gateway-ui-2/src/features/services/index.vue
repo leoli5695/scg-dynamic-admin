@@ -9,7 +9,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   AppstoreOutlined, CheckCircleOutlined, ClusterOutlined, ExclamationCircleOutlined,
-  OrderedListOutlined, PlusOutlined, QuestionCircleOutlined, ReloadOutlined, RobotOutlined, SearchOutlined,
+  OrderedListOutlined, PlusOutlined, ReloadOutlined, RobotOutlined, SearchOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { useCatalogFilter, type HealthFilter } from '@/composables/useCatalogFilter'
@@ -262,10 +262,10 @@ const categoryOptions = computed<VnSegmentOption<'NORMAL' | 'AI'>[]>(() => [
 ])
 
 // The rail follows the selected category's health source: instance heartbeat for
-// NORMAL, provider probe (three tiers) for AI.
+// NORMAL, provider probe for AI. The total also includes unprobed AI services.
 const statItems = computed<VnStatItem[]>(() => {
   const c = healthCounts.value
-  const items: VnStatItem[] = [
+  return [
     {
       key: 'all',
       value: c.total,
@@ -290,17 +290,6 @@ const statItems = computed<VnStatItem[]>(() => {
       active: health.value === 'unhealthy',
     },
   ]
-  if (category.value === 'AI') {
-    items.push({
-      key: 'unknown',
-      value: c.unknown,
-      label: t('services.not_probed'),
-      icon: QuestionCircleOutlined,
-      accent: 'var(--vn-ink-2)',
-      active: health.value === 'unknown',
-    })
-  }
-  return items
 })
 </script>
 
