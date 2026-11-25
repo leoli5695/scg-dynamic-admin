@@ -4,12 +4,12 @@
  * Rendered on the Vue-native design layer: toolbar + metric rail + native
  * segmented filters + a grid/table catalog. API calls and payloads are unchanged.
  */
-import { computed, ref, useTemplateRef, watch } from 'vue'
+import { computed, onActivated, ref, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   AppstoreOutlined, CheckCircleOutlined, ClusterOutlined, ExclamationCircleOutlined,
-  OrderedListOutlined, PlusOutlined, ReloadOutlined, RobotOutlined, SearchOutlined,
+  OrderedListOutlined, PlusOutlined, QuestionCircleOutlined, ReloadOutlined, RobotOutlined, SearchOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { useCatalogFilter, type HealthFilter } from '@/composables/useCatalogFilter'
@@ -28,8 +28,13 @@ import ServiceTile from './components/ServiceTile.vue'
 import ServiceTable from './components/ServiceTable.vue'
 import ServiceDetailDrawer from './components/ServiceDetailDrawer.vue'
 import ServiceFormModal, { type ServiceFormValues } from './components/ServiceFormModal.vue'
+import { serviceSignature, catalogHealth, type ServiceCatalogRow } from './utils'
 import '@/styles/vue-native.css'
 import './services-vue-native.css'
+
+// Named so the shell's KeepAlive can cache it: returning to this tab must not
+// pay a full remount plus a blocking refetch.
+defineOptions({ name: 'ServicesPage' })
 
 const route = useRoute()
 const router = useRouter()
@@ -52,12 +57,12 @@ const services = computed<ServiceDefinition[]>(() => servicesRequest.data.value 
 const isAiService = (s: ServiceDefinition): boolean => s.category === 'AI'
 
 const {
-  search, category, health, filtered, categoryCounts, healthyCount, unhealthyCount, isFiltered, reset,
+  search, category, health, filtered, categoryCounts, healthCounts, isFiltered, reset,
 } = useCatalogFilter<ServiceDefinition>({
   items: services,
   searchText: (s) => s.name,
-  isAi: isAiService,
-  isHealthy: (s) => !!s.instances && s.instances.some((i) => i.healthy !== false),
+  categoryOf: (s) => (isAiService(s) ? 'AI' : 'NORMAL'),
+  healthOf: catalogHealth,
 })
 
 // Deep-link support: topology jumps here with ?highlight=<serviceId|name>.
@@ -76,6 +81,21 @@ watch(
       }
     }
   },
+)
+
+// Cached by the shell: refresh silently on return, skip the first activation
+// because the initial mount already fetched.
+let activatedOnce = false
+onActivated(() => {
+  if (!activatedOnce) {
+    activatedOnce = true
+    return
+  }
+  servicesRequest.run()
+})
+
+const tileRows = computed<ServiceCatalogRow[]>(
+  () => filtered.value.map((service) => ({ service, sig: serviceSignature(service) })),
 )
 
 const errorMessage = (error: unknown, fallbackKey: string): string =>
@@ -177,10 +197,6 @@ function resetFilters() {
 }
 
 function selectStat(key: string) {
-  if (key === 'ai') {
-    category.value = category.value === 'AI' ? 'ALL' : 'AI'
-    return
-  }
   health.value = key as HealthFilter
 }
 
@@ -189,45 +205,52 @@ const viewOptions = computed<VnSegmentOption<'grid' | 'table'>[]>(() => [
   { key: 'table', label: t('services.view_table'), icon: OrderedListOutlined },
 ])
 
-const categoryOptions = computed<VnSegmentOption<'ALL' | 'NORMAL' | 'AI'>[]>(() => [
-  { key: 'ALL', label: t('services.tab_all'), count: categoryCounts.value.all },
+const categoryOptions = computed<VnSegmentOption<'NORMAL' | 'AI'>[]>(() => [
   { key: 'NORMAL', label: t('services.tab_normal'), count: categoryCounts.value.normal, icon: ClusterOutlined },
   { key: 'AI', label: t('services.tab_ai'), count: categoryCounts.value.ai, icon: RobotOutlined },
 ])
 
-const statItems = computed<VnStatItem[]>(() => [
-  {
-    key: 'all',
-    value: services.value.length,
-    label: t('services.stats_services'),
-    icon: AppstoreOutlined,
-    active: health.value === 'all' && category.value !== 'AI',
-  },
-  {
-    key: 'healthy',
-    value: healthyCount.value,
-    label: t('services.stats_healthy'),
-    icon: CheckCircleOutlined,
-    accent: 'var(--vn-ok)',
-    active: health.value === 'healthy',
-  },
-  {
-    key: 'unhealthy',
-    value: unhealthyCount.value,
-    label: t('services.stats_unhealthy'),
-    icon: ExclamationCircleOutlined,
-    accent: 'var(--vn-err)',
-    active: health.value === 'unhealthy',
-  },
-  {
-    key: 'ai',
-    value: categoryCounts.value.ai,
-    label: t('services.tab_ai'),
-    icon: RobotOutlined,
-    accent: 'var(--vn-info)',
-    active: category.value === 'AI',
-  },
-])
+// The rail follows the selected category's health source: instance heartbeat for
+// NORMAL, provider probe (three tiers) for AI.
+const statItems = computed<VnStatItem[]>(() => {
+  const c = healthCounts.value
+  const items: VnStatItem[] = [
+    {
+      key: 'all',
+      value: c.total,
+      label: t('services.stats_services'),
+      icon: AppstoreOutlined,
+      active: health.value === 'all',
+    },
+    {
+      key: 'healthy',
+      value: c.healthy,
+      label: t('services.stats_healthy'),
+      icon: CheckCircleOutlined,
+      accent: 'var(--vn-ok)',
+      active: health.value === 'healthy',
+    },
+    {
+      key: 'unhealthy',
+      value: c.unhealthy,
+      label: t('services.stats_unhealthy'),
+      icon: ExclamationCircleOutlined,
+      accent: 'var(--vn-err)',
+      active: health.value === 'unhealthy',
+    },
+  ]
+  if (category.value === 'AI') {
+    items.push({
+      key: 'unknown',
+      value: c.unknown,
+      label: t('services.not_probed'),
+      icon: QuestionCircleOutlined,
+      accent: 'var(--vn-ink-2)',
+      active: health.value === 'unknown',
+    })
+  }
+  return items
+})
 </script>
 
 <template>
@@ -314,10 +337,10 @@ const statItems = computed<VnStatItem[]>(() => [
     <template v-else>
       <TransitionGroup v-if="view === 'grid'" name="vn-item" tag="div" class="vn-grid">
         <ServiceTile
-          v-for="service in filtered"
-          :key="service.name"
-          v-memo="[service]"
-          :service="service"
+          v-for="row in tileRows"
+          :key="row.service.name"
+          v-memo="[row.sig]"
+          :service="row.service"
           @detail="selectedService = $event"
           @edit="openEditModal"
           @delete="handleDelete"
@@ -325,7 +348,7 @@ const statItems = computed<VnStatItem[]>(() => [
       </TransitionGroup>
       <ServiceTable
         v-else
-        :services="filtered"
+        :rows="tileRows"
         @detail="selectedService = $event"
         @edit="openEditModal"
         @delete="handleDelete"

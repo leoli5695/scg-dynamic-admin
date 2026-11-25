@@ -168,23 +168,32 @@
   border-top: 1px solid var(--vn-line-soft);
 }
 
-/* ==================== Stat rail: one panel, hairline-divided cells ========== */
+/* ==================== Stat rail: one panel, hairline-divided cells ==========
+   The bottom edge is owned by the cells, not the panel: every cell carries the
+   same 2px bottom rule and the active one just recolours it. That keeps all four
+   cells the same height, puts the active indicator exactly on the shared bottom
+   edge, and avoids a second line under the panel border. */
 .vn-scope .vn-statrail {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
+  align-items: stretch;
   overflow: hidden;
   margin-bottom: 12px;
+  border-bottom: 0;
+  border-radius: var(--vn-r-panel) var(--vn-r-panel) 0 0;
 }
 
 .vn-scope .vn-stat {
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 13px 16px 14px;
+  justify-content: center;
+  gap: 2px;
+  height: 68px;
+  padding: 0 14px;
   border: 0;
   border-left: 1px solid var(--vn-line-soft);
+  border-bottom: 2px solid var(--vn-line);
   background: transparent;
   text-align: left;
   font: inherit;
@@ -201,47 +210,36 @@
   background: var(--vn-surface-raised);
 }
 
-.vn-scope .vn-stat::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: var(--vn-stat-accent, var(--vn-brand));
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform var(--vn-fast) var(--vn-ease);
-}
-
-.vn-scope .vn-stat.is-active::after {
-  transform: scaleX(1);
-}
-
 .vn-scope .vn-stat.is-active {
   background: var(--vn-surface-raised);
+  border-bottom-color: var(--vn-stat-accent, var(--vn-brand));
 }
 
 .vn-scope .vn-stat-top {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: var(--vn-stat-accent, var(--vn-ink-3));
   font-size: var(--vn-glyph-sm);
 }
 
 .vn-scope .vn-stat-value {
-  font-size: 24px;
+  font-size: 23px;
   font-weight: 640;
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
   color: var(--vn-ink);
 }
 
 .vn-scope .vn-stat-label {
   font-size: 11.5px;
+  line-height: 1.3;
   color: var(--vn-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ==================== Segmented control (native, replaces antd tabs) ======== */

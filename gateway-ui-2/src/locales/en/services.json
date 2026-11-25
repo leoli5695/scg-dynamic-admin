@@ -110,5 +110,9 @@
   "services.view_grid": "Cards",
   "services.view_table": "Table",
   "services.view_mode": "View mode",
-  "services.results": "{{count}} results"
+  "services.results": "{{count}} results",
+  "services.not_probed": "Not probed",
+  "services.provider_health": "Provider health",
+  "services.last_probe": "Last probe",
+  "services.endpoint": "Provider endpoint"
 }

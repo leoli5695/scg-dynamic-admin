@@ -38,6 +38,19 @@ export const AI_PROVIDER_TYPES = [
 ] as const;
 export type AiProviderType = typeof AI_PROVIDER_TYPES[number];
 
+/**
+ * AI provider probe result, injected by GET /api/services for category === 'AI'
+ * only. UNKNOWN means "not probed yet" (first round after a restart, or a cache
+ * miss). Older backends omit the key entirely — treat that as UNKNOWN too.
+ */
+export interface ProviderHealth {
+  status: 'HEALTHY' | 'UNHEALTHY' | 'UNKNOWN';
+  /** Epoch millis of the last probe, null when never probed. */
+  lastProbeAt: number | null;
+  /** Redacted summary, e.g. "HTTP 401（认证失败，请检查 API Key）". Never a key. */
+  message: string | null;
+}
+
 /** Service as stored/returned by the admin backend. */
 export interface ServiceDefinition {
   name: string;
@@ -58,6 +71,8 @@ export interface ServiceDefinition {
   baseUrl?: string;
   /** Reference into the encrypted credential store. Read-only from the backend. */
   credentialRef?: string;
+  /** Provider probe result. Absent on older backends ⇒ read as UNKNOWN. */
+  providerHealth?: ProviderHealth;
   /**
    * Plaintext API key input for create/rotate. Write-only: never returned by the
    * backend, never persisted client-side.

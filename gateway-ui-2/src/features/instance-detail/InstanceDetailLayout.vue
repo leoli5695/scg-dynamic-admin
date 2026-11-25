@@ -31,6 +31,9 @@ import { createInstanceDetailContext, INSTANCE_DETAIL_KEY } from './context'
 import ScaleModal from './ScaleModal.vue'
 import './instance-detail.css'
 
+/** Tab pages kept mounted across tab switches (matched by component name). */
+const CACHED_TABS = ['ServicesPage']
+
 /** Tab key → icon mapping (order defines tab order). */
 const TAB_ICONS = {
   overview: DashboardOutlined,
@@ -213,9 +216,15 @@ const statusTone = computed<StatusTone>(() => {
       </a-tab-pane>
     </a-tabs>
 
-    <!-- Tab content via router -->
+    <!-- Tab content via router. The services catalog stays mounted so returning
+         to it renders the preserved list instead of blocking on a refetch; every
+         other tab keeps remounting exactly as before. -->
     <div class="instance-detail-content">
-      <RouterView />
+      <RouterView v-slot="{ Component }">
+        <KeepAlive :include="CACHED_TABS">
+          <component :is="Component" />
+        </KeepAlive>
+      </RouterView>
     </div>
 
     <ScaleModal

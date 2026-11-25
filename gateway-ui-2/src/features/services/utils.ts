@@ -58,3 +58,72 @@ export const getLoadBalancerLabelKey = (lb: string): string => {
     default: return lb;
   }
 };
+
+/**
+ * Everything a catalog row renders, flattened to a string. A refresh returns
+ * fresh objects even when nothing changed; memoising on this instead of object
+ * identity keeps unchanged rows from re-rendering.
+ */
+export const serviceSignature = (s: ServiceDefinition): string => {
+  const instances = (s.instances || [])
+    .map((i) => `${i.ip}:${i.port}:${i.weight ?? 1}:${i.healthy !== false ? 1 : 0}:${i.enabled !== false ? 1 : 0}`)
+    .join(',');
+  const ph = s.providerHealth;
+  return [
+    s.name, s.serviceId ?? '', s.description ?? '', s.loadBalancer ?? '',
+    s.category ?? '', s.providerType ?? '', s.baseUrl ?? '', instances,
+    ph ? `${ph.status}:${ph.lastProbeAt ?? ''}:${ph.message ?? ''}` : '-',
+  ].join('|');
+};
+
+export interface ServiceCatalogRow {
+  service: ServiceDefinition;
+  sig: string;
+}
+
+export type CatalogHealth = 'healthy' | 'unhealthy' | 'unknown';
+
+/**
+ * Health means different things per category:
+ *  - NORMAL: instance heartbeat (unchanged semantics — a service with no healthy
+ *    instance counts as unhealthy).
+ *  - AI: the backend's provider probe. A missing providerHealth key is UNKNOWN,
+ *    never unhealthy, and instance heartbeat is never used as a stand-in.
+ */
+export const catalogHealth = (s: ServiceDefinition): CatalogHealth => {
+  if (s.category === 'AI') {
+    const status = s.providerHealth?.status;
+    if (status === 'HEALTHY') return 'healthy';
+    if (status === 'UNHEALTHY') return 'unhealthy';
+    return 'unknown';
+  }
+  return s.instances && s.instances.some((i) => i.healthy !== false) ? 'healthy' : 'unhealthy';
+};
+
+export interface CatalogStatus {
+  tone: 'ok' | 'warn' | 'err' | 'idle';
+  textKey: string;
+  params?: Record<string, number>;
+  /** Probe summary for AI services; already redacted by the backend. */
+  detail?: string | null;
+  lastProbeAt?: number | null;
+}
+
+/** Badge model for a catalog row, honouring the per-category health source. */
+export const getCatalogStatus = (s: ServiceDefinition): CatalogStatus => {
+  if (s.category === 'AI') {
+    const health = catalogHealth(s);
+    const ph = s.providerHealth;
+    return {
+      tone: health === 'healthy' ? 'ok' : health === 'unhealthy' ? 'err' : 'idle',
+      textKey: health === 'healthy'
+        ? 'services.healthy'
+        : health === 'unhealthy' ? 'services.unhealthy' : 'services.not_probed',
+      detail: ph?.message ?? null,
+      lastProbeAt: ph?.lastProbeAt ?? null,
+    };
+  }
+  const legacy = getServiceStatus(s);
+  const tone = { success: 'ok', warning: 'warn', error: 'err', default: 'idle' } as const;
+  return { tone: tone[legacy.color], textKey: legacy.textKey, params: legacy.params };
+};

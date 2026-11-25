@@ -11,11 +11,9 @@ import {
 import type { ServiceDefinition } from '@/types/service'
 import VnBadge from '@/components/vn/VnBadge.vue'
 import VnIconButton from '@/components/vn/VnIconButton.vue'
-import { getLoadBalancerLabelKey, getServiceStatus } from '../utils'
+import { getCatalogStatus, getLoadBalancerLabelKey, type ServiceCatalogRow } from '../utils'
 
-const TONE = { success: 'ok', warning: 'warn', error: 'err', default: 'idle' } as const
-
-defineProps<{ services: ServiceDefinition[] }>()
+defineProps<{ rows: ServiceCatalogRow[] }>()
 const emit = defineEmits<{
   (e: 'detail', s: ServiceDefinition): void
   (e: 'edit', s: ServiceDefinition): void
@@ -42,9 +40,9 @@ const healthyOf = (s: ServiceDefinition) =>
       </thead>
       <TransitionGroup name="vn-item" tag="tbody">
         <tr
-          v-for="service in services"
+          v-for="{ service, sig } in rows"
           :key="service.name"
-          v-memo="[service]"
+          v-memo="[sig]"
           class="service-card vn-row"
         >
           <td>
@@ -60,8 +58,8 @@ const healthyOf = (s: ServiceDefinition) =>
             </div>
           </td>
           <td>
-            <VnBadge :tone="TONE[getServiceStatus(service).color]">
-              {{ t(getServiceStatus(service).textKey, getServiceStatus(service).params ?? {}) }}
+            <VnBadge :tone="getCatalogStatus(service).tone">
+              {{ t(getCatalogStatus(service).textKey, getCatalogStatus(service).params ?? {}) }}
             </VnBadge>
           </td>
           <td class="vn-row-dim">

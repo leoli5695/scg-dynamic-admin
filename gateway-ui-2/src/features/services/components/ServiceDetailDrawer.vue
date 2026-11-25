@@ -13,7 +13,7 @@ import type { ServiceDefinition, ServiceInstanceItem } from '@/types/service'
 import { message } from '@/utils/feedback'
 import VnBadge from '@/components/vn/VnBadge.vue'
 import VnIconButton from '@/components/vn/VnIconButton.vue'
-import { getLoadBalancerLabelKey, getServiceStatus } from '../utils'
+import { getCatalogStatus, getLoadBalancerLabelKey } from '../utils'
 
 const props = defineProps<{ service: ServiceDefinition }>()
 const emit = defineEmits<{
@@ -24,10 +24,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const TONE = { success: 'ok', warning: 'warn', error: 'err', default: 'idle' } as const
-
-const status = computed(() => getServiceStatus(props.service))
-const tone = computed(() => TONE[status.value.color])
+const status = computed(() => getCatalogStatus(props.service))
+const tone = computed(() => status.value.tone)
 const isAi = computed(() => props.service.category === 'AI')
 const instances = computed(() => props.service.instances || [])
 const healthyCount = computed(
@@ -107,6 +105,18 @@ function copyId() {
               <span class="vn-kv-value">{{ healthyCount }} / {{ instances.length }}</span>
             </div>
             <template v-if="isAi">
+              <div class="vn-kv-item">
+                <span class="vn-kv-label">{{ t('services.provider_health') }}</span>
+                <span class="vn-kv-value">
+                  <VnBadge :tone="tone">{{ t(status.textKey, status.params ?? {}) }}</VnBadge>
+                </span>
+              </div>
+              <div class="vn-kv-item">
+                <span class="vn-kv-label">{{ t('services.last_probe') }}</span>
+                <span class="vn-kv-value">
+                  {{ status.lastProbeAt ? new Date(status.lastProbeAt).toLocaleString() : '—' }}
+                </span>
+              </div>
               <div v-if="service.providerType" class="vn-kv-item">
                 <span class="vn-kv-label">{{ t('services.provider_type') }}</span>
                 <span class="vn-kv-value">{{ service.providerType }}</span>
@@ -117,6 +127,7 @@ function copyId() {
               </div>
             </template>
           </div>
+          <p v-if="isAi && status.detail" class="vn-probe-note">{{ status.detail }}</p>
         </section>
 
         <section class="vn-detail-section">

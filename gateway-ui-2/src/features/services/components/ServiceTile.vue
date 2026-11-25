@@ -8,14 +8,14 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   ApiOutlined, CloudServerOutlined, CopyOutlined, DeleteOutlined, DownOutlined,
-  EditOutlined, EyeOutlined, RobotOutlined, SwapOutlined,
+  EditOutlined, ExclamationCircleOutlined, EyeOutlined, RobotOutlined, SwapOutlined,
 } from '@/components/icons'
 import type { ServiceDefinition } from '@/types/service'
 import { message } from '@/utils/feedback'
 import VnBadge from '@/components/vn/VnBadge.vue'
 import VnIconButton from '@/components/vn/VnIconButton.vue'
 import VnPanel from '@/components/vn/VnPanel.vue'
-import { getLoadBalancerLabelKey, getServiceStatus } from '../utils'
+import { getCatalogStatus, getLoadBalancerLabelKey } from '../utils'
 
 const props = defineProps<{ service: ServiceDefinition }>()
 const emit = defineEmits<{
@@ -26,21 +26,30 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const TONE = { success: 'ok', warning: 'warn', error: 'err', default: 'idle' } as const
-
 const descriptionOpen = ref(false)
-const status = computed(() => getServiceStatus(props.service))
-const tone = computed(() => TONE[status.value.color])
+const status = computed(() => getCatalogStatus(props.service))
+const tone = computed(() => status.value.tone)
 const isAi = computed(() => props.service.category === 'AI')
 const instances = computed(() => props.service.instances || [])
 const enabled = computed(() => instances.value.filter((i) => i.enabled !== false))
 const healthyEnabled = computed(() => enabled.value.filter((i) => i.healthy !== false).length)
 const displayId = computed(() => props.service.serviceId || props.service.name)
-const shown = computed(() => instances.value.slice(0, 3))
+const shown = computed(() => instances.value.slice(0, 4))
 const overflow = computed(() => instances.value.length - shown.value.length)
 
+const probeTip = computed(() => {
+  const parts: string[] = []
+  if (status.value.detail) parts.push(status.value.detail)
+  const at = status.value.lastProbeAt
+  if (at) parts.push(`${t('services.last_probe')}: ${new Date(at).toLocaleString()}`)
+  return parts.join(' · ')
+})
+
 const warning = computed(() => {
-  if (isAi.value) return null
+  if (isAi.value) {
+    // An unhealthy provider is the AI equivalent of an unreachable upstream.
+    return tone.value === 'err' ? (status.value.detail || t('services.unhealthy')) : null
+  }
   if (instances.value.length === 0) return t('services.no_instances_warning')
   if (enabled.value.length === 0) return t('services.all_instances_disabled_warning')
   if (healthyEnabled.value === 0) return t('services.all_instances_down_warning')
@@ -86,7 +95,14 @@ function copyId() {
     </div>
 
     <div class="vn-tile-meta">
-      <VnBadge :tone="tone">{{ t(status.textKey, status.params ?? {}) }}</VnBadge>
+      <a-tooltip
+        v-if="status.detail || status.lastProbeAt"
+        overlay-class-name="vn-tooltip"
+        :title="probeTip"
+      >
+        <VnBadge :tone="tone">{{ t(status.textKey, status.params ?? {}) }}</VnBadge>
+      </a-tooltip>
+      <VnBadge v-else :tone="tone">{{ t(status.textKey, status.params ?? {}) }}</VnBadge>
       <span class="vn-chip">
         <SwapOutlined />{{ t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted')) }}
       </span>
@@ -96,45 +112,56 @@ function copyId() {
       </span>
     </div>
 
-    <p v-if="warning" class="vn-tile-warning">{{ warning }}</p>
+    <p class="vn-tile-warnslot">
+      <a-tooltip v-if="warning" :title="warning" overlay-class-name="vn-tooltip">
+        <span class="vn-tile-warning">
+          <ExclamationCircleOutlined />
+          <span class="vn-tile-warning-text">{{ warning }}</span>
+        </span>
+      </a-tooltip>
+    </p>
 
     <VnPanel class="vn-pool">
       <div class="vn-pool-head">
-        <span class="vn-label">{{ t('services.instances') }}</span>
-        <span class="vn-chip-num">{{ instances.length }}</span>
+        <span class="vn-label">{{ t(isAi ? 'services.endpoint' : 'services.instances') }}</span>
+        <span v-if="!isAi" class="vn-chip-num">{{ instances.length }}</span>
       </div>
-      <div v-if="instances.length" class="vn-pool-list">
-        <a-tooltip
-          v-for="(inst, idx) in shown"
-          :key="inst.instanceId || `${inst.ip}:${inst.port}` || idx"
-          overlay-class-name="vn-tooltip"
-          :title="`${t('services.weight')}: ${inst.weight || 1}${inst.enabled === false ? ` · ${t('common.disabled')}` : ''}${inst.healthy === false ? ` · ${t('services.unhealthy')}` : ''}`"
-        >
-          <span :class="['vn-endpoint', `vn-ink-${instanceTone(inst)}`]">
-            <i class="vn-badge-dot" aria-hidden="true" />
-            <span class="vn-mono">{{ inst.ip }}:{{ inst.port }}</span>
-          </span>
-        </a-tooltip>
-        <span v-if="overflow > 0" class="vn-endpoint vn-endpoint-more">+{{ overflow }}</span>
+      <div class="vn-pool-body">
+        <div v-if="instances.length" class="vn-pool-list">
+          <a-tooltip
+            v-for="(inst, idx) in shown"
+            :key="inst.instanceId || `${inst.ip}:${inst.port}` || idx"
+            overlay-class-name="vn-tooltip"
+            :title="`${t('services.weight')}: ${inst.weight || 1}${inst.enabled === false ? ` · ${t('common.disabled')}` : ''}${inst.healthy === false ? ` · ${t('services.unhealthy')}` : ''}`"
+          >
+            <span :class="['vn-endpoint', `vn-ink-${instanceTone(inst)}`]">
+              <i class="vn-badge-dot" aria-hidden="true" />
+              <span class="vn-mono">{{ inst.ip }}:{{ inst.port }}</span>
+            </span>
+          </a-tooltip>
+          <span v-if="overflow > 0" class="vn-endpoint vn-endpoint-more">+{{ overflow }}</span>
+        </div>
+        <span v-else class="vn-pool-empty">
+          {{ isAi ? (service.baseUrl || service.providerType || '—') : t('services.no_instances_configured') }}
+        </span>
       </div>
-      <span v-else class="vn-pool-empty">
-        {{ isAi ? (service.baseUrl || service.providerType || '—') : t('services.no_instances_configured') }}
-      </span>
     </VnPanel>
 
-    <div v-if="service.description" class="vn-tile-desc">
-      <button
-        type="button"
-        class="vn-disclosure"
-        :aria-expanded="descriptionOpen"
-        @click="descriptionOpen = !descriptionOpen"
-      >
-        <DownOutlined :class="['vn-chevron', descriptionOpen && 'is-open']" />
-        {{ t(descriptionOpen ? 'services.hide_description' : 'services.show_description') }}
-      </button>
-      <Transition name="vn-collapse">
-        <p v-if="descriptionOpen" class="vn-tile-desc-text">{{ service.description }}</p>
-      </Transition>
+    <div class="vn-tile-desc">
+      <template v-if="service.description">
+        <button
+          type="button"
+          class="vn-disclosure"
+          :aria-expanded="descriptionOpen"
+          @click="descriptionOpen = !descriptionOpen"
+        >
+          <DownOutlined :class="['vn-chevron', descriptionOpen && 'is-open']" />
+          {{ t(descriptionOpen ? 'services.hide_description' : 'services.show_description') }}
+        </button>
+        <Transition name="vn-collapse">
+          <p v-if="descriptionOpen" class="vn-tile-desc-text">{{ service.description }}</p>
+        </Transition>
+      </template>
     </div>
   </article>
 </template>

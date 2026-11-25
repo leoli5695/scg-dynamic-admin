@@ -110,5 +110,9 @@
   "services.view_grid": "卡片",
   "services.view_table": "表格",
   "services.view_mode": "视图模式",
-  "services.results": "{{count}} 个结果"
+  "services.results": "{{count}} 个结果",
+  "services.not_probed": "未探测",
+  "services.provider_health": "提供商健康",
+  "services.last_probe": "最近探测",
+  "services.endpoint": "提供商端点"
 }
