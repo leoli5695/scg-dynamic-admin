@@ -192,6 +192,16 @@ gateway:
       # Defaults to GATEWAY_ENCRYPTION_KEY so no new secret is required; override
       # with GATEWAY_ADMIN_SECURITY_CREDENTIAL_KEY for a dedicated key.
       credential-key: ${GATEWAY_ADMIN_SECURITY_CREDENTIAL_KEY:${GATEWAY_ENCRYPTION_KEY:}}
+    # AI 提供商端点健康探测（ProviderHealthProbeScheduler）。
+    # 定期轻量 HTTP 探测 AI 服务 baseUrl（OpenAI 兼容 GET /models，Bearer 凭证），
+    # 结果仅存内存（TTL=2×间隔），服务列表 AI 项附带 providerHealth 字段；
+    # 普通服务健康口径不变（实例心跳）。重启后首轮探测前显示 UNKNOWN。
+    provider-health:
+      enabled: ${GATEWAY_PROVIDER_HEALTH_ENABLED:true}
+      interval-ms: ${GATEWAY_PROVIDER_HEALTH_INTERVAL_MS:3600000}        # 探测间隔，默认 1 小时
+      initial-delay-ms: ${GATEWAY_PROVIDER_HEALTH_INITIAL_DELAY_MS:60000} # 启动后首轮延迟，避免启动风暴
+      timeout-ms: ${GATEWAY_PROVIDER_HEALTH_TIMEOUT_MS:5000}             # 单次连接/读取超时
+      concurrency: ${GATEWAY_PROVIDER_HEALTH_CONCURRENCY:4}              # 并发探测上限
   # ============================================================================
   # Jaeger 分布式追踪配置（K8s test 命名空间，NodePort 映射）
   # ============================================================================

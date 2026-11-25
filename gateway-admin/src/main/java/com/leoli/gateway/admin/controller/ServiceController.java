@@ -10,6 +10,7 @@ import com.leoli.gateway.admin.model.ServiceInstanceHealth;
 import com.leoli.gateway.admin.repository.GatewayInstanceRepository;
 import com.leoli.gateway.admin.repository.ServiceInstanceHealthRepository;
 import com.leoli.gateway.admin.service.AuditLogService;
+import com.leoli.gateway.admin.service.ProviderHealthProbeService;
 import com.leoli.gateway.admin.service.ServiceService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class ServiceController extends BaseController {
     private final NacosConfigCenterService nacosConfigCenterService;
     private final GatewayInstanceRepository gatewayInstanceRepository;
     private final ServiceInstanceHealthRepository instanceHealthRepository;
+    private final ProviderHealthProbeService providerHealthProbeService;
 
     /**
      * Get all services with instance health status.
@@ -90,6 +92,11 @@ public class ServiceController extends BaseController {
             serviceMap.put("providerType", service.getProviderType());
             serviceMap.put("baseUrl", service.getBaseUrl());
             serviceMap.put("credentialRef", service.getCredentialRef());
+            // AI services additionally carry the provider endpoint probe result;
+            // NORMAL services keep the heartbeat-based instance health below.
+            if (service.isAiService()) {
+                serviceMap.put("providerHealth", providerHealthProbeService.getHealth(service.getName()));
+            }
 
             List<Map<String, Object>> instancesList = new ArrayList<>();
             if (service.getInstances() != null) {
