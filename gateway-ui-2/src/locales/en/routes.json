@@ -164,5 +164,11 @@
   "routes.ai_add_model_mapping": "Add mapping",
   "routes.tab_all": "All Routes",
   "routes.tab_normal": "Normal Routes",
-  "routes.tab_ai": "AI Routes"
+  "routes.tab_ai": "AI Routes",
+  "routes.view_grid": "Cards",
+  "routes.view_table": "Table",
+  "routes.view_mode": "View mode",
+  "routes.results": "{{count}} results",
+  "routes.stats_scope": "{{category}} statistics",
+  "routes.more_actions": "More actions"
 }

@@ -1,14 +1,16 @@
 <script setup lang="ts">
 /**
- * Feature authorization matrix grouped by edition, rendered as login-style cards.
- * Clicking a card emits `select` so the page can open the detail drawer.
+ * Feature authorization matrix grouped by edition on the Vue-native layer:
+ * a native segmented group switch plus a grid of matte feature tiles. Clicking
+ * a tile emits `select` so the page can open the detail drawer.
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CheckCircleOutlined, CrownOutlined, LockOutlined } from '@/components/icons'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
 import {
   EDITION_CONFIG,
-  EDITION_TONE,
   type LicenseFeatureDef,
 } from '../constants/featureCatalog'
 
@@ -16,30 +18,18 @@ const props = defineProps<{ features: LicenseFeatureDef[] }>()
 const emit = defineEmits<{ (e: 'select', feature: LicenseFeatureDef): void }>()
 
 const { t } = useI18n()
+const groupKey = ref<'basic' | 'advanced' | 'enterprise'>('basic')
 
 const groups = computed(() => [
-  {
-    key: 'basic',
-    label: t('licenseUI.basic_features_free'),
-    icon: CheckCircleOutlined,
-    tone: 'license-tone-success',
-    items: props.features.filter((feature) => feature.requiredEdition === 'BASIC'),
-  },
-  {
-    key: 'advanced',
-    label: t('licenseUI.advanced_features'),
-    icon: CrownOutlined,
-    tone: 'license-tone-primary',
-    items: props.features.filter((feature) => feature.requiredEdition === 'ADVANCED'),
-  },
-  {
-    key: 'enterprise',
-    label: t('licenseUI.enterprise_features'),
-    icon: CrownOutlined,
-    tone: 'license-tone-violet',
-    items: props.features.filter((feature) => feature.requiredEdition === 'ENTERPRISE'),
-  },
+  { key: 'basic' as const, label: t('licenseUI.basic_features_free'), icon: CheckCircleOutlined, items: props.features.filter((f) => f.requiredEdition === 'BASIC') },
+  { key: 'advanced' as const, label: t('licenseUI.advanced_features'), icon: CrownOutlined, items: props.features.filter((f) => f.requiredEdition === 'ADVANCED') },
+  { key: 'enterprise' as const, label: t('licenseUI.enterprise_features'), icon: CrownOutlined, items: props.features.filter((f) => f.requiredEdition === 'ENTERPRISE') },
 ])
+
+const groupOptions = computed<VnSegmentOption<'basic' | 'advanced' | 'enterprise'>[]>(() =>
+  groups.value.map((g) => ({ key: g.key, label: g.label, count: g.items.length, icon: g.icon })))
+
+const activeItems = computed(() => groups.value.find((g) => g.key === groupKey.value)?.items ?? [])
 
 const enabledCount = computed(() => props.features.filter((feature) => feature.enabled).length)
 
@@ -52,8 +42,9 @@ function statusLabel(feature: LicenseFeatureDef): string {
   return t(EDITION_CONFIG[feature.requiredEdition].labelKey)
 }
 
-function statusTone(feature: LicenseFeatureDef): string {
-  return isFree(feature) ? 'status-badge-success' : EDITION_TONE[feature.requiredEdition]
+function statusTone(feature: LicenseFeatureDef): 'ok' | 'info' | 'warn' {
+  if (isFree(feature)) return 'ok'
+  return feature.requiredEdition === 'ADVANCED' ? 'info' : 'warn'
 }
 
 function statusIcon(feature: LicenseFeatureDef) {
@@ -62,47 +53,36 @@ function statusIcon(feature: LicenseFeatureDef) {
 </script>
 
 <template>
-  <a-card :bordered="false" class="license-matrix-card">
-    <template #title>{{ t('licenseUI.feature_matrix') }}</template>
-    <template #extra>
-      <span class="license-feature-count">
-        {{ t('licenseUI.feature_count', { enabled: enabledCount, total: features.length }) }}
-      </span>
-    </template>
-
-    <a-tabs class="license-matrix-tabs">
-      <a-tab-pane v-for="group in groups" :key="group.key">
-        <template #tab>
-          <span class="license-matrix-tab">
-            <component :is="group.icon" :class="group.tone" />
-            {{ group.label }}
+  <section class="vn-panel">
+    <header class="vn-panel-head">
+      <span class="vnp-panel-head">{{ t('licenseUI.feature_matrix') }}</span>
+      <span class="vnp-count">{{ t('licenseUI.feature_count', { enabled: enabledCount, total: features.length }) }}</span>
+    </header>
+    <div class="vn-panel-body">
+      <VnSegmented v-model="groupKey" :options="groupOptions" :label="t('licenseUI.feature_matrix')" class="vn-license-matrix-seg" />
+      <div class="vn-license-feature-grid">
+        <button
+          v-for="feature in activeItems"
+          :key="feature.name"
+          type="button"
+          :class="['vn-panel', 'vn-license-feature-item', { 'is-enabled': feature.enabled }]"
+          @click="emit('select', feature)"
+        >
+          <span :class="['vn-license-feature-icon', isFree(feature) ? 'vn-ink-ok' : 'vn-ink-idle']" aria-hidden="true">
+            <component :is="feature.icon" />
           </span>
-        </template>
-        <div class="license-feature-grid">
-          <button
-            v-for="feature in group.items"
-            :key="feature.name"
-            type="button"
-            class="license-feature-item"
-            :class="{ 'is-enabled': feature.enabled }"
-            @click="emit('select', feature)"
-          >
-            <span class="license-feature-icon">
-              <component :is="feature.icon" />
+          <span class="vn-license-feature-content">
+            <span class="vn-license-feature-head">
+              <span class="vn-license-feature-name">{{ t(feature.displayNameKey) }}</span>
+              <VnBadge :tone="statusTone(feature)">
+                <component :is="statusIcon(feature)" />
+                {{ statusLabel(feature) }}
+              </VnBadge>
             </span>
-            <span class="license-feature-content">
-              <span class="license-feature-head">
-                <span class="license-feature-name">{{ t(feature.displayNameKey) }}</span>
-                <span class="status-badge license-mini-chip" :class="statusTone(feature)">
-                  <component :is="statusIcon(feature)" />
-                  {{ statusLabel(feature) }}
-                </span>
-              </span>
-              <span class="license-feature-desc">{{ t(feature.descriptionKey) }}</span>
-            </span>
-          </button>
-        </div>
-      </a-tab-pane>
-    </a-tabs>
-  </a-card>
+            <span class="vn-license-feature-desc">{{ t(feature.descriptionKey) }}</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </section>
 </template>

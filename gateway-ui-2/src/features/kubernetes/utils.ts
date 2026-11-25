@@ -36,3 +36,13 @@ export function formatNumber(value?: number): string {
 export function formatMemoryGb(value?: number): string {
   return typeof value === 'number' ? `${value} GB` : '—'
 }
+
+/** Map the legacy badge tone buckets onto the Vue-native badge/rail tones. */
+export type VnTone = 'ok' | 'warn' | 'err' | 'info' | 'idle'
+export function vnTone(tone: K8sTone): VnTone {
+  if (tone === 'success') return 'ok'
+  if (tone === 'warning') return 'warn'
+  if (tone === 'error') return 'err'
+  if (tone === 'info') return 'info'
+  return 'idle'
+}

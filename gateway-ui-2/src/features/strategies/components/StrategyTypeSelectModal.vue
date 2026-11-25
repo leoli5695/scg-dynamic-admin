@@ -110,17 +110,16 @@ function reset() {
     :open="isOpen"
     :footer="null"
     :width="1120"
-    wrap-class-name="strategy-picker-modal"
+    :style="{ top: '24px' }"
+    wrap-class-name="vn-portal vn-modal strategy-picker-modal"
     @cancel="emit('cancel')"
   >
     <template #title>
-      <div class="strategy-modal-header">
-        <div class="strategy-modal-title-wrapper">
-          <span class="strategy-modal-icon" aria-hidden="true"><ControlOutlined /></span>
-          <span class="strategy-modal-title-text">
-            <span class="strategy-modal-title">{{ t('strategy.select_type') }}</span>
-            <span class="strategy-modal-subtitle">{{ t('strategy.picker_hint') }}</span>
-          </span>
+      <div class="vn-modal-head">
+        <span class="vn-modal-head-glyph" aria-hidden="true"><ControlOutlined /></span>
+        <div>
+          <div class="vn-modal-title">{{ t('strategy.select_type') }}</div>
+          <div class="vn-modal-subtitle">{{ t('strategy.picker_hint') }}</div>
         </div>
       </div>
     </template>

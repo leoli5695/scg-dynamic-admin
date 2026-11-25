@@ -15,6 +15,7 @@ import {
 import { getTraceById, type FilterChainExecution, type FilterExecutionBar, type RequestTrace } from '@/api/traces'
 import { message } from '@/utils/feedback'
 import { copyText } from '@/utils/clipboard'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
 import {
   formatJson, getHeadersCount, getStatusTone, isBodyLarge, parsePercentage, toFilterExecutionBars,
 } from '../traceUtils'
@@ -34,6 +35,12 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const router = useRouter()
+
+async function copyValue(text?: string | null) {
+  if (!text) return
+  if (await copyText(text)) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
+}
 
 const viewMode = ref<'formatted' | 'raw'>('formatted')
 const requestBodyExpanded = ref(false)
@@ -166,7 +173,7 @@ const filterColumns = computed<ColumnsType<FilterChainExecution>>(() => [
     :open="open"
     placement="right"
     :width="900"
-    root-class-name="trace-drawer"
+    root-class-name="vn-portal vnp-portal trace-drawer"
     destroy-on-close
     @close="emit('close')"
   >
@@ -219,14 +226,9 @@ const filterColumns = computed<ColumnsType<FilterChainExecution>>(() => [
           <div class="td-stat td-stat-wide">
             <span class="lg-section-title">{{ t('trace.trace_id') }}</span>
             <span class="td-trace-id">
-              <a-typography-text :copyable="{ text: selectedTrace.traceId }" class="trace-mono">
-                {{ selectedTrace.traceId }}
-              </a-typography-text>
-              <a-tooltip :title="t('trace.view_distributed')">
-                <a-button type="text" class="action-btn td-icon-btn" @click="jumpToDistributed">
-                  <template #icon><ApartmentOutlined /></template>
-                </a-button>
-              </a-tooltip>
+              <span class="trace-mono">{{ selectedTrace.traceId }}</span>
+              <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(selectedTrace.traceId)" />
+              <VnIconButton :icon="ApartmentOutlined" :label="t('trace.view_distributed')" @click="jumpToDistributed" />
             </span>
           </div>
         </div>
@@ -235,11 +237,10 @@ const filterColumns = computed<ColumnsType<FilterChainExecution>>(() => [
       <div class="trace-subpanel td-path">
         <div class="td-path-item">
           <span class="lg-section-title">{{ t('trace.path') }}</span>
-          <a-tooltip :title="selectedTrace.uri">
-            <a-typography-text :copyable="{ text: selectedTrace.path || selectedTrace.uri || '' }" class="trace-mono">
-              {{ selectedTrace.path || '-' }}
-            </a-typography-text>
+          <a-tooltip :title="selectedTrace.uri" overlay-class-name="vn-tooltip">
+            <span class="trace-mono">{{ selectedTrace.path || '-' }}</span>
           </a-tooltip>
+          <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(selectedTrace.path || selectedTrace.uri)" />
         </div>
         <div class="td-path-item">
           <span class="lg-section-title">{{ t('trace.route_id') }}</span>
@@ -250,9 +251,8 @@ const filterColumns = computed<ColumnsType<FilterChainExecution>>(() => [
         </div>
         <div class="td-path-item">
           <span class="lg-section-title">{{ t('trace.query_string') }}</span>
-          <a-typography-text :copyable="{ text: selectedTrace.queryString || '' }" class="trace-mono">
-            {{ selectedTrace.queryString || '-' }}
-          </a-typography-text>
+          <span class="trace-mono">{{ selectedTrace.queryString || '-' }}</span>
+          <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(selectedTrace.queryString)" />
         </div>
       </div>
 

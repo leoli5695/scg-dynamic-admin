@@ -1,15 +1,16 @@
 <script setup lang="ts">
 /**
  * Access log page — Vue port of gateway-ui/src/features/access-log/index.tsx.
- * Configuration form + log viewer tabs. The reactive form lives here so the
+ * Configuration form + log viewer views. The reactive form lives here so the
  * footer Save/Reset actions act on it, and the effective deploy mode (uncommitted
- * edit wins) is passed down to the viewer and the collection guide.
+ * edit wins) is passed down to the viewer and the collection guide. Rendered on
+ * the Vue-native design layer; API calls and payloads are unchanged.
  */
 import { computed, reactive, ref, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   ClusterOutlined, ContainerOutlined, ExclamationCircleOutlined, EyeOutlined,
-  FileTextOutlined, HddOutlined, InboxOutlined, ReloadOutlined, SettingOutlined,
+  HddOutlined, InboxOutlined, ReloadOutlined, SettingOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { ApiError } from '@/api/http'
@@ -19,10 +20,18 @@ import {
 import type { AccessLogConfig, DeployMode, OutputTarget } from '@/api/accessLog'
 import { message } from '@/utils/feedback'
 import { useInstanceDetail } from '@/features/instance-detail/context'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnState from '@/components/vn/VnState.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import { DEFAULT_SENSITIVE_FIELDS } from './constants'
 import ConfigTab from './components/ConfigTab.vue'
 import LogViewerTab from './components/LogViewerTab.vue'
+import '@/styles/vue-native.css'
+import '@/features/services/services-vue-native.css'
 import './access-log.css'
+
+defineOptions({ name: 'AccessLogPage' })
 
 const { t } = useI18n()
 const instanceContext = useInstanceDetail()
@@ -53,7 +62,22 @@ const outputTarget = ref<OutputTarget>('file')
 const showFileConfig = ref(true)
 const saving = ref(false)
 const activeTab = ref<'config' | 'logs'>('config')
+/** The viewer mounts lazily on first visit, then stays mounted for instant re-activation. */
+const logsVisited = ref(false)
 const logTotal = ref(0)
+
+const tabOptions = computed<VnSegmentOption<'config' | 'logs'>[]>(() => [
+  { key: 'config', label: t('access_log.config_tab'), icon: SettingOutlined },
+  { key: 'logs', label: t('access_log.viewer_tab'), icon: EyeOutlined, count: logTotal.value > 0 ? logTotal.value : undefined },
+])
+
+const activeTabModel = computed<'config' | 'logs'>({
+  get: () => activeTab.value,
+  set: (value) => {
+    activeTab.value = value
+    if (value === 'logs') logsVisited.value = true
+  },
+})
 
 /** Infer the frontend-only output target from the persisted config. */
 function inferOutputTarget(config: AccessLogConfig): OutputTarget {
@@ -166,77 +190,63 @@ async function handleReset() {
 </script>
 
 <template>
-  <div class="access-log-page">
-    <div class="page-header-modern al-page-header">
-      <div class="page-header-left">
-        <h3 class="page-title-main has-glyph">
-          <span class="page-header-glyph" aria-hidden="true"><FileTextOutlined /></span>
-          {{ t('access_log.title') }}
-        </h3>
-      </div>
-      <div class="page-header-right">
-        <span class="lg-chip al-mode-chip">
+  <div class="access-log-page vn-scope">
+    <VnToolbar :title="t('access_log.title')" :lede="t('access_log.description_helper')">
+      <template #actions>
+        <span class="vn-chip al-mode-chip">
           <component :is="modeIcon" />
           {{ modeDescription }}
         </span>
-        <a-button :loading="configLoading" @click="reloadConfig">
-          <template #icon><ReloadOutlined /></template>
-          {{ t('common.refresh') }}
-        </a-button>
-      </div>
-    </div>
+        <VnSegmented v-model="activeTabModel" :options="tabOptions" :label="t('access_log.view_mode')" />
+        <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" :disabled="configLoading" @click="reloadConfig" />
+      </template>
+    </VnToolbar>
 
     <div v-if="configLoading && !savedConfig" class="al-loading">
       <a-spin size="large" />
     </div>
 
-    <section v-else-if="configError && !savedConfig" class="lg-panel al-state-panel">
-      <span class="al-state-icon is-error"><ExclamationCircleOutlined /></span>
-      <h2 class="al-state-title">{{ t('access_log.load_failed') }}</h2>
-      <p class="al-state-hint" :title="configError.message">{{ configError.message }}</p>
-      <a-button type="primary" @click="reloadConfig">
-        <template #icon><ReloadOutlined /></template>
-        {{ t('common.refresh') }}
-      </a-button>
-    </section>
+    <VnState
+      v-else-if="configError && !savedConfig"
+      :icon="ExclamationCircleOutlined"
+      tone="err"
+      :title="t('access_log.load_failed')"
+      :hint="configError.message"
+    >
+      <template #actions>
+        <a-button type="primary" @click="reloadConfig">
+          <template #icon><ReloadOutlined /></template>
+          {{ t('common.refresh') }}
+        </a-button>
+      </template>
+    </VnState>
 
     <template v-else>
-      <a-tabs v-model:activeKey="activeTab" class="al-tabs">
-        <a-tab-pane key="config">
-          <template #tab>
-            <span class="al-tab-label"><SettingOutlined /> {{ t('access_log.config_tab') }}</span>
-          </template>
-          <ConfigTab
-            :form="form"
-            :config="savedConfig"
-            :deploy-modes="deployModes"
-            :output-target="outputTarget"
-            :show-file-config="showFileConfig"
-            @deploy-mode-change="handleDeployModeChange"
-            @output-target-change="handleOutputTargetChange"
-          />
-        </a-tab-pane>
-        <a-tab-pane key="logs">
-          <template #tab>
-            <span class="al-tab-label">
-              <EyeOutlined /> {{ t('access_log.viewer_tab') }}
-              <span v-if="logTotal > 0" class="al-tab-count">{{ logTotal }}</span>
-            </span>
-          </template>
-          <LogViewerTab
-            :instance-id="instanceId"
-            :deploy-mode="effectiveDeployMode"
-            @total-change="(value: number) => (logTotal = value)"
-          />
-        </a-tab-pane>
-      </a-tabs>
-
-      <div v-if="activeTab === 'config'" class="al-settings-footer">
-        <a-button @click="handleReset">{{ t('access_log.reset') }}</a-button>
-        <a-button type="primary" :loading="saving" @click="handleSave">
-          {{ t('common.save') }}
-        </a-button>
+      <div v-show="activeTab === 'config'" class="al-config-wrap">
+        <ConfigTab
+          :form="form"
+          :config="savedConfig"
+          :deploy-modes="deployModes"
+          :output-target="outputTarget"
+          :show-file-config="showFileConfig"
+          @deploy-mode-change="handleDeployModeChange"
+          @output-target-change="handleOutputTargetChange"
+        />
+        <div class="al-settings-footer">
+          <a-button @click="handleReset">{{ t('access_log.reset') }}</a-button>
+          <a-button type="primary" :loading="saving" @click="handleSave">
+            {{ t('common.save') }}
+          </a-button>
+        </div>
       </div>
+
+      <LogViewerTab
+        v-if="logsVisited"
+        v-show="activeTab === 'logs'"
+        :instance-id="instanceId"
+        :deploy-mode="effectiveDeployMode"
+        @total-change="(value: number) => (logTotal = value)"
+      />
     </template>
   </div>
 </template>

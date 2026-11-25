@@ -3,10 +3,16 @@
  * Expanded row detail for one access log entry — port of
  * gateway-ui/src/features/access-log/components/LogEntryExpanded.tsx.
  * The formatted/raw choice is owned by the viewer so it survives row switches.
+ * Rendered on the Vue-native design layer; copies go through utils/clipboard.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { CopyOutlined } from '@/components/icons'
 import type { AccessLogEntry } from '@/api/accessLog'
+import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
 import { formatFullTime, getDurationTone, getMethodTone, getStatusTone } from '../utils'
 import LogBodyPanel from './LogBodyPanel.vue'
 
@@ -39,6 +45,22 @@ const hasAuthBlock = computed(() => Boolean(
 ))
 const hasRoutingBlock = computed(() => Boolean(props.record.routeId || props.record.serviceId))
 
+function statusBadgeTone(code: number): 'ok' | 'warn' | 'err' | 'info' | 'idle' {
+  const tone = getStatusTone(code)
+  switch (tone) {
+    case 'success': return 'ok'
+    case 'warning': return 'warn'
+    case 'error': return 'err'
+    case 'info': return 'info'
+    default: return 'idle'
+  }
+}
+
+async function copyValue(text: string) {
+  if (await copyText(text)) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
+}
+
 function onBodyModeChange(event: { target: { value: unknown } }) {
   emit('update:bodyViewMode', event.target.value === 'raw' ? 'raw' : 'formatted')
 }
@@ -49,10 +71,7 @@ function onBodyModeChange(event: { target: { value: unknown } }) {
     <a-descriptions size="small" :column="4" class="al-desc">
       <a-descriptions-item :label="t('access_log.time')">{{ formatFullTime(record['@timestamp']) }}</a-descriptions-item>
       <a-descriptions-item :label="t('access_log.status_code')">
-        <span :class="['status-badge', `status-badge-${getStatusTone(record.statusCode)}`]">
-          <i :class="['status-dot', `status-dot-${getStatusTone(record.statusCode)}`]" />
-          {{ record.statusCode }}
-        </span>
+        <VnBadge :tone="statusBadgeTone(record.statusCode)">{{ record.statusCode }}</VnBadge>
       </a-descriptions-item>
       <a-descriptions-item :label="t('access_log.latency')">
         <span :class="['al-duration', getDurationTone(record.durationMs)]">{{ record.durationMs }} ms</span>
@@ -62,7 +81,7 @@ function onBodyModeChange(event: { target: { value: unknown } }) {
 
     <a-descriptions size="small" :column="3" class="al-desc">
       <a-descriptions-item :label="t('access_log.method_label')">
-        <span :class="['al-method-pill', `al-method-${getMethodTone(record.method)}`]">{{ record.method }}</span>
+        <span :class="['vn-method', `is-${getMethodTone(record.method)}`]">{{ record.method }}</span>
       </a-descriptions-item>
       <a-descriptions-item :label="t('access_log.path_label')">
         <code class="al-inline-code is-break">{{ record.path }}</code>
@@ -75,21 +94,19 @@ function onBodyModeChange(event: { target: { value: unknown } }) {
 
     <a-descriptions size="small" :column="4" class="al-desc">
       <a-descriptions-item :label="t('access_log.request_id')">
-        <a-typography-text
-          v-if="record.requestId"
-          class="al-mono"
-          :copyable="{ text: record.requestId, tooltips: false }"
-        >
-          {{ record.requestId }}
-        </a-typography-text>
+        <span v-if="record.requestId" class="al-copy-cell">
+          <span class="vn-mono">{{ record.requestId }}</span>
+          <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(record.requestId)" />
+        </span>
         <span v-else class="al-muted">-</span>
       </a-descriptions-item>
       <a-descriptions-item :label="t('access_log.trace_id_label')">
-        <a-tooltip v-if="traceId" :title="traceId">
-          <a-typography-text class="al-mono" :copyable="{ text: traceId, tooltips: false }">
-            {{ shortTraceId }}
-          </a-typography-text>
-        </a-tooltip>
+        <span v-if="traceId" class="al-copy-cell">
+          <a-tooltip :title="traceId" overlay-class-name="vn-tooltip">
+            <span class="vn-mono">{{ shortTraceId }}</span>
+          </a-tooltip>
+          <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(traceId)" />
+        </span>
         <span v-else class="al-muted">-</span>
       </a-descriptions-item>
       <a-descriptions-item :label="t('access_log.request_size')">{{ requestSize }}</a-descriptions-item>
@@ -98,7 +115,7 @@ function onBodyModeChange(event: { target: { value: unknown } }) {
 
     <a-descriptions v-if="hasAuthBlock" size="small" :column="3" class="al-desc">
       <a-descriptions-item v-if="record.authType" :label="t('access_log.auth')">
-        <span class="al-pill is-violet">{{ record.authType }}</span>
+        <span class="vn-chip">{{ record.authType }}</span>
       </a-descriptions-item>
       <a-descriptions-item v-if="record.authPolicy" :label="t('access_log.policy')">
         <code class="al-inline-code">{{ record.authPolicy }}</code>
@@ -108,14 +125,16 @@ function onBodyModeChange(event: { target: { value: unknown } }) {
 
     <a-descriptions v-if="hasRoutingBlock" size="small" :column="2" class="al-desc">
       <a-descriptions-item v-if="record.routeId" :label="t('access_log.route_id')">
-        <a-typography-text class="al-mono is-break" :copyable="{ text: record.routeId, tooltips: false }">
-          {{ record.routeId }}
-        </a-typography-text>
+        <span class="al-copy-cell">
+          <span class="vn-mono is-break">{{ record.routeId }}</span>
+          <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(record.routeId)" />
+        </span>
       </a-descriptions-item>
       <a-descriptions-item v-if="record.serviceId" :label="t('access_log.service_id')">
-        <a-typography-text class="al-mono" :copyable="{ text: record.serviceId, tooltips: false }">
-          {{ record.serviceId }}
-        </a-typography-text>
+        <span class="al-copy-cell">
+          <span class="vn-mono">{{ record.serviceId }}</span>
+          <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(record.serviceId)" />
+        </span>
       </a-descriptions-item>
     </a-descriptions>
 

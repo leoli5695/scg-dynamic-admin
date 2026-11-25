@@ -66,12 +66,12 @@ const adapterRules = computed(() => [
       </a-col>
       <a-col :span="12">
         <a-form-item :name="'inboundAction'" :label="t('strategy.ai_security.inbound_action')">
-          <a-select v-model:value="values.inboundAction" :options="actions" />
+          <a-select v-model:value="values.inboundAction" :options="actions"  popup-class-name="vn-portal"/>
         </a-form-item>
       </a-col>
       <a-col :span="12">
         <a-form-item :name="'outboundAction'" :label="t('strategy.ai_security.outbound_action')">
-          <a-select v-model:value="values.outboundAction" :options="actions" />
+          <a-select v-model:value="values.outboundAction" :options="actions"  popup-class-name="vn-portal"/>
         </a-form-item>
       </a-col>
     </a-row>
@@ -88,7 +88,7 @@ const adapterRules = computed(() => [
         mode="tags"
         :open="false"
         :placeholder="t('strategy.ai_security.word_list_placeholder')"
-      />
+       popup-class-name="vn-portal"/>
     </a-form-item>
 
     <a-row :gutter="16">
@@ -99,13 +99,13 @@ const adapterRules = computed(() => [
       </a-col>
       <a-col :span="16">
         <a-form-item :name="'piiAction'" :label="t('strategy.ai_security.pii_action')">
-          <a-select v-model:value="values.piiAction" :options="actions" />
+          <a-select v-model:value="values.piiAction" :options="actions"  popup-class-name="vn-portal"/>
         </a-form-item>
       </a-col>
     </a-row>
 
     <a-form-item :name="'piiTypes'" :label="t('strategy.ai_security.pii_types')">
-      <a-select v-model:value="values.piiTypes" mode="multiple" :options="piiTypes" />
+      <a-select v-model:value="values.piiTypes" mode="multiple" :options="piiTypes"  popup-class-name="vn-portal"/>
     </a-form-item>
 
     <a-form-item
@@ -121,7 +121,7 @@ const adapterRules = computed(() => [
       :label="t('strategy.ai_security.streaming_policy')"
       :extra="t('strategy.ai_security.streaming_policy_extra')"
     >
-      <a-select v-model:value="values.streamingPolicy" :options="streamingOptions" />
+      <a-select v-model:value="values.streamingPolicy" :options="streamingOptions"  popup-class-name="vn-portal"/>
     </a-form-item>
 
     <a-row :gutter="16">
@@ -169,7 +169,7 @@ const adapterRules = computed(() => [
       </a-col>
       <a-col :span="12">
         <a-form-item :name="'externalFailureAction'" :label="t('strategy.ai_security.external_failure_action')">
-          <a-select v-model:value="values.externalFailureAction" :options="failureOptions" />
+          <a-select v-model:value="values.externalFailureAction" :options="failureOptions"  popup-class-name="vn-portal"/>
         </a-form-item>
       </a-col>
     </a-row>

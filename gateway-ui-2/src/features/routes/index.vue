@@ -1,15 +1,17 @@
 <script setup lang="ts">
 /**
  * Routes page — fields aligned with RouteController + model/RouteDefinition.java.
- * Category tabs (ALL/NORMAL/AI), status filter, search, pagination, deep-link
- * (?highlight=), create/edit modal + detail drawer.
+ * Rendered on the Vue-native design layer: toolbar + metric rail + native
+ * segmented category filter + a grid/table catalog. API calls and payloads
+ * are unchanged.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onActivated, ref, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  CompassOutlined, ExclamationCircleOutlined, PlusOutlined, ReloadOutlined, RobotOutlined,
-  SearchOutlined,
+  AppstoreOutlined, BranchesOutlined, CheckCircleOutlined, CompassOutlined,
+  ExclamationCircleOutlined, OrderedListOutlined, PauseCircleOutlined,
+  PlusOutlined, ReloadOutlined, RobotOutlined, SearchOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { ApiError } from '@/api/http'
@@ -19,12 +21,21 @@ import {
 import { getNacosDiscoveryServices, listServices } from '@/api/services'
 import type { RouteDefinition, RouteResponse } from '@/types/route'
 import { message, modal } from '@/utils/feedback'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnState from '@/components/vn/VnState.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import RouteCard from './components/RouteCard.vue'
+import RouteTable from './components/RouteTable.vue'
 import RouteDetailDrawer from './components/RouteDetailDrawer.vue'
 import RouteFormModal from './components/RouteFormModal.vue'
-import RouteSearchBar, { type RouteStatusFilter } from './components/RouteSearchBar.vue'
-import RouteStatsBar from './components/RouteStatsBar.vue'
-import './routes-premium.css'
+import '@/styles/vue-native.css'
+import '@/styles/vue-native-shared.css'
+import './routes-vue-native.css'
+
+// Named so the shell's KeepAlive can cache it.
+defineOptions({ name: 'RoutesPage' })
 
 const route_ = useRoute()
 const router = useRouter()
@@ -32,14 +43,26 @@ const { t } = useI18n()
 
 const instanceId = computed(() => route_.params.instanceId as string | undefined)
 
+type StatusFilter = 'all' | 'enabled' | 'disabled'
+
+const viewPreferenceKey = 'gateway.routes.view'
+function readViewPreference(): 'grid' | 'table' | undefined {
+  try {
+    const value = localStorage.getItem(viewPreferenceKey)
+    return value === 'grid' || value === 'table' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const viewPreference = ref(readViewPreference())
 const searchTerm = ref('')
-const statusFilter = ref<RouteStatusFilter>('all')
-const categoryTab = ref<'ALL' | 'NORMAL' | 'AI'>('ALL')
-const currentPage = ref(1)
-const pageSize = ref(12)
+const statusFilter = ref<StatusFilter>('all')
+const category = ref<'NORMAL' | 'AI'>('NORMAL')
 const selectedRoute = ref<RouteResponse | null>(null)
 const editingRoute = ref<RouteResponse | null>(null)
 const createOpen = ref(false)
+const searchInput = useTemplateRef<{ focus: () => void }>('searchInput')
 
 const routesRequest = useRequest(
   (signal) => listRoutes(instanceId.value ? { instanceId: instanceId.value } : undefined, { signal }),
@@ -75,36 +98,73 @@ watch(
   },
 )
 
-// Reset pagination when filters change.
-watch([searchTerm, statusFilter], () => { currentPage.value = 1 })
-
-const filteredRoutes = computed(() => routes.value.filter((r) => {
-  const term = searchTerm.value.toLowerCase()
-  const matchesSearch = !term
-    || r.id.toLowerCase().includes(term)
-    || (r.routeName && r.routeName.toLowerCase().includes(term))
-    || (r.uri && r.uri.toLowerCase().includes(term))
-  const matchesStatus = statusFilter.value === 'all'
-    || (statusFilter.value === 'enabled' && r.enabled)
-    || (statusFilter.value === 'disabled' && !r.enabled)
-  const isAi = (r.category || 'NORMAL') === 'AI'
-  const matchesCategory = categoryTab.value === 'ALL' || (categoryTab.value === 'AI' ? isAi : !isAi)
-  return matchesSearch && matchesStatus && matchesCategory
-}))
-
-const categoryCounts = computed(() => {
-  const ai = routes.value.filter((r) => (r.category || 'NORMAL') === 'AI').length
-  return { all: routes.value.length, ai, normal: routes.value.length - ai }
+// Cached by the shell: refresh silently on return, skip the first activation
+// because the initial mount already fetched.
+let activatedOnce = false
+onActivated(() => {
+  if (!activatedOnce) {
+    activatedOnce = true
+    return
+  }
+  if (!routesRequest.loading.value) routesRequest.run()
 })
 
-const stats = computed(() => ({
-  total: routes.value.length,
-  enabled: routes.value.filter((r) => r.enabled).length,
-  disabled: routes.value.filter((r) => !r.enabled).length,
-}))
+const isAiRoute = (r: RouteResponse) => (r.category || 'NORMAL') === 'AI'
 
-const startIndex = computed(() => (currentPage.value - 1) * pageSize.value)
-const paginatedRoutes = computed(() => filteredRoutes.value.slice(startIndex.value, startIndex.value + pageSize.value))
+const categoryCounts = computed(() => {
+  const ai = routes.value.filter(isAiRoute).length
+  return { normal: routes.value.length - ai, ai }
+})
+
+const inCategory = computed(() => routes.value.filter((r) => (category.value === 'AI' ? isAiRoute(r) : !isAiRoute(r))))
+
+const statusCounts = computed(() => {
+  const enabled = inCategory.value.filter((r) => r.enabled).length
+  return { total: inCategory.value.length, enabled, disabled: inCategory.value.length - enabled }
+})
+
+const filteredRoutes = computed(() => {
+  const term = searchTerm.value.trim().toLowerCase()
+  return inCategory.value.filter((r) => {
+    if (term
+      && !r.id.toLowerCase().includes(term)
+      && !(r.routeName && r.routeName.toLowerCase().includes(term))
+      && !(r.uri && r.uri.toLowerCase().includes(term))) return false
+    if (statusFilter.value === 'enabled' && !r.enabled) return false
+    if (statusFilter.value === 'disabled' && r.enabled) return false
+    return true
+  })
+})
+
+const isFiltered = computed(() => searchTerm.value.trim() !== '' || statusFilter.value !== 'all')
+
+// A category switch must not keep a status filter scoped to the other set.
+watch(category, () => { statusFilter.value = 'all' })
+
+const pageSize = 24
+const view = computed({
+  get: () => viewPreference.value ?? (statusCounts.value.total > pageSize ? 'table' : 'grid'),
+  set: (value: 'grid' | 'table') => {
+    viewPreference.value = value
+    try { localStorage.setItem(viewPreferenceKey, value) } catch { /* storage is optional */ }
+  },
+})
+const page = ref(1)
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredRoutes.value.length / pageSize)))
+const visibleRoutes = computed(() => {
+  const start = (Math.min(page.value, pageCount.value) - 1) * pageSize
+  return filteredRoutes.value.slice(start, start + pageSize)
+})
+
+watch([searchTerm, statusFilter, category], () => { page.value = 1 })
+watch(pageCount, (count) => { page.value = Math.min(page.value, count) })
+watch(instanceId, () => {
+  selectedRoute.value = null
+  editingRoute.value = null
+  createOpen.value = false
+  page.value = 1
+  routesRequest.mutate([])
+}, { flush: 'sync' })
 
 const errorMessage = (error: unknown, fallbackKey: string): string =>
   (error instanceof ApiError && error.message ? error.message : t(fallbackKey))
@@ -136,14 +196,19 @@ async function handleUpdate(body: RouteDefinition): Promise<boolean> {
   }
 }
 
+// Keep route confirmations above the details drawer and its mask.
+const routeConfirmationZIndex = 1200
+
 function handleDelete(record: RouteResponse) {
   modal.confirm({
     title: t('common.confirm'),
     content: t('message.confirm_delete_route', { name: record.routeName, routeId: record.id || 'N/A' }),
     okText: t('common.delete'),
     okType: 'primary',
+    zIndex: routeConfirmationZIndex,
     okButtonProps: { danger: true },
     cancelText: t('common.cancel'),
+    wrapClassName: 'vn-portal',
     onOk: async () => {
       if (!record.id) {
         message.error(t('message.route_uuid_not_found'))
@@ -189,95 +254,142 @@ function openEditModal(record: RouteResponse) {
 function resetFilters() {
   searchTerm.value = ''
   statusFilter.value = 'all'
-  categoryTab.value = 'ALL'
-  currentPage.value = 1
+  searchInput.value?.focus()
 }
+
+function selectStat(key: string) {
+  statusFilter.value = key as StatusFilter
+}
+
+const viewOptions = computed<VnSegmentOption<'grid' | 'table'>[]>(() => [
+  { key: 'grid', label: t('routes.view_grid'), icon: AppstoreOutlined },
+  { key: 'table', label: t('routes.view_table'), icon: OrderedListOutlined },
+])
+
+const categoryOptions = computed<VnSegmentOption<'NORMAL' | 'AI'>[]>(() => [
+  { key: 'NORMAL', label: t('routes.tab_normal'), count: categoryCounts.value.normal, icon: CompassOutlined },
+  { key: 'AI', label: t('routes.tab_ai'), count: categoryCounts.value.ai, icon: RobotOutlined },
+])
+
+const statItems = computed<VnStatItem[]>(() => {
+  const c = statusCounts.value
+  return [
+    {
+      key: 'all',
+      value: c.total,
+      label: t('routes.stats_routes'),
+      icon: BranchesOutlined,
+      active: statusFilter.value === 'all',
+    },
+    {
+      key: 'enabled',
+      value: c.enabled,
+      label: t('routes.stats_enabled'),
+      icon: CheckCircleOutlined,
+      accent: 'var(--vn-ok)',
+      active: statusFilter.value === 'enabled',
+    },
+    {
+      key: 'disabled',
+      value: c.disabled,
+      label: t('routes.stats_disabled'),
+      icon: PauseCircleOutlined,
+      accent: 'var(--vn-idle)',
+      active: statusFilter.value === 'disabled',
+    },
+  ]
+})
 </script>
 
 <template>
-  <div class="routes-page">
-    <RouteSearchBar
-      v-model:search-term="searchTerm"
-      v-model:status-filter="statusFilter"
-      :on-create-click="() => { createOpen = true }"
+  <div class="routes-page vn-routes vn-scope">
+    <VnToolbar
+      :title="t('routes.title')"
+      :lede="t('routes.page_description_helper')"
     >
-      <template #stats>
-        <RouteStatsBar :total="stats.total" :enabled="stats.enabled" :disabled="stats.disabled" />
+      <template #actions>
+        <VnSegmented v-model="view" :options="viewOptions" :label="t('routes.view_mode')" />
+        <VnIconButton
+          :icon="ReloadOutlined"
+          :label="t('common.refresh')"
+          :disabled="routesRequest.loading.value"
+          @click="routesRequest.run()"
+        />
+        <a-button type="primary" class="create-btn" @click="createOpen = true">
+          <template #icon><PlusOutlined /></template>{{ t('routes.create') }}
+        </a-button>
       </template>
-    </RouteSearchBar>
+    </VnToolbar>
 
-    <!-- Category tabs -->
-    <a-tabs
-      v-model:activeKey="categoryTab"
-      class="route-category-tabs"
-      @change="currentPage = 1"
-    >
-      <a-tab-pane key="ALL" :tab="`${t('routes.tab_all')} (${categoryCounts.all})`" />
-      <a-tab-pane key="NORMAL">
-        <template #tab><CompassOutlined /> {{ t('routes.tab_normal') }} ({{ categoryCounts.normal }})</template>
-      </a-tab-pane>
-      <a-tab-pane key="AI">
-        <template #tab><RobotOutlined /> {{ t('routes.tab_ai') }} ({{ categoryCounts.ai }})</template>
-      </a-tab-pane>
-    </a-tabs>
-
-    <!-- Error state -->
-    <a-card
-      v-if="routesRequest.error.value && routes.length === 0"
-      :bordered="false"
-      class="route-state-card"
-    >
-      <div class="route-state">
-        <span class="route-state-icon is-error"><ExclamationCircleOutlined /></span>
-        <p class="route-state-title">{{ t('common.fetch_error') }}</p>
-        <p class="route-state-hint">{{ routesRequest.error.value.message }}</p>
-        <div class="route-state-actions">
-          <a-button type="primary" @click="routesRequest.run()">
-            <template #icon><ReloadOutlined /></template>
-            {{ t('common.refresh') }}
-          </a-button>
-        </div>
-      </div>
-    </a-card>
-
-    <!-- Initial loading skeleton -->
-    <div v-else-if="routesRequest.loading.value && routes.length === 0" class="routes-grid">
-      <a-card v-for="n in 6" :key="n" :bordered="false" class="route-skeleton-card">
-        <a-skeleton active :title="{ width: '55%' }" :paragraph="{ rows: 4 }" />
-      </a-card>
+    <!-- Category, metrics and search share one tool row to save vertical space. -->
+    <div class="vn-metarow">
+      <VnSegmented v-model="category" :options="categoryOptions" :label="t('routes.category')" />
+      <VnStatRail
+        :items="statItems"
+        :label="t('routes.stats_scope', { category: t(category === 'AI' ? 'routes.tab_ai' : 'routes.tab_normal') })"
+        @select="selectStat"
+      />
+      <a-input
+        ref="searchInput"
+        v-model:value="searchTerm"
+        :aria-label="t('routes.search_placeholder')"
+        :placeholder="t('routes.search_placeholder')"
+        allow-clear
+        class="vn-search"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <span class="vn-filterbar-spacer" />
+      <span class="vn-result-count" role="status">{{ t('routes.results', { count: filteredRoutes.length }) }}</span>
+      <a-button v-if="isFiltered" type="text" size="small" @click="resetFilters">
+        {{ t('common.reset') }}
+      </a-button>
     </div>
 
-    <!-- Empty / filtered-empty states -->
-    <a-card v-else-if="filteredRoutes.length === 0" :bordered="false" class="route-state-card">
-      <div class="route-state">
-        <span class="route-state-icon">
-          <SearchOutlined v-if="routes.length > 0" />
-          <CompassOutlined v-else />
-        </span>
-        <template v-if="routes.length === 0">
-          <p class="route-state-title">{{ t('routes.empty_description') }}</p>
-          <p class="route-state-hint">{{ t('routes.create_description') }}</p>
-          <div class="route-state-actions">
-            <a-button type="primary" @click="createOpen = true">
-              <template #icon><PlusOutlined /></template>
-              {{ t('routes.create_first') }}
-            </a-button>
-          </div>
-        </template>
-        <template v-else>
-          <p class="route-state-title">{{ t('routes.no_match') }}</p>
-          <p class="route-state-hint">{{ t('routes.no_match_hint') }}</p>
-          <div class="route-state-actions">
-            <a-button @click="resetFilters">{{ t('common.reset') }}</a-button>
-          </div>
-        </template>
-      </div>
-    </a-card>
+    <!-- Error -->
+    <VnState
+      v-if="routesRequest.error.value && routes.length === 0"
+      :icon="ExclamationCircleOutlined"
+      tone="err"
+      :title="t('common.fetch_error')"
+      :hint="routesRequest.error.value.message"
+    >
+      <template #actions>
+        <a-button type="primary" @click="routesRequest.run()">
+          <template #icon><ReloadOutlined /></template>{{ t('common.refresh') }}
+        </a-button>
+      </template>
+    </VnState>
 
-    <a-spin v-else :spinning="routesRequest.loading.value">
-      <div class="routes-grid">
+    <!-- Initial load -->
+    <div v-else-if="routesRequest.loading.value && routes.length === 0" class="vn-grid">
+      <div v-for="n in 8" :key="n" class="vn-panel vn-skel-tile">
+        <div class="vn-skel vn-skel-line" style="width: 58%" />
+        <div class="vn-skel vn-skel-line" style="width: 38%" />
+        <div class="vn-skel vn-skel-block" />
+      </div>
+    </div>
+
+    <!-- Empty / filtered-empty -->
+    <VnState
+      v-else-if="filteredRoutes.length === 0"
+      :icon="routes.length > 0 ? SearchOutlined : CompassOutlined"
+      :title="routes.length === 0 ? t('routes.empty_description') : t('routes.no_match')"
+      :hint="routes.length === 0 ? t('routes.create_description') : t('routes.no_match_hint')"
+    >
+      <template #actions>
+        <a-button v-if="routes.length === 0" type="primary" @click="createOpen = true">
+          <template #icon><PlusOutlined /></template>{{ t('routes.create_first') }}
+        </a-button>
+        <a-button v-else @click="resetFilters">{{ t('common.reset') }}</a-button>
+      </template>
+    </VnState>
+
+    <!-- Catalog -->
+    <template v-else>
+      <div v-if="view === 'grid'" class="vn-grid">
         <RouteCard
-          v-for="r in paginatedRoutes"
+          v-for="r in visibleRoutes"
           :key="r.id"
           :route="r"
           @edit="openEditModal"
@@ -286,20 +398,24 @@ function resetFilters() {
           @delete="handleDelete"
         />
       </div>
-      <div v-if="filteredRoutes.length > pageSize" class="pagination-container">
-        <a-pagination
-          v-model:current="currentPage"
-          v-model:page-size="pageSize"
-          :total="filteredRoutes.length"
-          show-size-changer
-          show-quick-jumper
-          :show-total="(total: number) => t('routes.pagination_total', { total })"
-          :page-size-options="['12', '24', '48', '96']"
-        />
-      </div>
-    </a-spin>
+      <RouteTable
+        v-else
+        :rows="visibleRoutes"
+        @detail="selectedRoute = $event"
+        @edit="openEditModal"
+        @toggle="handleToggle"
+        @delete="handleDelete"
+      />
+      <a-pagination
+        v-if="pageCount > 1"
+        v-model:current="page"
+        :page-size="pageSize"
+        :total="filteredRoutes.length"
+        :show-size-changer="false"
+        class="vn-pagination"
+      />
+    </template>
 
-    <!-- Detail drawer -->
     <RouteDetailDrawer
       v-if="selectedRoute"
       :route="selectedRoute"
@@ -308,7 +424,6 @@ function resetFilters() {
       @delete="handleDelete"
     />
 
-    <!-- Create modal -->
     <RouteFormModal
       :open="createOpen"
       mode="create"
@@ -317,8 +432,6 @@ function resetFilters() {
       :on-submit="handleCreate"
       @cancel="createOpen = false"
     />
-
-    <!-- Edit modal -->
     <RouteFormModal
       :open="!!editingRoute"
       mode="edit"

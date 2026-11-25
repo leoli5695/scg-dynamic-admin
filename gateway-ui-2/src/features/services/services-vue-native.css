@@ -171,7 +171,9 @@
   white-space: nowrap;
 }
 
-.vn-scope .vn-table-actions-head {
+/* Outranks the generic `thead th` text-align above, so the header sits over the
+   right-aligned action icons. */
+.vn-scope .vn-table thead th.vn-table-actions-head {
   text-align: right;
 }
 
@@ -195,6 +197,14 @@
 
 .vn-scope .vn-table tbody td:last-child {
   text-align: right;
+  white-space: nowrap;
+}
+
+/* Native table counterpart of the antd row-action rule: every action stays
+   inline and hugs the right edge, with no overflow menu. */
+.vn-scope .vn-table .vn-row-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .vn-scope .vn-row-identity {

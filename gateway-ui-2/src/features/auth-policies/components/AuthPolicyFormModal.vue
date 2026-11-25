@@ -106,40 +106,42 @@ async function handleFinish() {
 <template>
   <a-modal
     :open="isOpen"
-    :width="760"
+    :width="600"
     :footer="null"
-    wrap-class-name="auth-policy-editor-modal"
+    :style="{ top: '24px' }"
+    wrap-class-name="vn-portal vn-modal"
     :closable="!busy"
     :keyboard="!busy"
     :mask-closable="false"
     @cancel="emit('cancel')"
   >
     <template #title>
-      <div class="auth-modal-head">
-        <span :class="['auth-modal-glyph', isEdit ? 'is-edit' : '']" aria-hidden="true">
+      <div class="vn-modal-head">
+        <span class="vn-modal-head-glyph" aria-hidden="true">
           <EditOutlined v-if="isEdit" />
           <PlusOutlined v-else />
         </span>
-        <span class="auth-modal-heading">
-          <span class="auth-modal-title">
+        <div style="min-width: 0">
+          <div class="vn-modal-title">
             {{ t(isEdit ? 'auth_policy.edit' : 'auth_policy.create') }}
-          </span>
-          <span class="auth-modal-subtitle">
+          </div>
+          <div class="vn-modal-subtitle">
             {{ isEdit ? policy?.policyName : t('auth_policy.create_description') }}
-          </span>
-        </span>
+          </div>
+        </div>
       </div>
     </template>
 
     <a-form
       ref="formRef"
       layout="vertical"
+      class="vn-form"
       :model="values"
       :disabled="busy || impactBlocked"
       scroll-to-first-error
       @finish="handleFinish"
     >
-      <div class="auth-modal-scroll">
+      <div class="vn-modal-scroll">
         <div
           v-if="isEdit"
           :class="['auth-impact-block', impactBlocked ? 'is-blocked' : '']"
@@ -166,12 +168,12 @@ async function handleFinish() {
           </div>
         </div>
 
-        <div class="form-section">
-          <div class="form-section-header">
-            <ThunderboltOutlined class="form-section-icon" />
-            <span class="form-section-title">{{ t('strategy.basic_info') }}</span>
+        <div class="form-section-modern">
+          <div class="section-header">
+            <ThunderboltOutlined class="section-icon" />
+            <span class="section-title">{{ t('strategy.basic_info') }}</span>
           </div>
-          <div class="form-section-content">
+          <div class="section-content">
             <a-form-item
               name="policyName"
               :label="t('auth_policy.policy_name')"
@@ -179,7 +181,7 @@ async function handleFinish() {
             >
               <a-input
                 v-model:value="values.policyName"
-                size="large"
+               
                 :placeholder="t('auth_policy.policy_name_placeholder')"
               />
             </a-form-item>
@@ -190,21 +192,21 @@ async function handleFinish() {
             >
               <a-select
                 :value="values.authType"
-                size="large"
+               
                 :disabled="isEdit"
                 :options="authTypeOptions"
                 @update:value="handleTypeChange"
-              />
+               popup-class-name="vn-portal"/>
             </a-form-item>
           </div>
         </div>
 
-        <div class="form-section">
-          <div class="form-section-header">
-            <SafetyOutlined class="form-section-icon" />
-            <span class="form-section-title">{{ t('auth_policy.config_section') }}</span>
+        <div class="form-section-modern">
+          <div class="section-header">
+            <SafetyOutlined class="section-icon" />
+            <span class="section-title">{{ t('auth_policy.config_section') }}</span>
           </div>
-          <div class="form-section-content">
+          <div class="section-content">
             <template v-if="values.authType === 'JWT'">
               <a-form-item
                 name="secretKey"
@@ -223,7 +225,7 @@ async function handleFinish() {
                         { value: 'HS512', label: 'HS512' },
                         { value: 'RS256', label: 'RS256' },
                       ]"
-                    />
+                     popup-class-name="vn-portal"/>
                   </a-form-item>
                 </a-col>
                 <a-col :span="12">
@@ -318,18 +320,18 @@ async function handleFinish() {
                     { value: 'HMAC-SHA256', label: 'HMAC-SHA256' },
                     { value: 'HMAC-SHA512', label: 'HMAC-SHA512' },
                   ]"
-                />
+                 popup-class-name="vn-portal"/>
               </a-form-item>
             </template>
           </div>
         </div>
 
-        <div class="form-section">
-          <div class="form-section-header">
-            <SettingOutlined class="form-section-icon" />
-            <span class="form-section-title">{{ t('strategy.advanced_settings') }}</span>
+        <div class="form-section-modern">
+          <div class="section-header">
+            <SettingOutlined class="section-icon" />
+            <span class="section-title">{{ t('strategy.advanced_settings') }}</span>
           </div>
-          <div class="form-section-content">
+          <div class="section-content">
             <a-form-item name="description" :label="t('common.description')">
               <a-textarea v-model:value="values.description" :rows="2" />
             </a-form-item>
@@ -344,7 +346,7 @@ async function handleFinish() {
         </div>
       </div>
 
-      <div class="auth-modal-footer">
+      <div class="modal-footer-modern">
         <a-button :disabled="busy" @click="emit('cancel')">{{ t('common.cancel') }}</a-button>
         <a-button type="primary" html-type="submit" :loading="busy" :disabled="impactBlocked">
           <template #icon>

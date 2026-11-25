@@ -164,5 +164,11 @@
   "routes.ai_add_model_mapping": "添加映射",
   "routes.tab_all": "全部路由",
   "routes.tab_normal": "普通路由",
-  "routes.tab_ai": "AI 路由"
+  "routes.tab_ai": "AI 路由",
+  "routes.view_grid": "卡片",
+  "routes.view_table": "表格",
+  "routes.view_mode": "视图模式",
+  "routes.results": "{{count}} 个结果",
+  "routes.stats_scope": "{{category}}统计",
+  "routes.more_actions": "更多操作"
 }

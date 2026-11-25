@@ -55,7 +55,7 @@ function removePredicate(index: number) {
       <div class="upstream-head">
         <span class="upstream-index">{{ t('routes.ai_upstream') }} {{ idx + 1 }}</span>
         <a-tooltip :title="t('common.delete')">
-          <a-button type="text" danger class="action-btn" :aria-label="t('common.delete')" @click="removeUpstream(idx)">
+          <a-button type="text" danger class="action-btn vn-iconbtn" :aria-label="t('common.delete')" @click="removeUpstream(idx)">
             <template #icon><DeleteOutlined /></template>
           </a-button>
         </a-tooltip>
@@ -67,6 +67,7 @@ function removePredicate(index: number) {
           class="upstream-service-select"
           show-search
           option-filter-prop="label"
+          popup-class-name="vn-portal"
           :options="serviceOptions"
           :not-found-content="t('routes.ai_no_services')"
         />
@@ -82,7 +83,7 @@ function removePredicate(index: number) {
           <a-input v-model:value="mm.key" :placeholder="t('routes.ai_model_mapping_key')" size="small" class="mapping-input" />
           <span class="mapping-arrow">→</span>
           <a-input v-model:value="mm.value" :placeholder="t('routes.ai_model_mapping_value')" size="small" class="mapping-input" />
-          <a-button type="text" danger size="small" class="action-btn" :aria-label="t('common.delete')" @click="removeMapping(up, mmIdx)">
+          <a-button type="text" danger size="small" class="action-btn vn-iconbtn" :aria-label="t('common.delete')" @click="removeMapping(up, mmIdx)">
             <template #icon><DeleteOutlined /></template>
           </a-button>
         </div>
@@ -101,13 +102,13 @@ function removePredicate(index: number) {
         <RobotOutlined />{{ t('routes.ai_model_predicates') }}
       </div>
       <div v-for="(mp, mpIdx) in modelPredicates" :key="mpIdx" class="model-predicate-row">
-        <a-select v-model:value="mp.matchType" class="model-match-type">
+        <a-select v-model:value="mp.matchType" class="model-match-type" popup-class-name="vn-portal">
           <a-select-option value="PREFIX">{{ t('routes.ai_match_prefix') }}</a-select-option>
           <a-select-option value="EXACT">{{ t('routes.ai_match_exact') }}</a-select-option>
         </a-select>
         <a-input v-model:value="mp.value" :placeholder="t('routes.ai_model_value_placeholder')" class="model-match-value" />
         <a-tooltip :title="t('common.delete')">
-          <a-button type="text" danger class="action-btn" :aria-label="t('common.delete')" @click="removePredicate(mpIdx)">
+          <a-button type="text" danger class="action-btn vn-iconbtn" :aria-label="t('common.delete')" @click="removePredicate(mpIdx)">
             <template #icon><DeleteOutlined /></template>
           </a-button>
         </a-tooltip>

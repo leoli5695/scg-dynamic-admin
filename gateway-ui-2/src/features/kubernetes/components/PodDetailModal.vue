@@ -2,9 +2,9 @@
 /**
  * Pod detail modal: info / YAML / logs tabs. Logs are snapshot-based (the API
  * returns the tail window, not a stream), so realtime mode re-fetches instead
- * of appending.
+ * of appending. Kept mounted by the drawer and driven through `open`.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   ClearOutlined, ContainerOutlined, CopyOutlined, PauseCircleOutlined,
@@ -14,11 +14,13 @@ import { getPodDetail, getPodLogs, getPodYaml } from '@/api/kubernetes'
 import type { KubernetesPodDetail, KubernetesPodInfo } from '@/types/kubernetes'
 import { message } from '@/utils/feedback'
 import { copyText } from '@/utils/clipboard'
-import { phaseTone } from '../utils'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import { phaseTone, vnTone } from '../utils'
 
 const props = defineProps<{
   clusterId: number
-  pod: KubernetesPodInfo
+  pod?: KubernetesPodInfo | null
+  open?: boolean
 }>()
 
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -41,6 +43,7 @@ const logSinceSeconds = ref(0)
 const logAutoRefresh = ref(false)
 const logRefreshInterval = ref(3)
 const logsLoading = ref(false)
+const isOpen = computed(() => props.open !== false)
 
 const tailLineOptions = [100, 200, 500, 1000].map((n) => ({
   value: n,
@@ -79,6 +82,7 @@ function containerRestarts(name: string): number {
 }
 
 async function loadInitial() {
+  if (!props.pod) return
   loading.value = true
   try {
     const [detailData, yamlData, logsData] = await Promise.all([
@@ -97,6 +101,7 @@ async function loadInitial() {
 }
 
 async function loadLogs() {
+  if (!props.pod) return
   logsLoading.value = true
   try {
     const data = await getPodLogs(
@@ -130,7 +135,24 @@ watch([logAutoRefresh, logRefreshInterval], () => {
   }
 })
 
-onMounted(loadInitial)
+watch(isOpen, (open) => {
+  if (open) {
+    detail.value = null
+    yaml.value = ''
+    logs.value = ''
+    activeTab.value = 'info'
+    logMode.value = 'history'
+    logTailLines.value = INITIAL_TAIL_LINES
+    logSinceSeconds.value = 0
+    logAutoRefresh.value = false
+    logRefreshInterval.value = 3
+    loadInitial()
+  } else {
+    stopLogTimer()
+    logAutoRefresh.value = false
+  }
+})
+
 onBeforeUnmount(stopLogTimer)
 
 function handleLogModeChange(mode: 'history' | 'realtime') {
@@ -162,113 +184,103 @@ async function copyYaml() {
 
 <template>
   <a-modal
-    :open="true"
+    :open="isOpen"
     :width="900"
     :footer="null"
     :mask-closable="true"
-    :destroy-on-close="true"
     :get-container="getModalContainer"
-    wrap-class-name="k8s-pod-modal"
+    wrap-class-name="vn-portal vnp-portal vnp-modal"
     @cancel="emit('close')"
   >
     <template #title>
-      <div class="k8s-modal-head">
-        <span class="k8s-modal-glyph" aria-hidden="true"><ContainerOutlined /></span>
-        <div class="k8s-modal-heading">
-          <span class="k8s-modal-title k8s-mono k8s-pod-title">{{ pod.name }}</span>
-          <span class="k8s-modal-subtitle">{{ pod.namespace }}</span>
+      <div class="vnp-modal-head">
+        <span class="vnp-modal-head-glyph" aria-hidden="true"><ContainerOutlined /></span>
+        <div style="min-width: 0">
+          <div class="vnp-modal-title vn-mono">{{ pod?.name }}</div>
+          <div class="vnp-modal-subtitle">{{ pod?.namespace }}</div>
         </div>
-        <span :class="['k8s-pill', 'status-badge', `status-badge-${phaseTone(pod.phase)}`]">
-          {{ pod.phase || '—' }}
-        </span>
+        <VnBadge :tone="vnTone(phaseTone(pod?.phase))">{{ pod?.phase || '—' }}</VnBadge>
       </div>
     </template>
 
     <a-spin :spinning="loading">
-      <a-tabs v-model:activeKey="activeTab" class="k8s-pod-tabs">
+      <a-tabs v-model:activeKey="activeTab">
         <a-tab-pane key="info" :tab="t('k8s.pod_info')">
-          <div v-if="detail" class="k8s-pod-body">
-            <section class="k8s-subpanel">
-              <div class="k8s-subpanel-head">
-                <span class="k8s-section-title">{{ t('k8s.basic_info') }}</span>
-              </div>
-              <div class="k8s-pod-info-grid">
-                <div class="k8s-pod-info-item">
-                  <span class="k8s-kv-label">{{ t('k8s.namespace') }}</span>
-                  <span class="k8s-pod-info-value">{{ detail.namespace }}</span>
+          <div v-if="detail" class="vn-k8s-pod-body">
+            <section class="vnp-section">
+              <div class="vnp-section-head">{{ t('k8s.basic_info') }}</div>
+              <div class="vnp-kv">
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">{{ t('k8s.namespace') }}</span>
+                  <span class="vnp-kv-value">{{ detail.namespace }}</span>
                 </div>
-                <div class="k8s-pod-info-item">
-                  <span class="k8s-kv-label">Pod IP</span>
-                  <span class="k8s-pod-info-value k8s-mono">{{ detail.podIP || '—' }}</span>
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">Pod IP</span>
+                  <span class="vnp-kv-value vn-mono">{{ detail.podIP || '—' }}</span>
                 </div>
-                <div class="k8s-pod-info-item">
-                  <span class="k8s-kv-label">{{ t('k8s.host_ip') }}</span>
-                  <span class="k8s-pod-info-value k8s-mono">{{ detail.hostIP || '—' }}</span>
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">{{ t('k8s.host_ip') }}</span>
+                  <span class="vnp-kv-value vn-mono">{{ detail.hostIP || '—' }}</span>
                 </div>
-                <div class="k8s-pod-info-item">
-                  <span class="k8s-kv-label">{{ t('k8s.node') }}</span>
-                  <span class="k8s-pod-info-value">{{ detail.nodeName || '—' }}</span>
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">{{ t('k8s.node') }}</span>
+                  <span class="vnp-kv-value">{{ detail.nodeName || '—' }}</span>
                 </div>
-                <div class="k8s-pod-info-item">
-                  <span class="k8s-kv-label">{{ t('k8s.start_time') }}</span>
-                  <span class="k8s-pod-info-value">{{ detail.startTime || '—' }}</span>
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">{{ t('k8s.start_time') }}</span>
+                  <span class="vnp-kv-value">{{ detail.startTime || '—' }}</span>
                 </div>
-                <div class="k8s-pod-info-item">
-                  <span class="k8s-kv-label">{{ t('k8s.service_account') }}</span>
-                  <span class="k8s-pod-info-value">{{ detail.serviceAccountName || '—' }}</span>
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">{{ t('k8s.service_account') }}</span>
+                  <span class="vnp-kv-value">{{ detail.serviceAccountName || '—' }}</span>
                 </div>
-                <div class="k8s-pod-info-item k8s-pod-info-wide">
-                  <span class="k8s-kv-label">{{ t('k8s.restart_policy') }}</span>
-                  <span class="k8s-pod-info-value">{{ detail.restartPolicy || '—' }}</span>
+                <div class="vnp-kv-item vnp-kv-wide">
+                  <span class="vnp-kv-label">{{ t('k8s.restart_policy') }}</span>
+                  <span class="vnp-kv-value">{{ detail.restartPolicy || '—' }}</span>
                 </div>
               </div>
             </section>
 
-            <section class="k8s-subpanel">
-              <div class="k8s-subpanel-head">
-                <span class="k8s-section-title">{{ t('k8s.containers') }}</span>
-                <span class="k8s-count-pill">{{ detail.containers?.length ?? 0 }}</span>
-              </div>
-              <div class="k8s-container-list">
-                <div v-for="container in detail.containers ?? []" :key="container.name" class="k8s-container-card">
-                  <div class="k8s-container-head">
-                    <span class="k8s-container-name">{{ container.name }}</span>
-                    <a-tooltip :title="container.image">
-                      <code class="k8s-container-image">{{ container.image }}</code>
+            <section class="vnp-section" style="margin-top: 12px">
+              <div class="vnp-section-head"><span>{{ t('k8s.containers') }}</span><span class="vnp-count">{{ detail.containers?.length ?? 0 }}</span></div>
+              <div class="vnp-list">
+                <div v-for="container in detail.containers ?? []" :key="container.name" class="vn-k8s-container-card">
+                  <div class="vn-k8s-container-head">
+                    <span class="vnp-strong">{{ container.name }}</span>
+                    <a-tooltip :title="container.image" overlay-class-name="vn-tooltip">
+                      <code class="vn-mono vnp-cell-muted">{{ container.image }}</code>
                     </a-tooltip>
                   </div>
-                  <div class="k8s-container-details">
-                    <div class="k8s-container-detail">
-                      <span class="k8s-kv-label">{{ t('k8s.image_pull_policy') }}</span>
-                      <span class="k8s-container-detail-value">{{ container.imagePullPolicy || '—' }}</span>
+                  <div class="vnp-kv">
+                    <div class="vnp-kv-item">
+                      <span class="vnp-kv-label">{{ t('k8s.image_pull_policy') }}</span>
+                      <span class="vnp-kv-value">{{ container.imagePullPolicy || '—' }}</span>
                     </div>
-                    <div class="k8s-container-detail">
-                      <span class="k8s-kv-label">{{ t('k8s.ready') }}</span>
-                      <span
-                        :class="['k8s-pill', 'status-badge', containerReady(container.name) ? 'status-badge-success' : 'status-badge-error']"
-                      >
-                        {{ containerReady(container.name) ? t('k8s.ready_true') : t('k8s.ready_false') }}
+                    <div class="vnp-kv-item">
+                      <span class="vnp-kv-label">{{ t('k8s.ready') }}</span>
+                      <span class="vnp-kv-value">
+                        <VnBadge :tone="containerReady(container.name) ? 'ok' : 'err'">
+                          {{ containerReady(container.name) ? t('k8s.ready_true') : t('k8s.ready_false') }}
+                        </VnBadge>
                       </span>
                     </div>
-                    <div class="k8s-container-detail">
-                      <span class="k8s-kv-label">{{ t('k8s.restarts') }}</span>
-                      <span class="k8s-container-detail-value">{{ containerRestarts(container.name) }}</span>
+                    <div class="vnp-kv-item">
+                      <span class="vnp-kv-label">{{ t('k8s.restarts') }}</span>
+                      <span class="vnp-kv-value">{{ containerRestarts(container.name) }}</span>
                     </div>
-                    <div v-if="container.ports && container.ports.length" class="k8s-container-detail">
-                      <span class="k8s-kv-label">{{ t('k8s.ports') }}</span>
-                      <span class="k8s-container-tags">
-                        <a-tag v-for="(port, idx) in container.ports" :key="idx" class="k8s-port-tag">
-                          {{ port.containerPort }}/{{ port.protocol }}
-                        </a-tag>
+                    <div v-if="container.ports && container.ports.length" class="vnp-kv-item">
+                      <span class="vnp-kv-label">{{ t('k8s.ports') }}</span>
+                      <span class="vnp-kv-value vn-k8s-container-tags">
+                        <span v-for="(port, idx) in container.ports" :key="idx" class="vn-chip">{{ port.containerPort }}/{{ port.protocol }}</span>
                       </span>
                     </div>
                   </div>
-                  <div v-if="container.env && container.env.length" class="k8s-env-block">
-                    <span class="k8s-kv-label">{{ t('k8s.env_vars') }}</span>
-                    <div class="k8s-env-list">
-                      <div v-for="env in container.env" :key="env.name" class="k8s-env-row">
-                        <code class="k8s-env-name">{{ env.name }}</code>
-                        <span class="k8s-env-value">{{ env.value || `(${t('k8s.from_secret')})` }}</span>
+                  <div v-if="container.env && container.env.length" class="vn-k8s-env-block">
+                    <span class="vnp-kv-label">{{ t('k8s.env_vars') }}</span>
+                    <div class="vn-k8s-env-list">
+                      <div v-for="env in container.env" :key="env.name" class="vn-k8s-env-row">
+                        <code class="vn-mono vn-k8s-env-name">{{ env.name }}</code>
+                        <span class="vnp-cell-muted">{{ env.value || `(${t('k8s.from_secret')})` }}</span>
                       </div>
                     </div>
                   </div>
@@ -276,47 +288,38 @@ async function copyYaml() {
               </div>
             </section>
 
-            <section v-if="detail.conditions && detail.conditions.length" class="k8s-subpanel">
-              <div class="k8s-subpanel-head">
-                <span class="k8s-section-title">{{ t('k8s.conditions') }}</span>
-              </div>
+            <section v-if="detail.conditions && detail.conditions.length" class="vnp-section" style="margin-top: 12px">
+              <div class="vnp-section-head">{{ t('k8s.conditions') }}</div>
               <a-table
                 :columns="conditionColumns"
                 :data-source="detail.conditions"
                 :pagination="false"
                 row-key="type"
                 size="small"
-                class="k8s-table"
               >
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key === 'status'">
-                    <span :class="['k8s-pill', 'status-badge', record.status === 'True' ? 'status-badge-success' : 'status-badge-error']">
-                      {{ record.status }}
-                    </span>
+                    <VnBadge :tone="record.status === 'True' ? 'ok' : 'err'">{{ record.status }}</VnBadge>
                   </template>
                   <template v-else-if="column.key === 'reason'">
-                    <span class="k8s-cell-muted">{{ record.reason || '—' }}</span>
+                    <span class="vnp-cell-muted">{{ record.reason || '—' }}</span>
                   </template>
                   <template v-else-if="column.key === 'message'">
-                    <span class="k8s-cell-muted" :title="record.message">{{ record.message || '—' }}</span>
+                    <span class="vnp-cell-muted" :title="record.message">{{ record.message || '—' }}</span>
                   </template>
                 </template>
               </a-table>
             </section>
 
-            <section v-if="detail.events && detail.events.length" class="k8s-subpanel">
-              <div class="k8s-subpanel-head">
-                <span class="k8s-section-title">{{ t('k8s.events') }}</span>
-              </div>
-              <div class="k8s-event-list">
-                <div v-for="(event, idx) in detail.events" :key="idx" class="k8s-event-card">
-                  <div class="k8s-event-head">
-                    <span :class="['k8s-pill', 'status-badge', event.type === 'Normal' ? 'status-badge-info' : 'status-badge-warning']">
-                      {{ event.reason }}
-                    </span>
-                    <span class="k8s-event-time">{{ event.lastTimestamp || '—' }}</span>
+            <section v-if="detail.events && detail.events.length" class="vnp-section" style="margin-top: 12px">
+              <div class="vnp-section-head">{{ t('k8s.events') }}</div>
+              <div class="vnp-list">
+                <div v-for="(event, idx) in detail.events" :key="idx" class="vn-k8s-event-card">
+                  <div class="vn-k8s-event-head">
+                    <VnBadge :tone="event.type === 'Normal' ? 'info' : 'warn'">{{ event.reason }}</VnBadge>
+                    <span class="vnp-cell-muted">{{ event.lastTimestamp || '—' }}</span>
                   </div>
-                  <p class="k8s-event-message">{{ event.message }}</p>
+                  <p class="vn-k8s-event-message">{{ event.message }}</p>
                 </div>
               </div>
             </section>
@@ -324,43 +327,41 @@ async function copyYaml() {
         </a-tab-pane>
 
         <a-tab-pane key="yaml" tab="YAML">
-          <div class="k8s-code-block">
-            <div class="k8s-code-head">
-              <span class="k8s-section-title">{{ t('k8s.yaml_definition') }}</span>
+          <div class="vnp-code">
+            <div class="vnp-code-head">
+              <span class="vnp-form-section-title">{{ t('k8s.yaml_definition') }}</span>
               <a-button size="small" @click="copyYaml">
-                <template #icon><CopyOutlined /></template>
-                {{ t('common.copy') }}
+                <template #icon><CopyOutlined /></template>{{ t('common.copy') }}
               </a-button>
             </div>
-            <pre class="k8s-code-pre">{{ yaml || '—' }}</pre>
+            <pre class="vnp-code-pre">{{ yaml || '—' }}</pre>
           </div>
         </a-tab-pane>
 
         <a-tab-pane key="logs" :tab="t('k8s.logs')">
-          <div class="k8s-code-block">
-            <div class="k8s-code-head k8s-logs-head">
-              <div class="k8s-logs-group">
-                <span class="k8s-section-title">{{ t('k8s.container_logs') }}</span>
+          <div class="vnp-code">
+            <div class="vnp-code-head vn-k8s-logs-head">
+              <div class="vn-k8s-logs-group">
+                <span class="vnp-form-section-title">{{ t('k8s.container_logs') }}</span>
                 <a-select
                   :value="logMode"
                   :options="[
                     { value: 'history', label: t('k8s.log_history') },
                     { value: 'realtime', label: t('k8s.log_realtime') },
                   ]"
-                  class="k8s-log-mode-select"
+                  class="vn-k8s-log-select"
                   @change="handleLogModeChange"
                 />
               </div>
-              <div v-if="logMode === 'history'" class="k8s-logs-group">
-                <a-select v-model:value="logTailLines" :options="tailLineOptions" class="k8s-log-select" />
-                <a-select v-model:value="logSinceSeconds" :options="sinceOptions" class="k8s-log-select-lg" />
+              <div v-if="logMode === 'history'" class="vn-k8s-logs-group">
+                <a-select v-model:value="logTailLines" :options="tailLineOptions" class="vn-k8s-log-select" />
+                <a-select v-model:value="logSinceSeconds" :options="sinceOptions" class="vn-k8s-log-select-lg" />
                 <a-button :loading="logsLoading" @click="loadLogs">
-                  <template #icon><ReloadOutlined /></template>
-                  {{ t('common.refresh') }}
+                  <template #icon><ReloadOutlined /></template>{{ t('common.refresh') }}
                 </a-button>
               </div>
-              <div v-else class="k8s-logs-group">
-                <a-select v-model:value="logRefreshInterval" :options="intervalOptions" class="k8s-log-select" />
+              <div v-else class="vn-k8s-logs-group">
+                <a-select v-model:value="logRefreshInterval" :options="intervalOptions" class="vn-k8s-log-select" />
                 <a-button :type="logAutoRefresh ? 'primary' : 'default'" @click="toggleRealtime">
                   <template #icon>
                     <PauseCircleOutlined v-if="logAutoRefresh" />
@@ -369,12 +370,11 @@ async function copyYaml() {
                   {{ logAutoRefresh ? t('k8s.log_stop') : t('k8s.log_start') }}
                 </a-button>
                 <a-button @click="clearLogs">
-                  <template #icon><ClearOutlined /></template>
-                  {{ t('k8s.log_clear') }}
+                  <template #icon><ClearOutlined /></template>{{ t('k8s.log_clear') }}
                 </a-button>
               </div>
             </div>
-            <pre class="k8s-code-pre k8s-logs-pre">{{ logs }}</pre>
+            <pre class="vnp-code-pre">{{ logs }}</pre>
           </div>
         </a-tab-pane>
       </a-tabs>

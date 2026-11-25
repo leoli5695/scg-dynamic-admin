@@ -73,5 +73,14 @@
   "auth_policy.type_desc_basic": "Basic认证：使用HTTP Basic Authentication进行身份验证。客户端需在请求头中携带Base64编码的用户名密码（Authorization: Basic xxx）。",
   "auth_policy.type_desc_hmac": "HMAC认证：使用签名算法进行身份验证。客户端需对请求内容进行签名，并在请求头中携带签名信息。支持HMAC-SHA256、HMAC-SHA512算法。",
   "auth_policy.load_failed": "加载认证策略失败",
-  "auth_policy.binding_toggle_failed": "切换绑定状态失败"
+  "auth_policy.binding_toggle_failed": "切换绑定状态失败",
+  "auth_policy.stats_disabled": "已禁用",
+  "auth_policy.no_match": "当前筛选条件下没有认证凭证",
+  "auth_policy.view_grid": "卡片",
+  "auth_policy.view_table": "表格",
+  "auth_policy.view_mode": "视图模式",
+  "auth_policy.results": "{{count}} 个结果",
+  "auth_policy.search_placeholder": "搜索凭证名称",
+  "auth_policy.stats_scope": "凭证状态统计",
+  "auth_policy.more_actions": "更多操作"
 }

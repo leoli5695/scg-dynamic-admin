@@ -1,0 +1,135 @@
+/**
+ * Kubernetes page composition on the Vue-native layer. Layout only — surfaces,
+ * ink, badges, chips and control chrome come from vue-native.css / vn-pages.css.
+ * Scoped to the page root (.vn-k8s) and its portals so nothing leaks elsewhere.
+ */
+
+.vn-k8s {
+  padding: 0;
+  min-height: 100%;
+}
+
+/* Keep the chip row to a single line so tiles in a row stay equal height. */
+.vn-k8s .vnp-tile-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.vn-k8s-inline-alert {
+  margin-bottom: 12px;
+}
+
+/* ==================== Drawer internals ==================== */
+.vnp-portal .vn-k8s-pane-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.vnp-portal .vn-k8s-namespace-select {
+  width: 220px;
+}
+.vnp-portal .vn-k8s-replica-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vnp-portal .vn-k8s-replica-cell .ant-progress {
+  flex: 1;
+  min-width: 0;
+}
+.vnp-portal .vn-k8s-container-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Pod detail */
+.vnp-portal .vn-k8s-pod-body {
+  display: flex;
+  flex-direction: column;
+}
+.vnp-portal .vn-k8s-container-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+.vnp-portal .vn-k8s-container-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.vnp-portal .vn-k8s-container-head code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vnp-portal .vn-k8s-env-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vnp-portal .vn-k8s-env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.vnp-portal .vn-k8s-env-row {
+  display: flex;
+  gap: 8px;
+  font-size: 11.5px;
+}
+.vnp-portal .vn-k8s-env-name {
+  flex: none;
+  color: var(--vn-ink);
+}
+.vnp-portal .vn-k8s-event-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+.vnp-portal .vn-k8s-event-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vnp-portal .vn-k8s-event-message {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--vn-ink-2);
+}
+
+/* Import test result lines */
+.vnp-portal .vn-k8s-test-line {
+  margin: 0 0 3px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* Logs toolbar */
+.vnp-portal .vn-k8s-logs-head {
+  flex-wrap: wrap;
+}
+.vnp-portal .vn-k8s-logs-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vnp-portal .vn-k8s-log-select {
+  width: 120px;
+}
+.vnp-portal .vn-k8s-log-select-lg {
+  width: 150px;
+}

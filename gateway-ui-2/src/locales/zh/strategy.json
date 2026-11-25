@@ -405,5 +405,13 @@
   "strategy.impact_edit_bindings_hint": "请在路由详情工作台绑定或解绑；修改策略配置不会覆盖已有绑定。",
   "strategy.retry": "重试",
   "strategy.delete_confirm": "该策略将从当前网关实例中移除，已绑定路由会立即失去此策略。",
-  "strategy.empty_hint": "策略用于为网关中的所有路由统一施加流量、安全与韧性规则。"
+  "strategy.empty_hint": "策略用于为网关中的所有路由统一施加流量、安全与韧性规则。",
+  "strategy.view_grid": "卡片",
+  "strategy.view_table": "表格",
+  "strategy.view_mode": "视图模式",
+  "strategy.results": "{{count}} 个结果",
+  "strategy.category": "策略类型",
+  "strategy.stats_scope": "{{category}}统计",
+  "strategy.search_placeholder": "搜索策略名称/类型",
+  "strategy.more_actions": "更多操作"
 }

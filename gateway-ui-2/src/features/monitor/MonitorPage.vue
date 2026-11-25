@@ -1,17 +1,15 @@
 <script setup lang="ts">
 /**
- * Gateway monitor tab — Vue port of gateway-ui/src/features/monitor/index.tsx.
- * Realtime snapshot (10s poll) + history trends (30s) + per-route stats (30s),
- * all scoped to the current instance and the selected pod. Polling pauses in
- * historical mode and while the document is hidden (usePolling contract).
- * Visual language follows the login skin (2026-11-20): transparent canvas,
- * login panels, capsule badges and the periwinkle→violet accent family.
+ * Gateway monitor tab on the Vue-native design layer. Realtime snapshot (10s
+ * poll) + history trends (30s) + per-route stats (30s), scoped to the current
+ * instance and selected pod. Polling pauses in historical mode and while the
+ * document is hidden (usePolling contract). API calls unchanged.
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, CloudServerOutlined,
-  LineChartOutlined, QuestionCircleOutlined,
+  CompassOutlined, ContainerOutlined, LineChartOutlined, QuestionCircleOutlined, ReloadOutlined,
 } from '@/components/icons'
 import { usePolling } from '@/composables/useRequest'
 import {
@@ -20,11 +18,20 @@ import {
 import type { MonitorInstance, MonitorRouteMetric } from '@/api/monitor'
 import { getInstancePods } from '@/api/instances'
 import { useInstanceDetail } from '../instance-detail/context'
-import { instanceTone } from './utils'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
+import { instanceTone, vnTone } from './utils'
 import MetricCards from './components/MetricCards.vue'
 import HistoryTrends from './components/HistoryTrends.vue'
 import PodSelector from './components/PodSelector.vue'
-import './monitor.css'
+import '@/styles/vue-native.css'
+import '@/styles/vn-pages.css'
+import './monitor-vue-native.css'
+
+defineOptions({ name: 'MonitorPage' })
 
 /** Realtime snapshot window for history/routes in realtime mode (hours). */
 const REALTIME_HOURS = 1
@@ -43,9 +50,9 @@ const selectedPodName = ref<string>()
 const showHistoricalHint = ref(true)
 const lastUpdated = ref<Date>()
 
-const modeOptions = computed(() => [
-  { value: 'realtime', label: t('monitor.realtime_mode') },
-  { value: 'historical', label: t('monitor.historical_mode') },
+const modeOptions = computed<VnSegmentOption<ViewMode>[]>(() => [
+  { key: 'realtime', label: t('monitor.realtime_mode'), icon: LineChartOutlined },
+  { key: 'historical', label: t('monitor.historical_mode'), icon: ClockCircleOutlined },
 ])
 
 const timeRangeOptions = computed(() => [
@@ -133,6 +140,12 @@ const metricsError = computed(() => metricsRequest.error.value?.message)
 
 const timeText = computed(() => (lastUpdated.value ?? new Date()).toLocaleTimeString())
 
+const statItems = computed<VnStatItem[]>(() => [
+  { key: 'instances', value: metrics.value?.instances?.length ?? 0, label: t('monitor.gateway_instances'), icon: CloudServerOutlined },
+  { key: 'routes', value: routeMetrics.value.length, label: t('monitor.tab_routes'), icon: CompassOutlined, accent: 'var(--vn-info)' },
+  { key: 'pods', value: pods.value.length, label: t('monitor.select_pod'), icon: ContainerOutlined },
+])
+
 const instanceColumns = computed(() => [
   { title: t('monitor.instance'), dataIndex: 'instance', key: 'instance' },
   { title: t('monitor.job'), dataIndex: 'job', key: 'job' },
@@ -143,58 +156,47 @@ function selectPod(podName: string): void {
   selectedPodName.value = podName
 }
 
-function onModeChange(value: unknown): void {
-  viewMode.value = value === 'historical' ? 'historical' : 'realtime'
-}
-
-function onRangeChange(value: unknown): void {
-  historyHoursForHistorical.value = Number(value) || 1
+function refreshAll(): void {
+  metricsRequest.run()
+  historyRequest.run()
+  routesRequest.run()
 }
 </script>
 
 <template>
-  <div class="monitor-page">
-    <div v-if="metricsRequest.loading.value && !metrics" class="lg-panel monitor-state monitor-initial-state">
+  <div class="monitor-page vn-monitor vn-scope vnp-scope">
+    <div v-if="metricsRequest.loading.value && !metrics" class="vn-panel vn-monitor-state vn-monitor-initial-state">
       <a-spin size="large" />
-      <span class="monitor-state-hint">{{ t('common.loading') }}</span>
+      <span class="vnp-hint">{{ t('common.loading') }}</span>
     </div>
 
     <template v-else>
-      <header class="monitor-header">
-        <div class="monitor-heading">
-          <h1 class="monitor-title">
-            <span class="lg-icon-tile" aria-hidden="true"><LineChartOutlined /></span>
-            {{ t('monitor.title') }}
-          </h1>
-          <p class="monitor-subtitle">
-            {{ t('monitor.instance') }}:
-            <code class="monitor-code">{{ instanceId }}</code>
-          </p>
-        </div>
-        <div class="monitor-actions">
-          <a-segmented
-            class="monitor-mode"
-            :value="viewMode"
-            :options="modeOptions"
-            @change="onModeChange"
-          />
-          <a-select
-            v-if="viewMode === 'historical'"
-            class="monitor-range-select"
-            :value="historyHoursForHistorical"
-            :options="timeRangeOptions"
-            @change="onRangeChange"
-          />
-          <span :class="['status-badge', prometheusAvailable ? 'status-badge-success' : 'status-badge-error']">
-            <i :class="['status-dot', prometheusAvailable ? 'status-dot-success' : 'status-dot-error']" />
-            {{ prometheusAvailable ? t('monitor.prometheus_connected') : t('monitor.prometheus_disconnected') }}
-          </span>
-          <span class="lg-chip monitor-time-chip">
+      <VnToolbar :title="t('monitor.title')" :lede="`${t('monitor.instance')}: ${instanceId}`">
+        <template #actions>
+          <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" @click="refreshAll" />
+          <span class="vn-chip vn-monitor-time-chip">
             <ClockCircleOutlined aria-hidden="true" />
-            {{ timeText }}
+            <span class="vn-mono">{{ timeText }}</span>
           </span>
-        </div>
-      </header>
+        </template>
+      </VnToolbar>
+
+      <div class="vn-metarow">
+        <VnSegmented v-model="viewMode" :options="modeOptions" :label="t('monitor.title')" />
+        <a-select
+          v-if="viewMode === 'historical'"
+          v-model:value="historyHoursForHistorical"
+          class="vn-monitor-range-select"
+          :options="timeRangeOptions"
+          popup-class-name="vn-portal vnp-portal"
+          :aria-label="t('monitor.historical_mode')"
+        />
+        <VnStatRail :items="statItems" :label="t('monitor.title')" />
+        <span class="vn-filterbar-spacer" />
+        <VnBadge :tone="prometheusAvailable ? 'ok' : 'err'">
+          {{ prometheusAvailable ? t('monitor.prometheus_connected') : t('monitor.prometheus_disconnected') }}
+        </VnBadge>
+      </div>
 
       <a-alert
         v-if="viewMode === 'historical' && showHistoricalHint"
@@ -231,48 +233,47 @@ function onRangeChange(value: unknown): void {
         @refresh="podsRequest.run()"
       />
 
-      <a-card :bordered="false" class="monitor-instances-card">
-        <template #title>
-          <span class="monitor-card-heading">
-            <span class="icon-tile icon-tile--sm"><CloudServerOutlined /></span>
-            <span class="lg-section-title">{{ t('monitor.gateway_instances') }}</span>
-          </span>
-        </template>
-        <a-table
-          :scroll="{ x: 'max-content' }"
-          :data-source="metrics?.instances ?? []"
-          :columns="instanceColumns"
-          row-key="instance"
-          :pagination="false"
-          size="small"
-          :locale="{ emptyText: t('monitor.no_instances') }"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'instance'">
-              <code class="monitor-code">{{ (record as MonitorInstance).instance }}</code>
-            </template>
-            <template v-else-if="column.key === 'job'">
-              <span class="status-badge status-badge-neutral">{{ (record as MonitorInstance).job }}</span>
-            </template>
-            <template v-else-if="column.key === 'status'">
-              <span class="monitor-instance-status">
-                <CheckCircleOutlined
-                  v-if="(record as MonitorInstance).status === 'UP'"
-                  class="monitor-status-icon is-success"
-                />
-                <CloseCircleOutlined
-                  v-else-if="(record as MonitorInstance).status === 'DOWN'"
-                  class="monitor-status-icon is-error"
-                />
-                <QuestionCircleOutlined v-else class="monitor-status-icon is-muted" />
-                <span :class="['status-badge', `status-badge-${instanceTone((record as MonitorInstance).status)}`]">
-                  {{ (record as MonitorInstance).status }}
+      <section class="vn-panel">
+        <header class="vn-panel-head">
+          <span class="vnp-panel-head"><CloudServerOutlined />{{ t('monitor.gateway_instances') }}</span>
+        </header>
+        <div class="vn-panel-body vn-monitor-instances-body">
+          <a-table
+            :scroll="{ x: 'max-content' }"
+            :data-source="metrics?.instances ?? []"
+            :columns="instanceColumns"
+            row-key="instance"
+            :pagination="false"
+            size="small"
+            :locale="{ emptyText: t('monitor.no_instances') }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'instance'">
+                <span class="vn-mono">{{ (record as MonitorInstance).instance }}</span>
+              </template>
+              <template v-else-if="column.key === 'job'">
+                <span class="vn-chip">{{ (record as MonitorInstance).job }}</span>
+              </template>
+              <template v-else-if="column.key === 'status'">
+                <span class="vn-monitor-instance-status">
+                  <CheckCircleOutlined
+                    v-if="(record as MonitorInstance).status === 'UP'"
+                    class="vn-ink-ok"
+                  />
+                  <CloseCircleOutlined
+                    v-else-if="(record as MonitorInstance).status === 'DOWN'"
+                    class="vn-ink-err"
+                  />
+                  <QuestionCircleOutlined v-else class="vn-ink-idle" />
+                  <VnBadge :tone="vnTone(instanceTone((record as MonitorInstance).status))">
+                    {{ (record as MonitorInstance).status }}
+                  </VnBadge>
                 </span>
-              </span>
+              </template>
             </template>
-          </template>
-        </a-table>
-      </a-card>
+          </a-table>
+        </div>
+      </section>
 
       <MetricCards :metrics="metrics" />
 

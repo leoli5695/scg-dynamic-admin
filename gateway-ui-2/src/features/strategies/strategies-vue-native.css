@@ -1,0 +1,567 @@
+/**
+ * Strategies page composition on the Vue-native layer.
+ * Layout only — surfaces, ink, radii and control chrome come from
+ * styles/vue-native.css; shared catalog/portal patterns from
+ * styles/vue-native-shared.css. Nothing leaks outside `.vn-scope` / `.vn-portal`.
+ */
+
+.vn-strategies {
+  padding: 0;
+  min-height: 100%;
+}
+
+/* ==================== Tool row extras ==================== */
+.vn-strategies .vn-type-select {
+  width: 150px;
+  flex: none;
+}
+
+/* ==================== Tile ==================== */
+.vn-strategies .vn-tile-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  height: 24px;
+  flex: none;
+}
+
+.vn-strategies .vn-band-label {
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vn-strategies .vn-route-id-chip {
+  max-width: 150px;
+}
+
+.vn-strategies .vn-route-id-chip .vn-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--vn-mono);
+  font-size: 11px;
+}
+
+/* Type identity tones snapped onto the vn semantic palette. */
+.vn-strategies .vn-stone-primary { color: var(--vn-info); }
+.vn-strategies .vn-stone-success { color: var(--vn-ok); }
+.vn-strategies .vn-stone-warning { color: var(--vn-warn); }
+.vn-strategies .vn-stone-error { color: var(--vn-err); }
+.vn-strategies .vn-stone-info { color: var(--vn-info); }
+.vn-strategies .vn-stone-accent { color: var(--vn-info); }
+.vn-strategies .vn-stone-neutral { color: var(--vn-ink-3); }
+
+/* ==================== Table view ==================== */
+.vn-strategies .vn-strategy-summary {
+  display: block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vn-ink-2);
+}
+
+/* ==================== Editor modal ==================== */
+.vn-portal .vn-modal-head > .vn-modal-back.ant-btn {
+  flex: none;
+  padding-inline: 6px;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .strategy-impact-alert.ant-alert {
+  margin-bottom: 2px;
+}
+
+.vn-portal .strategy-impact-hint {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .strategy-impact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+  color: var(--vn-ink);
+}
+
+.vn-portal .strategy-impact-route-id {
+  margin-left: 6px;
+  font-family: var(--vn-mono);
+  font-size: 10.5px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .strategy-form-section-index {
+  display: none;
+}
+
+.vn-portal .strategy-form-section-hint {
+  font-size: 11px;
+  color: var(--vn-ink-3);
+  margin-left: auto;
+}
+
+.vn-portal .strategy-type-display {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 4px;
+}
+
+.vn-portal .strategy-type-display-label {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .strategy-type-display-tag.ant-tag {
+  align-self: flex-start;
+  margin: 0;
+}
+
+.vn-portal .strategy-footer-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .strategy-footer-meta .ant-tag {
+  margin: 0;
+}
+
+/* Scope radio group reads like the native segmented control. */
+.vn-portal .strategy-scope-switch.ant-radio-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+}
+
+.vn-portal .strategy-scope-switch .ant-radio-button-wrapper {
+  height: 28px;
+  line-height: 26px;
+  padding-inline: 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vn-ink-2);
+  font-size: 12.5px;
+}
+
+.vn-portal .strategy-scope-switch .ant-radio-button-wrapper::before {
+  display: none;
+}
+
+.vn-portal .strategy-scope-switch .ant-radio-button-wrapper:hover {
+  color: var(--vn-ink);
+  background: var(--vn-surface-raised);
+}
+
+.vn-portal .strategy-scope-switch .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled) {
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+  box-shadow: none;
+}
+
+.vn-portal .strategy-scope-switch .ant-radio-button-wrapper-disabled {
+  opacity: 0.55;
+}
+
+/* ==================== Dynamic config internals ==================== */
+.vn-portal .ant-card.ant-card {
+  background: var(--vn-surface);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  box-shadow: none;
+}
+
+.vn-portal .ant-card.ant-card::before {
+  display: none;
+}
+
+.vn-portal .ant-card .ant-card-head {
+  min-height: 38px;
+  padding-inline: 12px;
+  border-bottom: 1px solid var(--vn-line-soft);
+  color: var(--vn-ink);
+  font-size: 12.5px;
+}
+
+.vn-portal .ant-card .ant-card-body {
+  padding: 12px;
+}
+
+.vn-portal .strategy-config-card.ant-card {
+  margin-bottom: 8px;
+}
+
+.vn-portal .strategy-rule-card.ant-card {
+  margin-bottom: 8px;
+}
+
+.vn-portal .strategy-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.vn-portal .strategy-info-icon {
+  color: var(--vn-ink-3);
+  cursor: help;
+}
+
+.vn-portal .strategy-section-switch {
+  margin-bottom: 10px;
+}
+
+.vn-portal .strategy-muted-hint {
+  color: var(--vn-ink-3);
+  font-size: 11px;
+}
+
+.vn-portal .strategy-config-divider.ant-divider {
+  margin: 12px 0;
+  border-color: var(--vn-line-soft);
+  color: var(--vn-ink-3);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.vn-portal .strategy-dimension-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vn-portal .strategy-dimension-label {
+  color: var(--vn-ink-2);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.vn-portal .strategy-tenant-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.vn-portal .strategy-tenant-id {
+  width: 150px;
+}
+
+.vn-portal .strategy-inline-row {
+  margin-bottom: 8px;
+}
+
+.vn-portal .strategy-inline-item {
+  margin-bottom: 0;
+}
+
+.vn-portal .strategy-kv-section {
+  margin-bottom: 10px;
+}
+
+.vn-portal .strategy-kv-label.ant-typography {
+  margin-bottom: 6px;
+  color: var(--vn-ink-2);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.vn-portal .strategy-kv-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.vn-portal .strategy-kv-row + .strategy-kv-row {
+  margin-top: 8px;
+}
+
+.vn-portal .strategy-kv-item {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.vn-portal .strategy-kv-item-wide {
+  flex: 2;
+}
+
+.vn-portal .strategy-kv-add.ant-btn {
+  margin-top: 8px;
+}
+
+.vn-portal .strategy-alert.ant-alert {
+  margin-bottom: 10px;
+}
+
+/* ==================== Type picker modal ==================== */
+.vn-portal.strategy-picker-modal .ant-modal .ant-modal-body {
+  flex-direction: column;
+}
+
+.vn-portal .strategy-picker-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+
+.vn-portal .strategy-picker-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vn-portal .strategy-picker-search {
+  flex: 1;
+  max-width: 340px;
+}
+
+.vn-portal .strategy-picker-categories {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vn-portal .strategy-picker-categories button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-chip);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-2);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background var(--vn-fast) var(--vn-ease), color var(--vn-fast) var(--vn-ease);
+}
+
+.vn-portal .strategy-picker-categories button:hover {
+  color: var(--vn-ink);
+  background: var(--vn-surface-raised);
+}
+
+.vn-portal .strategy-picker-categories button[aria-pressed="true"] {
+  background: var(--vn-brand-soft);
+  border-color: var(--vn-brand-line);
+  color: var(--vn-brand);
+}
+
+.vn-portal .strategy-picker-categories button span {
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .strategy-picker-categories button[aria-pressed="true"] span {
+  color: var(--vn-brand);
+}
+
+.vn-portal .strategy-picker-result-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.vn-portal .strategy-picker-results {
+  padding: 14px 18px 18px;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.vn-portal .strategy-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+}
+
+.vn-portal .strategy-picker-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  text-align: left;
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-panel);
+  background: var(--vn-surface);
+  box-shadow: var(--vn-shadow-1);
+  font: inherit;
+  color: var(--vn-ink);
+  cursor: pointer;
+  transition: border-color var(--vn-fast) var(--vn-ease), background var(--vn-fast) var(--vn-ease);
+}
+
+.vn-portal .strategy-picker-card:hover:not(:disabled) {
+  border-color: var(--vn-brand-line);
+  background: var(--vn-surface-raised);
+}
+
+.vn-portal .strategy-picker-card:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.vn-portal .strategy-picker-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.vn-portal .strategy-picker-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+  font-size: var(--vn-glyph);
+}
+
+.vn-portal .strategy-picker-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vn-portal .strategy-picker-names strong {
+  font-size: 12.5px;
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .strategy-picker-names span {
+  font-size: 10.5px;
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .strategy-picker-arrow {
+  margin-left: auto;
+  flex: none;
+  color: var(--vn-ink-3);
+  font-size: var(--vn-glyph-sm);
+}
+
+.vn-portal .strategy-picker-card:hover:not(:disabled) .strategy-picker-arrow {
+  color: var(--vn-brand);
+}
+
+.vn-portal .strategy-picker-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.vn-portal .strategy-picker-card-footer > span {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--vn-ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.vn-portal .strategy-picker-card-footer small {
+  font-size: 10.5px;
+  color: var(--vn-ink-3);
+}
+
+/* Picker type tones snapped onto the vn palette. */
+.vn-portal .strategy-tone-primary { color: var(--vn-info); }
+.vn-portal .strategy-tone-success { color: var(--vn-ok); }
+.vn-portal .strategy-tone-warning { color: var(--vn-warn); }
+.vn-portal .strategy-tone-error { color: var(--vn-err); }
+.vn-portal .strategy-tone-info { color: var(--vn-info); }
+.vn-portal .strategy-tone-accent { color: var(--vn-info); }
+.vn-portal .strategy-tone-neutral { color: var(--vn-ink-3); }
+
+/* ==================== Nested credential modal (default antd footer) ======= */
+.vn-portal .strategy-credential-modal.ant-modal .ant-modal-body {
+  padding: 14px 18px 16px;
+}
+
+.vn-portal .strategy-credential-modal.ant-modal .ant-modal-footer {
+  margin: 0;
+  padding: 11px 18px;
+  border-top: 1px solid var(--vn-line-soft);
+}
+
+/* ==================== Delete confirmation ==================== */
+.vn-portal .strategy-delete-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 24px 22px 16px;
+}
+
+.vn-portal .strategy-delete-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 4px;
+  border-radius: var(--vn-r-panel);
+  border: 1px solid rgba(242, 85, 90, 0.3);
+  background: rgba(242, 85, 90, 0.1);
+  color: var(--vn-err);
+  font-size: var(--vn-glyph-xl);
+}
+
+.vn-portal .strategy-delete-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--vn-ink);
+}
+
+.vn-portal .strategy-delete-text {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .strategy-delete-target {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+  font-family: var(--vn-mono);
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .strategy-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 11px 18px;
+  border-top: 1px solid var(--vn-line-soft);
+}

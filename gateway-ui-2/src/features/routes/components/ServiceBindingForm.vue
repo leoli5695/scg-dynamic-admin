@@ -11,6 +11,7 @@ import type { RoutingMode } from '@/types/route'
 import type { NacosDiscoveryServiceInfo, ServiceDefinition } from '@/types/service'
 import { sumWeights } from '../utils'
 import type { RouteFormValues } from '../utils'
+import VnBadge from '@/components/vn/VnBadge.vue'
 
 const props = defineProps<{
   formState: RouteFormValues
@@ -101,7 +102,7 @@ function removeService(index: number) {
     <!-- Single service mode -->
     <template v-if="routingMode === 'SINGLE'">
       <a-form-item :label="t('routes.target_service')" required>
-        <a-select v-model:value="formState.serviceId" :placeholder="t('routes.select_service')" show-search @change="handleServiceIdChange">
+        <a-select v-model:value="formState.serviceId" :placeholder="t('routes.select_service')" show-search popup-class-name="vn-portal" @change="handleServiceIdChange">
           <a-select-opt-group>
             <template #label><CloudOutlined class="select-group-icon" /> {{ t('routes.static_services') }}</template>
             <a-select-option v-for="s in services" :key="`static-${s.serviceId}`" :value="`static://${s.serviceId}`">
@@ -126,9 +127,9 @@ function removeService(index: number) {
     <!-- Multi-service mode -->
     <template v-if="routingMode === 'MULTI'">
       <div class="weight-bar">
-        <span class="status-badge" :class="weightValid ? 'status-badge-success' : 'status-badge-warning'">
+        <VnBadge :tone="weightValid ? 'ok' : 'warn'">
           {{ t('routes.weight_total') }}: {{ totalWeight }}%
-        </span>
+        </VnBadge>
         <span v-if="!weightValid" class="weight-bar-hint">{{ t('routes.weight_must_be_100_hint') }}</span>
       </div>
       <div v-for="(svc, idx) in formState.services" :key="idx" class="binding-row">
@@ -137,6 +138,7 @@ function removeService(index: number) {
           :placeholder="t('routes.select_service')"
           class="binding-row-service"
           show-search
+          popup-class-name="vn-portal"
           @change="handleMultiServiceIdChange($event, idx)"
         >
           <a-select-opt-group>
@@ -160,7 +162,7 @@ function removeService(index: number) {
         <a-input-number v-model:value="svc.weight" :min="1" :max="100" placeholder="Weight" class="binding-row-weight" addon-after="%" />
         <a-switch v-model:checked="svc.enabled" size="small" checked-children="ON" un-checked-children="OFF" />
         <a-tooltip v-if="(formState.services?.length || 0) > 1" :title="t('common.delete')">
-          <a-button type="text" danger class="action-btn" :aria-label="t('common.delete')" @click="removeService(idx)">
+          <a-button type="text" danger class="action-btn vn-iconbtn" :aria-label="t('common.delete')" @click="removeService(idx)">
             <template #icon><DeleteOutlined /></template>
           </a-button>
         </a-tooltip>

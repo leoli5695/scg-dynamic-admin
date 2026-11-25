@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Small label + value block used inside the snapshot metric cards. */
+/** Small label + value block used inside the snapshot metric cards (vn ink). */
 withDefaults(defineProps<{
   label: string
   value: string | number
@@ -10,12 +10,20 @@ withDefaults(defineProps<{
   tone: 'default',
   size: 'md',
 })
+
+const toneClass: Record<string, string> = {
+  default: '',
+  primary: 'vn-monitor-primary',
+  success: 'vn-ink-ok',
+  warning: 'vn-ink-warn',
+  error: 'vn-ink-err',
+}
 </script>
 
 <template>
-  <div class="monitor-stat">
-    <span class="monitor-stat-label">{{ label }}</span>
-    <span :class="['monitor-stat-value', `tone-${tone}`, size === 'lg' ? 'is-lg' : '']">
+  <div class="vn-monitor-stat">
+    <span class="vn-monitor-stat-label">{{ label }}</span>
+    <span :class="['vn-monitor-stat-value', toneClass[tone], size === 'lg' ? 'is-lg' : '']">
       {{ value }}<em v-if="unit">{{ unit }}</em>
     </span>
   </div>

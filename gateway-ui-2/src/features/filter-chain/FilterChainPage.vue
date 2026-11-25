@@ -3,8 +3,8 @@
  * Filter chain page — Vue port of gateway-ui/src/features/filter-chain/index.tsx.
  * Per-filter aggregates, recent trace records, trace detail with a DOM/CSS
  * waterfall, threshold config, JSON/CSV/PNG export, auto refresh and keyboard
- * shortcuts. Visual language follows the login skin (2026-11-20): transparent
- * canvas, login panels, periwinkle→violet accents, capsule badges, no canvas.
+ * shortcuts. Rendered on the Vue-native design layer; the chain/waterfall
+ * functionality and API calls are unchanged.
  */
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -12,7 +12,7 @@ import { useI18n } from 'vue-i18n'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import {
   CheckCircleOutlined, ClearOutlined, ClockCircleOutlined, CloseCircleOutlined,
-  DownloadOutlined, ExclamationCircleOutlined, EyeOutlined, FilterOutlined,
+  CopyOutlined, DownloadOutlined, ExclamationCircleOutlined, EyeOutlined, FilterOutlined,
   FundOutlined, ReloadOutlined, SearchOutlined, SettingOutlined,
   ThunderboltOutlined,
 } from '@/components/icons'
@@ -23,9 +23,18 @@ import {
 } from '@/api/filterChain'
 import type { FilterChainRecord, FilterExecution, FilterStats } from '@/api/filterChain'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import WaterfallChart from './components/WaterfallChart.vue'
 import { downloadBlob, formatMicros, formatSelfTime, selfTimeMs, statsToCsv } from './filterChainUtils'
+import '@/styles/vue-native.css'
+import '@/features/services/services-vue-native.css'
 import './filter-chain.css'
+
+defineOptions({ name: 'FilterChainPage' })
 
 const route = useRoute()
 const { t } = useI18n()
@@ -221,6 +230,11 @@ async function exportChartPng() {
   }
 }
 
+async function copyValue(text: string) {
+  if (await copyText(text)) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
+}
+
 /* ---------- Aggregates (React parity) ---------- */
 
 const totalExecutions = computed(() => filterStats.value.reduce((sum, f) => sum + f.totalCount, 0))
@@ -241,6 +255,13 @@ const avgP99 = computed(() => filterStats.value.length > 0
 
 const slowestFilters = computed(() =>
   [...filterStats.value].sort((a, b) => b.avgSelfTimeMsRaw - a.avgSelfTimeMsRaw).slice(0, 5))
+
+const statItems = computed<VnStatItem[]>(() => [
+  { key: 'exec', value: totalExecutions.value, label: t('filterChain.total_executions'), icon: FundOutlined },
+  { key: 'rate', value: Number(overallSuccessRate.value), label: t('filterChain.success_rate'), icon: CheckCircleOutlined, accent: parseFloat(overallSuccessRate.value) >= 99 ? 'var(--vn-ok)' : 'var(--vn-warn)' },
+  { key: 'fail', value: totalFailures.value, label: t('filterChain.failures'), icon: CloseCircleOutlined, accent: totalFailures.value > 0 ? 'var(--vn-err)' : 'var(--vn-ok)' },
+  { key: 'count', value: filterStats.value.length, label: t('filterChain.filter_count'), icon: FilterOutlined },
+])
 
 /* ---------- Table columns ---------- */
 
@@ -293,7 +314,7 @@ const recordColumns = computed<ColumnsType<FilterChainRecord>>(() => [
   { title: t('filterChain.filters'), dataIndex: 'filterCount', key: 'filterCount', width: 100 },
   { title: t('filterChain.status'), key: 'status', width: 140 },
   { title: t('filterChain.time'), dataIndex: 'createdAt', key: 'createdAt', width: 110 },
-  { title: t('common.actions'), key: 'actions', width: 70, fixed: 'right' },
+  { title: t('common.actions'), key: 'actions', width: 92, fixed: 'right' },
 ])
 
 const executionColumns = computed<ColumnsType<FilterExecution>>(() => [
@@ -310,27 +331,27 @@ const recordPagination = { pageSize: 10, showSizeChanger: false }
 
 /* ---------- Cell tone helpers (React fixed thresholds) ---------- */
 
-function rateTone(rate: string): string {
+function rateTone(rate: string): 'ok' | 'warn' | 'err' {
   const value = parseFloat(rate)
-  return value >= 99 ? 'success' : value >= 95 ? 'warning' : 'error'
+  return value >= 99 ? 'ok' : value >= 95 ? 'warn' : 'err'
 }
 
-function selfTimeTone(ms: number): string {
-  return ms < 1 ? 'success' : ms < 10 ? 'warning' : 'error'
+function selfTimeTone(ms: number): 'ok' | 'warn' | 'err' {
+  return ms < 1 ? 'ok' : ms < 10 ? 'warn' : 'err'
 }
 
-function p95Tone(ms: number): string {
-  return ms < 5 ? 'success' : ms < 20 ? 'warning' : 'error'
+function p95Tone(ms: number): 'ok' | 'warn' | 'err' {
+  return ms < 5 ? 'ok' : ms < 20 ? 'warn' : 'err'
 }
 
-function p99Tone(ms: number): string {
-  return ms < 10 ? 'success' : ms < 50 ? 'warning' : 'error'
+function p99Tone(ms: number): 'ok' | 'warn' | 'err' {
+  return ms < 10 ? 'ok' : ms < 50 ? 'warn' : 'err'
 }
 
-function executionTone(exec: FilterExecution): string {
-  if (!exec.success) return 'error'
+function executionTone(exec: FilterExecution): 'ok' | 'warn' | 'err' {
+  if (!exec.success) return 'err'
   const ms = selfTimeMs(exec)
-  return ms < 1 ? 'success' : ms < 10 ? 'warning' : 'error'
+  return ms < 1 ? 'ok' : ms < 10 ? 'warn' : 'err'
 }
 
 function formatRecordTime(ts: number): string {
@@ -346,18 +367,10 @@ const refreshIntervalOptions = computed(() => [
 </script>
 
 <template>
-  <div class="fch-page">
-    <header class="fch-page-header">
-      <div class="fch-page-heading">
-        <span class="lg-eyebrow">{{ t('filterChain.eyebrow') }}</span>
-        <h1 class="fch-page-title">
-          <span class="lg-icon-tile" aria-hidden="true"><FilterOutlined /></span>
-          {{ t('filterChain.title') }}
-        </h1>
-        <p class="fch-page-subtitle">{{ t('filterChain.subtitle') }}</p>
-      </div>
-      <div class="fch-page-actions">
-        <a-tooltip :title="t('filterChain.performance_threshold_config')">
+  <div class="fch-page vn-scope">
+    <VnToolbar :title="t('filterChain.title')" :lede="t('filterChain.subtitle')">
+      <template #actions>
+        <a-tooltip :title="t('filterChain.performance_threshold_config')" overlay-class-name="vn-tooltip">
           <a-button @click="thresholdOpen = true">
             <template #icon><SettingOutlined /></template>
             {{ t('filterChain.threshold') }}
@@ -367,31 +380,29 @@ const refreshIntervalOptions = computed(() => [
           <template #icon><DownloadOutlined /></template>
           {{ t('filterChain.export') }}
         </a-button>
-        <a-tooltip :title="t('filterChain.shortcut_r_hint')">
+        <a-tooltip :title="t('filterChain.shortcut_r_hint')" overlay-class-name="vn-tooltip">
           <a-button type="primary" :loading="loading" @click="loadData">
             <template #icon><ReloadOutlined /></template>
             {{ t('common.refresh') }}
           </a-button>
         </a-tooltip>
-      </div>
-    </header>
+      </template>
+    </VnToolbar>
 
-    <section class="lg-panel fch-toolbar">
+    <div class="vn-metarow">
       <a-input
         v-model:value="searchTraceId"
         :placeholder="t('filterChain.search_trace')"
         allow-clear
-        class="fch-search-input"
+        class="vn-search fch-search-input"
         @press-enter="searchTrace"
       >
         <template #prefix><SearchOutlined /></template>
       </a-input>
-      <a-button :loading="searching" @click="searchTrace">
-        <template #icon><SearchOutlined /></template>
-        {{ t('common.search') }}
-      </a-button>
-      <span class="fch-toolbar-spacer" />
-      <a-tooltip :title="t('filterChain.shortcut_a_hint')">
+      <VnIconButton :icon="SearchOutlined" :label="t('common.search')" :disabled="searching" @click="searchTrace" />
+      <VnStatRail :items="statItems" :label="t('filterChain.performance_analysis')" />
+      <span class="vn-filterbar-spacer" />
+      <a-tooltip :title="t('filterChain.shortcut_a_hint')" overlay-class-name="vn-tooltip">
         <div class="fch-auto-control">
           <a-switch
             v-model:checked="autoRefresh"
@@ -406,7 +417,7 @@ const refreshIntervalOptions = computed(() => [
           />
         </div>
       </a-tooltip>
-    </section>
+    </div>
 
     <a-alert
       v-if="loadError"
@@ -430,92 +441,59 @@ const refreshIntervalOptions = computed(() => [
     </a-alert>
 
     <a-spin :spinning="loading">
-      <section class="fch-kpi-grid" :aria-label="t('filterChain.performance_analysis')">
-        <div class="lg-panel fch-kpi">
-          <div class="fch-kpi-head">
-            <span class="lg-section-title">{{ t('filterChain.total_executions') }}</span>
-            <span class="icon-tile icon-tile--sm fch-kpi-icon is-primary"><FundOutlined /></span>
-          </div>
-          <div class="fch-kpi-value">{{ totalExecutions.toLocaleString() }}</div>
-          <div class="fch-kpi-sub">{{ filterStats.length }} {{ t('filterChain.filter_count') }}</div>
-        </div>
-        <div class="lg-panel fch-kpi">
-          <div class="fch-kpi-head">
-            <span class="lg-section-title">{{ t('filterChain.success_rate') }}</span>
-            <span class="icon-tile icon-tile--sm fch-kpi-icon is-success"><CheckCircleOutlined /></span>
-          </div>
-          <div :class="['fch-kpi-value', parseFloat(overallSuccessRate) >= 99 ? 'is-success' : 'is-warning']">
-            {{ overallSuccessRate }}<small>%</small>
-          </div>
-          <div class="fch-kpi-sub">{{ totalSuccess.toLocaleString() }} {{ t('filterChain.success') }}</div>
-        </div>
-        <div class="lg-panel fch-kpi">
-          <div class="fch-kpi-head">
-            <span class="lg-section-title">{{ t('filterChain.failures') }}</span>
-            <span class="icon-tile icon-tile--sm fch-kpi-icon is-error"><CloseCircleOutlined /></span>
-          </div>
-          <div :class="['fch-kpi-value', totalFailures > 0 ? 'is-error' : 'is-success']">{{ totalFailures.toLocaleString() }}</div>
-          <div class="fch-kpi-sub">{{ t('filterChain.performance_analysis') }}</div>
-        </div>
-        <div class="lg-panel fch-kpi">
-          <div class="fch-kpi-head">
-            <span class="lg-section-title">{{ t('filterChain.filter_count') }}</span>
-            <span class="icon-tile icon-tile--sm fch-kpi-icon is-accent"><FilterOutlined /></span>
-          </div>
-          <div class="fch-kpi-value">{{ filterStats.length }}</div>
-          <div class="fch-kpi-sub">{{ t('filterChain.filter_stats') }}</div>
-        </div>
-      </section>
-
       <div class="fch-analysis-grid">
-        <section class="lg-panel fch-analysis-panel">
-          <div class="fch-panel-head">
+        <section class="vn-panel fch-analysis-panel">
+          <div class="vn-panel-head">
             <span class="fch-panel-title"><FundOutlined /> {{ t('filterChain.performance_analysis') }}</span>
           </div>
-          <div class="fch-analysis-stats">
-            <div class="fch-analysis-stat">
-              <span class="lg-section-title">{{ t('filterChain.avg_self_time') }}</span>
-              <strong :class="parseFloat(avgSelfTime) < 1 ? 'is-success' : 'is-warning'">{{ avgSelfTime }}<small>ms</small></strong>
+          <div class="vn-panel-body">
+            <div class="fch-analysis-stats">
+              <div class="fch-analysis-stat">
+                <span class="vn-kv-label">{{ t('filterChain.avg_self_time') }}</span>
+                <strong :class="parseFloat(avgSelfTime) < 1 ? 'vn-ink-ok' : 'vn-ink-warn'">{{ avgSelfTime }}<small>ms</small></strong>
+              </div>
+              <div class="fch-analysis-stat">
+                <span class="vn-kv-label">{{ t('filterChain.p95_latency') }}</span>
+                <strong :class="parseFloat(avgP95) < 5 ? 'vn-ink-ok' : 'vn-ink-warn'">{{ avgP95 }}<small>ms</small></strong>
+              </div>
+              <div class="fch-analysis-stat">
+                <span class="vn-kv-label">{{ t('filterChain.p99_latency') }}</span>
+                <strong :class="parseFloat(avgP99) < 10 ? 'vn-ink-ok' : 'vn-ink-warn'">{{ avgP99 }}<small>ms</small></strong>
+              </div>
             </div>
-            <div class="fch-analysis-stat">
-              <span class="lg-section-title">{{ t('filterChain.p95_latency') }}</span>
-              <strong :class="parseFloat(avgP95) < 5 ? 'is-success' : 'is-warning'">{{ avgP95 }}<small>ms</small></strong>
-            </div>
-            <div class="fch-analysis-stat">
-              <span class="lg-section-title">{{ t('filterChain.p99_latency') }}</span>
-              <strong :class="parseFloat(avgP99) < 10 ? 'is-success' : 'is-warning'">{{ avgP99 }}<small>ms</small></strong>
-            </div>
+            <p class="fch-analysis-note">{{ t('filterChain.self_time_desc') }}</p>
           </div>
-          <p class="fch-analysis-note">{{ t('filterChain.self_time_desc') }}</p>
         </section>
 
-        <section class="lg-panel fch-analysis-panel">
-          <div class="fch-panel-head">
+        <section class="vn-panel fch-analysis-panel">
+          <div class="vn-panel-head">
             <span class="fch-panel-title"><ClockCircleOutlined /> {{ t('filterChain.slowest_filters') }}</span>
           </div>
-          <div v-if="slowestFilters.length" class="fch-slowest-list">
-            <div v-for="(filter, index) in slowestFilters" :key="`${filter.filterName}-${index}`" class="fch-slowest-row">
-              <span class="fch-slowest-name">
-                <span :class="['fch-rank-pill', index === 0 ? 'is-error' : index < 3 ? 'is-warning' : 'is-info']">#{{ index + 1 }}</span>
-                <span class="fch-mono">{{ filter.filterName }}</span>
-              </span>
-              <span class="fch-slowest-meta">
-                <span :class="['fch-slowest-value', index === 0 ? 'is-error' : 'is-warning']">{{ filter.avgSelfTimeMsRaw.toFixed(3) }}ms</span>
-                <a-tooltip :title="`P95: ${(filter.selfP95Micros / 1000).toFixed(2)}ms | P99: ${(filter.selfP99Micros / 1000).toFixed(2)}ms`">
-                  <ClockCircleOutlined class="fch-slowest-clock" />
-                </a-tooltip>
-              </span>
+          <div class="vn-panel-body">
+            <div v-if="slowestFilters.length" class="fch-slowest-list">
+              <div v-for="(filter, index) in slowestFilters" :key="`${filter.filterName}-${index}`" class="fch-slowest-row">
+                <span class="fch-slowest-name">
+                  <span :class="['fch-rank-pill', index === 0 ? 'is-error' : index < 3 ? 'is-warning' : 'is-info']">#{{ index + 1 }}</span>
+                  <span class="vn-mono">{{ filter.filterName }}</span>
+                </span>
+                <span class="fch-slowest-meta">
+                  <span :class="['fch-slowest-value', index === 0 ? 'vn-ink-err' : 'vn-ink-warn']">{{ filter.avgSelfTimeMsRaw.toFixed(3) }}ms</span>
+                  <a-tooltip :title="`P95: ${(filter.selfP95Micros / 1000).toFixed(2)}ms | P99: ${(filter.selfP99Micros / 1000).toFixed(2)}ms`" overlay-class-name="vn-tooltip">
+                    <ClockCircleOutlined class="fch-slowest-clock" />
+                  </a-tooltip>
+                </span>
+              </div>
             </div>
-          </div>
-          <div v-else class="fch-empty-inline">
-            <span class="icon-tile icon-tile--muted"><FilterOutlined /></span>
-            <span>{{ t('filterChain.no_data') }}</span>
+            <div v-else class="fch-empty-inline">
+              <span class="vn-state-glyph" aria-hidden="true"><FilterOutlined /></span>
+              <span>{{ t('filterChain.no_data') }}</span>
+            </div>
           </div>
         </section>
       </div>
 
-      <section class="lg-panel fch-table-panel">
-        <div class="fch-panel-head">
+      <section class="vn-panel fch-table-panel">
+        <div class="vn-panel-head">
           <span class="fch-panel-title"><FilterOutlined /> {{ t('filterChain.filter_stats') }}</span>
           <a-button size="small" danger @click="handleClearStats">
             <template #icon><ClearOutlined /></template>
@@ -533,29 +511,29 @@ const refreshIntervalOptions = computed(() => [
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'filterName'">
-              <span class="fch-mono-pill">{{ record.filterName }}</span>
+              <span class="vn-chip fch-mono-pill">{{ record.filterName }}</span>
             </template>
             <template v-else-if="column.key === 'order'">
-              <span :class="['status-badge', record.order < 0 ? 'status-badge-info' : 'status-badge-success']">{{ record.order }}</span>
+              <VnBadge :tone="record.order < 0 ? 'info' : 'ok'">{{ record.order }}</VnBadge>
             </template>
             <template v-else-if="column.key === 'totalCount'">
               <span class="fch-num">{{ record.totalCount.toLocaleString() }}</span>
             </template>
             <template v-else-if="column.key === 'successRate'">
-              <span :class="['status-badge', `status-badge-${rateTone(record.successRate)}`]">{{ record.successRate }}</span>
+              <VnBadge :tone="rateTone(record.successRate)">{{ record.successRate }}</VnBadge>
             </template>
             <template v-else-if="column.key === 'avgDurationMicros'">
               <span class="fch-num">{{ formatMicros(record.avgDurationMicrosRaw) }}</span>
             </template>
             <template v-else-if="column.key === 'avgSelfTimeMs'">
-              <span :class="['status-badge', `status-badge-${selfTimeTone(record.avgSelfTimeMsRaw)}`]">{{ record.avgSelfTimeMsRaw.toFixed(3) }}ms</span>
+              <VnBadge :tone="selfTimeTone(record.avgSelfTimeMsRaw)">{{ record.avgSelfTimeMsRaw.toFixed(3) }}ms</VnBadge>
             </template>
             <template v-else-if="column.key === 'selfP95Ms'">
-              <span :class="['status-badge', `status-badge-${p95Tone(record.selfP95Micros / 1000)}`]">{{ (record.selfP95Micros / 1000).toFixed(2) }}ms</span>
+              <VnBadge :tone="p95Tone(record.selfP95Micros / 1000)">{{ (record.selfP95Micros / 1000).toFixed(2) }}ms</VnBadge>
             </template>
             <template v-else-if="column.key === 'selfP99Ms'">
-              <a-tooltip :title="t('filterChain.p99_tooltip')">
-                <span :class="['status-badge', `status-badge-${p99Tone(record.selfP99Micros / 1000)}`]">{{ (record.selfP99Micros / 1000).toFixed(2) }}ms</span>
+              <a-tooltip :title="t('filterChain.p99_tooltip')" overlay-class-name="vn-tooltip">
+                <VnBadge :tone="p99Tone(record.selfP99Micros / 1000)">{{ (record.selfP99Micros / 1000).toFixed(2) }}ms</VnBadge>
               </a-tooltip>
             </template>
             <template v-else-if="column.key === 'minSelfTimeMicros'">
@@ -566,12 +544,12 @@ const refreshIntervalOptions = computed(() => [
             </template>
           </template>
           <template #emptyText>
-            <div v-if="!loading" :class="['fch-empty', loadError ? 'is-error' : '']">
-              <span :class="['icon-tile', loadError ? 'fch-empty-error-icon' : 'icon-tile--muted']">
+            <div v-if="!loading" class="fch-empty">
+              <span :class="['vn-state-glyph', loadError && 'is-err']" aria-hidden="true">
                 <ExclamationCircleOutlined v-if="loadError" />
                 <FilterOutlined v-else />
               </span>
-              <p class="fch-empty-title">{{ loadError || t('filterChain.no_data') }}</p>
+              <p class="vn-state-title">{{ loadError || t('filterChain.no_data') }}</p>
               <a-button v-if="loadError" type="primary" @click="loadData">
                 <template #icon><ReloadOutlined /></template>
                 {{ t('common.refresh') }}
@@ -581,8 +559,8 @@ const refreshIntervalOptions = computed(() => [
         </a-table>
       </section>
 
-      <section class="lg-panel fch-table-panel">
-        <div class="fch-panel-head">
+      <section class="vn-panel fch-table-panel">
+        <div class="vn-panel-head">
           <span class="fch-panel-title"><ClockCircleOutlined /> {{ t('filterChain.recent_records') }}</span>
         </div>
         <a-table
@@ -596,25 +574,23 @@ const refreshIntervalOptions = computed(() => [
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'traceId'">
-              <a-tooltip :title="record.traceId">
-                <a-typography-text :copyable="{ text: record.traceId, tooltips: false }" class="fch-mono">
-                  {{ record.traceId.slice(0, 16) }}…
-                </a-typography-text>
+              <a-tooltip :title="record.traceId" overlay-class-name="vn-tooltip">
+                <span class="vn-mono">{{ record.traceId.slice(0, 16) }}…</span>
               </a-tooltip>
             </template>
             <template v-else-if="column.key === 'totalDurationMs'">
-              <span :class="['status-badge', record.totalDurationMs > 1000 ? 'status-badge-warning' : 'status-badge-success']">{{ record.totalDurationMs }}ms</span>
+              <VnBadge :tone="record.totalDurationMs > 1000 ? 'warn' : 'ok'">{{ record.totalDurationMs }}ms</VnBadge>
             </template>
             <template v-else-if="column.key === 'filterCount'">
               {{ t('filterChain.filters_count', { count: record.filterCount }) }}
             </template>
             <template v-else-if="column.key === 'status'">
               <span class="fch-status-group">
-                <a-tooltip :title="t('filterChain.success_count', { count: record.successCount })">
-                  <span class="status-badge status-badge-success"><CheckCircleOutlined /> {{ record.successCount }}</span>
+                <a-tooltip :title="t('filterChain.success_count', { count: record.successCount })" overlay-class-name="vn-tooltip">
+                  <VnBadge tone="ok">{{ record.successCount }}</VnBadge>
                 </a-tooltip>
-                <a-tooltip v-if="record.failureCount > 0" :title="t('filterChain.failed_count', { count: record.failureCount })">
-                  <span class="status-badge status-badge-error"><CloseCircleOutlined /> {{ record.failureCount }}</span>
+                <a-tooltip v-if="record.failureCount > 0" :title="t('filterChain.failed_count', { count: record.failureCount })" overlay-class-name="vn-tooltip">
+                  <VnBadge tone="err">{{ record.failureCount }}</VnBadge>
                 </a-tooltip>
               </span>
             </template>
@@ -622,17 +598,16 @@ const refreshIntervalOptions = computed(() => [
               <span class="fch-time">{{ formatRecordTime(record.createdAt) }}</span>
             </template>
             <template v-else-if="column.key === 'actions'">
-              <a-tooltip :title="t('common.detail')">
-                <a-button type="text" class="action-btn fch-row-action" @click="openDetail(record)">
-                  <template #icon><EyeOutlined /></template>
-                </a-button>
-              </a-tooltip>
+              <div class="vn-iconbtn-group">
+                <VnIconButton :icon="EyeOutlined" :label="t('common.detail')" @click="openDetail(record)" />
+                <VnIconButton :icon="CopyOutlined" :label="t('common.copy_id')" inline @click="copyValue(record.traceId)" />
+              </div>
             </template>
           </template>
           <template #emptyText>
             <div v-if="!loading" class="fch-empty">
-              <span class="icon-tile icon-tile--muted"><ClockCircleOutlined /></span>
-              <p class="fch-empty-title">{{ t('filterChain.no_data') }}</p>
+              <span class="vn-state-glyph" aria-hidden="true"><ClockCircleOutlined /></span>
+              <p class="vn-state-title">{{ t('filterChain.no_data') }}</p>
             </div>
           </template>
         </a-table>
@@ -642,108 +617,116 @@ const refreshIntervalOptions = computed(() => [
     <div class="fch-shortcuts">
       <ThunderboltOutlined />
       <span class="fch-shortcuts-label">{{ t('filterChain.shortcuts_label') }}</span>
-      <span class="lg-chip">{{ t('filterChain.shortcut_refresh_tag') }}</span>
-      <a-tooltip :title="t('filterChain.shortcut_e_blocked')">
-        <span class="lg-chip is-warning">{{ t('filterChain.shortcut_export_tag') }}</span>
+      <span class="vn-chip">{{ t('filterChain.shortcut_refresh_tag') }}</span>
+      <a-tooltip :title="t('filterChain.shortcut_e_blocked')" overlay-class-name="vn-tooltip">
+        <span class="vn-chip fch-chip-warning">{{ t('filterChain.shortcut_export_tag') }}</span>
       </a-tooltip>
-      <span class="lg-chip">{{ t('filterChain.shortcut_auto_tag') }}</span>
+      <span class="vn-chip">{{ t('filterChain.shortcut_auto_tag') }}</span>
     </div>
 
     <a-drawer
       :open="detailOpen"
       placement="right"
       :width="920"
-      root-class-name="fch-drawer"
+      :closable="false"
+      root-class-name="vn-portal vn-drawer"
       destroy-on-close
       @close="detailOpen = false"
     >
-      <template #title>
-        <span class="fch-drawer-title">
-          <FilterOutlined /> {{ t('filterChain.trace_detail') }}
-          <span v-if="selectedRecord" class="fch-mono fch-drawer-trace">{{ selectedRecord.traceId }}</span>
-        </span>
-      </template>
-
-      <template v-if="selectedRecord">
-        <div class="fch-summary">
-          <div class="fch-stat">
-            <span class="lg-section-title">{{ t('filterChain.duration') }}</span>
-            <span class="fch-stat-value">{{ selectedRecord.totalDurationMs }}<small>ms</small></span>
+      <div v-if="selectedRecord" class="vn-detail">
+        <div class="vn-detail-head">
+          <div class="vn-detail-head-left">
+            <span class="vn-detail-glyph" aria-hidden="true"><FilterOutlined /></span>
+            <div style="min-width: 0">
+              <h4 class="vn-detail-title">{{ t('filterChain.trace_detail') }}</h4>
+              <div class="vn-detail-idrow">
+                <span class="vn-mono vn-detail-id">{{ selectedRecord.traceId }}</span>
+                <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(selectedRecord.traceId)" />
+              </div>
+            </div>
           </div>
-          <div class="fch-stat">
-            <span class="lg-section-title">{{ t('filterChain.filters') }}</span>
-            <span class="fch-stat-value">{{ selectedRecord.filterCount }}</span>
-          </div>
-          <div class="fch-stat">
-            <span class="lg-section-title">{{ t('filterChain.success') }}</span>
-            <span class="fch-stat-value is-success">{{ selectedRecord.successCount }}</span>
-          </div>
-          <div class="fch-stat">
-            <span class="lg-section-title">{{ t('filterChain.failures') }}</span>
-            <span :class="['fch-stat-value', selectedRecord.failureCount > 0 ? 'is-error' : 'is-success']">{{ selectedRecord.failureCount }}</span>
-          </div>
+          <VnIconButton :icon="CloseCircleOutlined" :label="t('common.close')" @click="detailOpen = false" />
         </div>
 
-        <div class="fch-subpanel">
-          <div class="fch-subpanel-head">
-            <span class="fch-subpanel-title">{{ t('filterChain.waterfall_chart') }}</span>
-            <a-button size="small" type="primary" @click="exportChartPng">
-              <template #icon><PictureOutlined /></template>
-              {{ t('filterChain.export_png') }}
-            </a-button>
+        <div class="vn-detail-scroll">
+          <div class="fch-summary">
+            <div class="fch-stat">
+              <span class="vn-kv-label">{{ t('filterChain.duration') }}</span>
+              <span class="fch-stat-value">{{ selectedRecord.totalDurationMs }}<small>ms</small></span>
+            </div>
+            <div class="fch-stat">
+              <span class="vn-kv-label">{{ t('filterChain.filters') }}</span>
+              <span class="fch-stat-value">{{ selectedRecord.filterCount }}</span>
+            </div>
+            <div class="fch-stat">
+              <span class="vn-kv-label">{{ t('filterChain.success') }}</span>
+              <span class="fch-stat-value vn-ink-ok">{{ selectedRecord.successCount }}</span>
+            </div>
+            <div class="fch-stat">
+              <span class="vn-kv-label">{{ t('filterChain.failures') }}</span>
+              <span :class="['fch-stat-value', selectedRecord.failureCount > 0 ? 'vn-ink-err' : 'vn-ink-ok']">{{ selectedRecord.failureCount }}</span>
+            </div>
           </div>
-          <WaterfallChart
-            ref="waterfallRef"
-            :executions="selectedRecord.executions || []"
-            :total-duration-ms="selectedRecord.totalDurationMs"
-            :slow-threshold-ms="thresholds.selfTime"
-          />
-        </div>
 
-        <div class="fch-subpanel">
-          <div class="fch-subpanel-head">
-            <span class="fch-subpanel-title">{{ t('filterChain.filter_stats') }}</span>
+          <div class="vn-detail-section">
+            <div class="vn-detail-section-head">
+              <span>{{ t('filterChain.waterfall_chart') }}</span>
+              <a-button size="small" type="primary" class="fch-export-png" @click="exportChartPng">
+                <template #icon><PictureOutlined /></template>
+                {{ t('filterChain.export_png') }}
+              </a-button>
+            </div>
+            <WaterfallChart
+              ref="waterfallRef"
+              :executions="selectedRecord.executions || []"
+              :total-duration-ms="selectedRecord.totalDurationMs"
+              :slow-threshold-ms="thresholds.selfTime"
+            />
           </div>
-          <a-table
-            :columns="executionColumns"
-            :data-source="selectedRecord.executions || []"
-            :pagination="false"
-            row-key="filter"
-            size="small"
-            :scroll="{ x: 860 }"
-            class="fch-table"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'filter'">
-                <span class="fch-mono-pill">{{ record.filter }}</span>
+
+          <div class="vn-detail-section">
+            <div class="vn-detail-section-head">{{ t('filterChain.filter_stats') }}</div>
+            <a-table
+              :columns="executionColumns"
+              :data-source="selectedRecord.executions || []"
+              :pagination="false"
+              row-key="filter"
+              size="small"
+              :scroll="{ x: 860 }"
+              class="fch-table"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'filter'">
+                  <span class="vn-chip fch-mono-pill">{{ record.filter }}</span>
+                </template>
+                <template v-else-if="column.key === 'order'">
+                  <VnBadge tone="idle">{{ record.order }}</VnBadge>
+                </template>
+                <template v-else-if="column.key === 'selfTimeMs'">
+                  <VnBadge v-if="record.selfTimeMs == null && record.selfTimeMicros == null" tone="idle">N/A</VnBadge>
+                  <VnBadge v-else :tone="executionTone(record)">{{ formatSelfTime(record) }}</VnBadge>
+                </template>
+                <template v-else-if="column.key === 'downstreamMs'">
+                  <span class="fch-muted">{{ record.downstreamMs != null ? `${record.downstreamMs.toFixed(2)}ms` : 'N/A' }}</span>
+                </template>
+                <template v-else-if="column.key === 'duration'">
+                  <a-tooltip :title="t('filterChain.duration_breakdown', { self: formatSelfTime(record), downstream: (record.downstreamMs ?? 0).toFixed(2) })" overlay-class-name="vn-tooltip">
+                    <span class="fch-num">{{ (record.totalDurationMs ?? 0).toFixed(2) }}ms</span>
+                  </a-tooltip>
+                </template>
+                <template v-else-if="column.key === 'success'">
+                  <CheckCircleOutlined v-if="record.success" class="fch-status-icon vn-ink-ok" />
+                  <CloseCircleOutlined v-else class="fch-status-icon vn-ink-err" />
+                </template>
+                <template v-else-if="column.key === 'error'">
+                  <span v-if="record.error" class="fch-error-text">{{ record.error }}</span>
+                  <span v-else class="fch-muted">-</span>
+                </template>
               </template>
-              <template v-else-if="column.key === 'order'">
-                <span class="status-badge status-badge-neutral">{{ record.order }}</span>
-              </template>
-              <template v-else-if="column.key === 'selfTimeMs'">
-                <span v-if="record.selfTimeMs == null && record.selfTimeMicros == null" class="status-badge status-badge-neutral">N/A</span>
-                <span v-else :class="['status-badge', `status-badge-${executionTone(record)}`]">{{ formatSelfTime(record) }}</span>
-              </template>
-              <template v-else-if="column.key === 'downstreamMs'">
-                <span class="fch-muted">{{ record.downstreamMs != null ? `${record.downstreamMs.toFixed(2)}ms` : 'N/A' }}</span>
-              </template>
-              <template v-else-if="column.key === 'duration'">
-                <a-tooltip :title="t('filterChain.duration_breakdown', { self: formatSelfTime(record), downstream: (record.downstreamMs ?? 0).toFixed(2) })">
-                  <span class="fch-num">{{ (record.totalDurationMs ?? 0).toFixed(2) }}ms</span>
-                </a-tooltip>
-              </template>
-              <template v-else-if="column.key === 'success'">
-                <CheckCircleOutlined v-if="record.success" class="fch-status-icon is-success" />
-                <CloseCircleOutlined v-else class="fch-status-icon is-error" />
-              </template>
-              <template v-else-if="column.key === 'error'">
-                <span v-if="record.error" class="fch-error-text">{{ record.error }}</span>
-                <span v-else class="fch-muted">-</span>
-              </template>
-            </template>
-          </a-table>
+            </a-table>
+          </div>
         </div>
-      </template>
+      </div>
     </a-drawer>
 
     <a-modal
@@ -751,34 +734,37 @@ const refreshIntervalOptions = computed(() => [
       :title="t('filterChain.performance_threshold_config')"
       :ok-text="t('common.save')"
       :cancel-text="t('common.cancel')"
-      wrap-class-name="fch-modal"
+      :width="600"
+      wrap-class-name="vn-portal vn-modal"
       @ok="saveThresholds"
     >
-      <a-form layout="vertical" class="fch-threshold-form">
-        <a-form-item :label="t('filterChain.self_time_threshold')">
-          <div class="fch-threshold-row">
-            <a-input-number :value="thresholds.selfTime" :min="1" :max="100" :step="1" @change="(v: unknown) => (thresholds.selfTime = Number(v) || 10)" />
-            <span class="fch-threshold-hint">{{ t('filterChain.threshold_exceed_alert') }}</span>
-          </div>
-        </a-form-item>
-        <a-form-item :label="t('filterChain.p95_threshold')">
-          <div class="fch-threshold-row">
-            <a-input-number :value="thresholds.p95" :min="5" :max="200" :step="5" @change="(v: unknown) => (thresholds.p95 = Number(v) || 20)" />
-            <span class="fch-threshold-hint">{{ t('filterChain.p95_threshold_hint') }}</span>
-          </div>
-        </a-form-item>
-        <a-form-item :label="t('filterChain.p99_threshold')">
-          <div class="fch-threshold-row">
-            <a-input-number :value="thresholds.p99" :min="10" :max="500" :step="10" @change="(v: unknown) => (thresholds.p99 = Number(v) || 50)" />
-            <span class="fch-threshold-hint">{{ t('filterChain.p99_tooltip') }}</span>
-          </div>
-        </a-form-item>
-        <a-form-item :label="t('filterChain.success_rate_threshold')">
-          <div class="fch-threshold-row">
-            <a-input-number :value="thresholds.successRate" :min="80" :max="100" :step="1" @change="(v: unknown) => (thresholds.successRate = Number(v) || 95)" />
-            <span class="fch-threshold-hint">{{ t('filterChain.threshold_below_alert') }}</span>
-          </div>
-        </a-form-item>
+      <a-form layout="vertical" class="fch-threshold-form vn-form">
+        <div class="vn-modal-scroll">
+          <a-form-item :label="t('filterChain.self_time_threshold')">
+            <div class="fch-threshold-row">
+              <a-input-number :value="thresholds.selfTime" :min="1" :max="100" :step="1" @change="(v: unknown) => (thresholds.selfTime = Number(v) || 10)" />
+              <span class="fch-threshold-hint">{{ t('filterChain.threshold_exceed_alert') }}</span>
+            </div>
+          </a-form-item>
+          <a-form-item :label="t('filterChain.p95_threshold')">
+            <div class="fch-threshold-row">
+              <a-input-number :value="thresholds.p95" :min="5" :max="200" :step="5" @change="(v: unknown) => (thresholds.p95 = Number(v) || 20)" />
+              <span class="fch-threshold-hint">{{ t('filterChain.p95_threshold_hint') }}</span>
+            </div>
+          </a-form-item>
+          <a-form-item :label="t('filterChain.p99_threshold')">
+            <div class="fch-threshold-row">
+              <a-input-number :value="thresholds.p99" :min="10" :max="500" :step="10" @change="(v: unknown) => (thresholds.p99 = Number(v) || 50)" />
+              <span class="fch-threshold-hint">{{ t('filterChain.p99_tooltip') }}</span>
+            </div>
+          </a-form-item>
+          <a-form-item :label="t('filterChain.success_rate_threshold')">
+            <div class="fch-threshold-row">
+              <a-input-number :value="thresholds.successRate" :min="80" :max="100" :step="1" @change="(v: unknown) => (thresholds.successRate = Number(v) || 95)" />
+              <span class="fch-threshold-hint">{{ t('filterChain.threshold_below_alert') }}</span>
+            </div>
+          </a-form-item>
+        </div>
       </a-form>
     </a-modal>
 
@@ -786,26 +772,29 @@ const refreshIntervalOptions = computed(() => [
       v-model:open="exportOpen"
       :title="t('filterChain.export_data')"
       :footer="null"
-      wrap-class-name="fch-modal"
+      :width="600"
+      wrap-class-name="vn-portal vn-modal"
     >
-      <div class="fch-export-options">
-        <a-button block @click="exportJson">
-          <template #icon><DownloadOutlined /></template>
-          {{ t('filterChain.export_json_full') }}
-        </a-button>
-        <a-button block @click="exportCsv">
-          <template #icon><DownloadOutlined /></template>
-          {{ t('filterChain.export_csv_table') }}
-        </a-button>
-        <a-button block @click="exportChartPng">
-          <template #icon><PictureOutlined /></template>
-          {{ t('filterChain.export_waterfall_png') }}
-        </a-button>
-        <a-divider class="fch-export-divider" />
-        <p class="fch-export-note">
-          {{ t('filterChain.export_note_json_csv') }}<br />
-          {{ t('filterChain.export_note_png') }}
-        </p>
+      <div class="vn-modal-scroll">
+        <div class="fch-export-options">
+          <a-button block @click="exportJson">
+            <template #icon><DownloadOutlined /></template>
+            {{ t('filterChain.export_json_full') }}
+          </a-button>
+          <a-button block @click="exportCsv">
+            <template #icon><DownloadOutlined /></template>
+            {{ t('filterChain.export_csv_table') }}
+          </a-button>
+          <a-button block @click="exportChartPng">
+            <template #icon><PictureOutlined /></template>
+            {{ t('filterChain.export_waterfall_png') }}
+          </a-button>
+          <a-divider class="fch-export-divider" />
+          <p class="fch-export-note">
+            {{ t('filterChain.export_note_json_csv') }}<br />
+            {{ t('filterChain.export_note_png') }}
+          </p>
+        </div>
       </div>
     </a-modal>
   </div>

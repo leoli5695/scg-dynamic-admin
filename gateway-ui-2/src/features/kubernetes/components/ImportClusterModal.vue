@@ -29,7 +29,6 @@ const form = reactive({ clusterName: '', description: '', kubeconfig: '' })
 const testing = ref(false)
 const importing = ref(false)
 const testResult = ref<ConnectionTestResult | null>(null)
-const getModalContainer = () => document.body
 const isOpen = computed(() => props.open !== false)
 watch(isOpen, (open) => {
   if (!open) return
@@ -103,107 +102,97 @@ function handleCancel() {
   <a-modal
     :open="isOpen"
     :width="700"
+    :footer="null"
     :mask-closable="true"
-    :get-container="getModalContainer"
-    wrap-class-name="k8s-import-modal"
+    wrap-class-name="vn-portal vnp-portal vnp-modal"
     @cancel="handleCancel"
   >
     <template #title>
-      <div class="k8s-modal-head">
-        <span class="k8s-modal-glyph" aria-hidden="true"><ClusterOutlined /></span>
-        <div class="k8s-modal-heading">
-          <span class="k8s-modal-title">{{ t('k8s.import_title') }}</span>
-          <span class="k8s-modal-subtitle">{{ t('k8s.import_subtitle') }}</span>
+      <div class="vnp-modal-head">
+        <span class="vnp-modal-head-glyph" aria-hidden="true"><ClusterOutlined /></span>
+        <div>
+          <div class="vnp-modal-title">{{ t('k8s.import_title') }}</div>
+          <div class="vnp-modal-subtitle">{{ t('k8s.import_subtitle') }}</div>
         </div>
       </div>
     </template>
 
-    <a-alert type="info" show-icon :message="t('k8s.import_info')" class="k8s-modal-alert" />
+    <a-form ref="formRef" :model="form" :rules="rules" layout="vertical" class="vnp-form">
+      <div class="vnp-modal-scroll">
+        <a-alert type="info" show-icon :message="t('k8s.import_info')" />
 
-    <a-form ref="formRef" :model="form" :rules="rules" layout="vertical" class="k8s-form">
-      <section class="k8s-form-section">
-        <div class="k8s-section-head">
-          <ClusterOutlined class="k8s-section-glyph" />
-          <span class="k8s-section-title">{{ t('k8s.basic_info') }}</span>
-        </div>
-        <a-form-item name="clusterName" :label="t('k8s.cluster_name')">
-          <a-input
-            v-model:value="form.clusterName"
-            :placeholder="t('k8s.cluster_name_placeholder')"
-          />
-        </a-form-item>
-        <a-form-item name="description" :label="t('common.description')" class="k8s-form-item-last">
-          <a-input
-            v-model:value="form.description"
-            :placeholder="t('k8s.description_placeholder')"
-          />
-        </a-form-item>
-      </section>
+        <section class="vnp-form-section">
+          <div class="vnp-form-section-head">
+            <ClusterOutlined />
+            <span class="vnp-form-section-title">{{ t('k8s.basic_info') }}</span>
+          </div>
+          <a-form-item name="clusterName" :label="t('k8s.cluster_name')">
+            <a-input v-model:value="form.clusterName" :placeholder="t('k8s.cluster_name_placeholder')" />
+          </a-form-item>
+          <a-form-item name="description" :label="t('common.description')">
+            <a-input v-model:value="form.description" :placeholder="t('k8s.description_placeholder')" />
+          </a-form-item>
+        </section>
 
-      <section class="k8s-form-section">
-        <div class="k8s-section-head">
-          <ApiOutlined class="k8s-section-glyph" />
-          <span class="k8s-section-title">{{ t('k8s.kubeconfig') }}</span>
-          <a-button
-            type="link"
-            size="small"
-            class="k8s-section-action"
-            :loading="testing"
-            @click="handleTestConnection"
-          >
-            <template #icon><ApiOutlined /></template>
-            {{ t('k8s.test_connection') }}
-          </a-button>
-        </div>
-        <a-form-item name="kubeconfig" class="k8s-form-item-last">
-          <a-textarea
-            v-model:value="form.kubeconfig"
-            :rows="8"
-            class="k8s-kubeconfig-input"
-            :placeholder="t('k8s.kubeconfig_placeholder')"
-            @input="testResult = null"
-          />
-        </a-form-item>
-      </section>
+        <section class="vnp-form-section">
+          <div class="vnp-form-section-head">
+            <ApiOutlined />
+            <span class="vnp-form-section-title">{{ t('k8s.kubeconfig') }}</span>
+            <a-button
+              type="link"
+              size="small"
+              class="vnp-form-section-action"
+              :loading="testing"
+              @click="handleTestConnection"
+            >
+              <template #icon><ApiOutlined /></template>{{ t('k8s.test_connection') }}
+            </a-button>
+          </div>
+          <a-form-item name="kubeconfig">
+            <a-textarea
+              v-model:value="form.kubeconfig"
+              :rows="8"
+              class="vn-mono"
+              :placeholder="t('k8s.kubeconfig_placeholder')"
+              @input="testResult = null"
+            />
+          </a-form-item>
+        </section>
 
-      <a-alert
-        v-if="testResult"
-        :type="testResult.success ? 'success' : 'error'"
-        show-icon
-        :message="testResult.success ? t('k8s.test_success') : t('k8s.test_failed')"
-        class="k8s-modal-alert k8s-modal-alert-last"
-      >
-        <template #description>
-          <template v-if="testResult.success">
-            <p class="k8s-test-line"><strong>{{ t('k8s.server_url') }}:</strong> {{ testResult.serverUrl }}</p>
-            <p class="k8s-test-line"><strong>{{ t('k8s.context') }}:</strong> {{ testResult.contextName }}</p>
-            <p v-if="testResult.clusterVersion" class="k8s-test-line">
-              <strong>{{ t('k8s.cluster_version') }}:</strong> {{ testResult.clusterVersion }}
-            </p>
-            <p v-if="testResult.nodeCount !== undefined" class="k8s-test-line">
-              <strong>{{ t('k8s.nodes') }}:</strong> {{ testResult.nodeCount }}
-            </p>
-            <p v-if="testResult.namespaceCount !== undefined" class="k8s-test-line">
-              <strong>{{ t('k8s.namespace') }}:</strong> {{ testResult.namespaceCount }}
-            </p>
+        <a-alert
+          v-if="testResult"
+          :type="testResult.success ? 'success' : 'error'"
+          show-icon
+          :message="testResult.success ? t('k8s.test_success') : t('k8s.test_failed')"
+        >
+          <template #description>
+            <template v-if="testResult.success">
+              <p class="vn-k8s-test-line"><strong>{{ t('k8s.server_url') }}:</strong> {{ testResult.serverUrl }}</p>
+              <p class="vn-k8s-test-line"><strong>{{ t('k8s.context') }}:</strong> {{ testResult.contextName }}</p>
+              <p v-if="testResult.clusterVersion" class="vn-k8s-test-line">
+                <strong>{{ t('k8s.cluster_version') }}:</strong> {{ testResult.clusterVersion }}
+              </p>
+              <p v-if="testResult.nodeCount !== undefined" class="vn-k8s-test-line">
+                <strong>{{ t('k8s.nodes') }}:</strong> {{ testResult.nodeCount }}
+              </p>
+              <p v-if="testResult.namespaceCount !== undefined" class="vn-k8s-test-line">
+                <strong>{{ t('k8s.namespace') }}:</strong> {{ testResult.namespaceCount }}
+              </p>
+            </template>
+            <template v-else>
+              <p v-if="testResult.serverUrl" class="vn-k8s-test-line">
+                <strong>{{ t('k8s.server_url') }}:</strong> {{ testResult.serverUrl }}
+              </p>
+              <p class="vn-k8s-test-line vn-ink-err">{{ testResult.error }}</p>
+            </template>
           </template>
-          <template v-else>
-            <p v-if="testResult.serverUrl" class="k8s-test-line">
-              <strong>{{ t('k8s.server_url') }}:</strong> {{ testResult.serverUrl }}
-            </p>
-            <p class="k8s-test-line k8s-test-error">{{ testResult.error }}</p>
-          </template>
-        </template>
-      </a-alert>
-    </a-form>
+        </a-alert>
+      </div>
 
-    <template #footer>
-      <div class="k8s-modal-foot-actions">
+      <div class="vnp-modal-foot">
         <a-button @click="handleCancel">{{ t('common.cancel') }}</a-button>
-        <a-button type="primary" :loading="importing" @click="handleImport">
-          {{ t('common.confirm') }}
-        </a-button>
+        <a-button type="primary" :loading="importing" @click="handleImport">{{ t('common.confirm') }}</a-button>
       </div>
-    </template>
+    </a-form>
   </a-modal>
 </template>

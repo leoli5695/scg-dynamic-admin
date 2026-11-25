@@ -1,0 +1,307 @@
+/**
+ * Plugin bindings page composition on the Vue-native layer.
+ * Layout only — surfaces, ink, radii and control chrome come from
+ * styles/vue-native.css; shared catalog/portal patterns from
+ * styles/vue-native-shared.css. Nothing leaks outside `.vn-scope` / `.vn-portal`.
+ */
+
+.vn-bindings {
+  padding: 0;
+  min-height: 100%;
+}
+
+.vn-bindings .bindings-partial-alert.ant-alert {
+  margin-bottom: 12px;
+}
+
+/* ==================== Table cells ==================== */
+.vn-bindings .vn-plugin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+
+.vn-bindings .vn-plugin-chip .anticon {
+  font-size: var(--vn-glyph-sm);
+  flex: none;
+}
+
+.vn-bindings .vn-plugin-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vn-ink);
+}
+
+/* Plugin category tones snapped onto the vn semantic palette. */
+.vn-bindings .vn-pstone-success,
+.vn-portal .vn-pstone-success { color: var(--vn-ok); }
+.vn-bindings .vn-pstone-warning,
+.vn-portal .vn-pstone-warning { color: var(--vn-warn); }
+.vn-bindings .vn-pstone-error,
+.vn-portal .vn-pstone-error { color: var(--vn-err); }
+.vn-bindings .vn-pstone-info,
+.vn-portal .vn-pstone-info { color: var(--vn-info); }
+.vn-bindings .vn-pstone-primary,
+.vn-portal .vn-pstone-primary { color: var(--vn-info); }
+.vn-bindings .vn-pstone-accent,
+.vn-portal .vn-pstone-accent { color: var(--vn-info); }
+.vn-bindings .vn-pstone-neutral,
+.vn-portal .vn-pstone-neutral { color: var(--vn-ink-3); }
+
+.vn-bindings .vn-binding-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 180px;
+  color: var(--vn-ink-2);
+}
+
+.vn-bindings .vn-binding-scope .anticon {
+  font-size: var(--vn-glyph-sm);
+  color: var(--vn-ink-3);
+  flex: none;
+}
+
+.vn-bindings .vn-binding-scope-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-bindings .vn-binding-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vn-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.vn-bindings .vn-binding-order .anticon {
+  font-size: var(--vn-glyph-sm);
+  color: var(--vn-ink-3);
+}
+
+.vn-bindings .vn-config-summary {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--vn-mono);
+  font-size: 11px;
+  color: var(--vn-ink-2);
+}
+
+.vn-bindings .vn-config-empty {
+  color: var(--vn-ink-3);
+  font-size: 11.5px;
+}
+
+.vn-bindings .vn-binding-time {
+  color: var(--vn-ink-3);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vn-bindings .vn-sort-head {
+  cursor: pointer;
+  user-select: none;
+}
+
+.vn-bindings .vn-sort-head:hover {
+  color: var(--vn-ink-2);
+}
+
+.vn-bindings .vn-sort-arrow {
+  margin-left: 4px;
+  font-size: 10px;
+}
+
+/* ==================== Editor modal ==================== */
+.vn-portal .binding-scope-radio.ant-radio-group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+}
+
+.vn-portal .binding-scope-radio .ant-radio-button-wrapper {
+  height: 28px;
+  line-height: 26px;
+  padding-inline: 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vn-ink-2);
+  font-size: 12.5px;
+}
+
+.vn-portal .binding-scope-radio .ant-radio-button-wrapper::before {
+  display: none;
+}
+
+.vn-portal .binding-scope-radio .ant-radio-button-wrapper:hover {
+  color: var(--vn-ink);
+  background: var(--vn-surface-raised);
+}
+
+.vn-portal .binding-scope-radio .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled) {
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+  box-shadow: none;
+}
+
+.vn-portal .binding-modal-alert.ant-alert {
+  margin-bottom: 10px;
+}
+
+/* ==================== Plugin picker modal ==================== */
+.vn-portal.plugin-picker-modal .ant-modal .ant-modal-body {
+  flex-direction: column;
+}
+
+.vn-portal .binding-picker-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 18px 18px;
+  max-height: 64vh;
+  overflow-y: auto;
+}
+
+.vn-portal .binding-picker-group-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .binding-picker-group-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink-3);
+  letter-spacing: 0;
+}
+
+.vn-portal .binding-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+}
+
+.vn-portal .binding-plugin-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  text-align: left;
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-panel);
+  background: var(--vn-surface);
+  box-shadow: var(--vn-shadow-1);
+  font: inherit;
+  color: var(--vn-ink);
+  cursor: pointer;
+  transition: border-color var(--vn-fast) var(--vn-ease), background var(--vn-fast) var(--vn-ease);
+}
+
+.vn-portal .binding-plugin-card:hover:not(:disabled) {
+  border-color: var(--vn-brand-line);
+  background: var(--vn-surface-raised);
+}
+
+.vn-portal .binding-plugin-card:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.vn-portal .binding-plugin-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+  font-size: var(--vn-glyph);
+}
+
+.vn-portal .binding-plugin-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vn-portal .binding-plugin-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.vn-portal .binding-plugin-name {
+  font-size: 12.5px;
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .binding-plugin-kind {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-brand-line);
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.vn-portal .binding-plugin-desc {
+  font-size: 11px;
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .binding-plugin-arrow {
+  margin-left: auto;
+  flex: none;
+  color: var(--vn-ink-3);
+  font-size: var(--vn-glyph-sm);
+}
+
+.vn-portal .binding-plugin-card:hover:not(:disabled) .binding-plugin-arrow {
+  color: var(--vn-brand);
+}
+
+.vn-portal .binding-picker-empty {
+  padding: 32px 18px;
+}
+
+.vn-portal .binding-picker-empty-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--vn-ink-3);
+}

@@ -44,7 +44,7 @@ function go(newTab: boolean): void {
 <template>
   <div class="topology-menu-overlay" @click="emit('close')" @contextmenu.prevent="emit('close')" />
   <div
-    class="lg-panel topology-menu"
+    class="vn-panel topology-menu"
     :style="{ left: `${x}px`, top: `${y}px` }"
     role="menu"
     @click.stop

@@ -5,10 +5,13 @@
  */
 import { useI18n } from 'vue-i18n'
 import {
-  ApiOutlined, ApartmentOutlined, CloudServerOutlined, DownOutlined,
+  ApiOutlined, ApartmentOutlined, CloudServerOutlined, CopyOutlined, DownOutlined,
   ThunderboltOutlined,
 } from '@/components/icons'
 import type { FullChainDetail } from '@/api/traces'
+import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
 import { formatJson } from '../traceUtils'
 import FullChainWaterfallChart from './FullChainWaterfallChart.vue'
 
@@ -21,6 +24,12 @@ const props = defineProps<{
 const emit = defineEmits<{ (event: 'close'): void }>()
 
 const { t } = useI18n()
+
+async function copyValue(text?: string | null) {
+  if (!text) return
+  if (await copyText(text)) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
+}
 
 function chainTone(status?: string): string {
   if (status === 'OBSERVED') return 'is-info'
@@ -54,7 +63,7 @@ function formatTime(value?: string): string {
     :open="open"
     placement="right"
     :width="950"
-    root-class-name="trace-drawer"
+    root-class-name="vn-portal vnp-portal trace-drawer"
     destroy-on-close
     @close="emit('close')"
   >
@@ -71,7 +80,8 @@ function formatTime(value?: string): string {
       <div class="trace-subpanel td-summary">
         <div class="td-trace-line">
           <span class="lg-section-title">{{ t('trace.trace_id') }}</span>
-          <a-typography-text :copyable="{ text: chain.traceId }" class="trace-mono">{{ chain.traceId }}</a-typography-text>
+          <span class="trace-mono">{{ chain.traceId }}</span>
+          <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(chain.traceId)" />
           <span :class="['fd-tag', chainTone(chain.chainStatus)]">{{ chainStatusLabel(chain.chainStatus) }}</span>
         </div>
       </div>
@@ -149,10 +159,12 @@ function formatTime(value?: string): string {
             </span>
           </a-descriptions-item>
           <a-descriptions-item :label="t('trace.path')" :span="2">
-            <a-typography-text :copyable="{ text: chain.gateway.uri || '' }" class="trace-mono">{{ chain.gateway.uri }}</a-typography-text>
+            <span class="trace-mono">{{ chain.gateway.uri }}</span>
+            <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(chain.gateway.uri)" />
           </a-descriptions-item>
           <a-descriptions-item v-if="chain.gateway.queryString" :label="t('trace.query_string')" :span="2">
-            <a-typography-text :copyable="{ text: chain.gateway.queryString }" class="trace-mono">{{ chain.gateway.queryString }}</a-typography-text>
+            <span class="trace-mono">{{ chain.gateway.queryString }}</span>
+            <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(chain.gateway.queryString)" />
           </a-descriptions-item>
           <a-descriptions-item :label="t('trace.route_id')">
             <span class="trace-mono">{{ chain.gateway.routeId || '-' }}</span>

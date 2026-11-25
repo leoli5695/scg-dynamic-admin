@@ -73,5 +73,14 @@
   "auth_policy.type_desc_basic": "Basic authentication: verifies identity via HTTP Basic Authentication. Clients must send Base64-encoded credentials (Authorization: Basic xxx).",
   "auth_policy.type_desc_hmac": "HMAC authentication: verifies identity via request signing. Clients sign the request content and send the signature headers. Supports HMAC-SHA256 and HMAC-SHA512.",
   "auth_policy.load_failed": "Failed to load auth policies",
-  "auth_policy.binding_toggle_failed": "Failed to toggle binding status"
+  "auth_policy.binding_toggle_failed": "Failed to toggle binding status",
+  "auth_policy.stats_disabled": "Disabled",
+  "auth_policy.no_match": "No credentials match the current filters",
+  "auth_policy.view_grid": "Cards",
+  "auth_policy.view_table": "Table",
+  "auth_policy.view_mode": "View mode",
+  "auth_policy.results": "{{count}} results",
+  "auth_policy.search_placeholder": "Search credential name",
+  "auth_policy.stats_scope": "Credential status statistics",
+  "auth_policy.more_actions": "More actions"
 }

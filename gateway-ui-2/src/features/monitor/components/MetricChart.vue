@@ -54,7 +54,7 @@ const option = computed<EChartsOption>(() => {
     grid: { left: 58, right: 18, top: 12, bottom: 26 },
     tooltip: {
       ...chartTooltip,
-      axisPointer: { type: 'line', lineStyle: { color: 'rgba(145, 169, 222, 0.35)' } },
+      axisPointer: { type: 'line', lineStyle: { color: '#35425e' } },
       formatter: (raw: unknown) => {
         const list = (Array.isArray(raw) ? raw : [raw]) as Array<{ dataIndex: number; color: string }>
         const item = list[0]
@@ -63,7 +63,7 @@ const option = computed<EChartsOption>(() => {
         if (!row) return ''
         const time = new Date(row.timestamp).toLocaleTimeString()
         const value = `${compactNumber(row.value)}${suffix}`
-        return `<div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#edf2ff">${time}</div>`
+        return `<div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#e6ebf5">${time}</div>`
           + `<div style="font-size:13px;color:${item.color}">${value}</div>`
       },
     },
@@ -101,17 +101,19 @@ const option = computed<EChartsOption>(() => {
 </script>
 
 <template>
-  <a-card :bordered="false" class="monitor-chart-card">
-    <template #title>
-      <span class="monitor-chart-title">{{ title }}</span>
-    </template>
-    <div v-if="!points.length" class="monitor-chart-empty">{{ t('monitor.no_data') }}</div>
-    <v-chart
-      v-else
-      class="monitor-chart"
-      :option="option"
-      :init-options="CHART_INIT_OPTIONS"
-      autoresize
-    />
-  </a-card>
+  <section class="vn-panel vn-monitor-chart-card">
+    <header class="vn-panel-head">
+      <span class="vn-monitor-chart-title">{{ title }}</span>
+    </header>
+    <div class="vn-panel-body">
+      <div v-if="!points.length" class="vn-monitor-chart-empty">{{ t('monitor.no_data') }}</div>
+      <v-chart
+        v-else
+        class="vn-monitor-chart"
+        :option="option"
+        :init-options="CHART_INIT_OPTIONS"
+        autoresize
+      />
+    </div>
+  </section>
 </template>

@@ -3,24 +3,16 @@
  * Plugin bindings page — merges global bindings with per-route bindings into
  * one view. Fields aligned with RoutePluginBindingController + PluginBindingEntity.
  * GET /api/plugin-bindings/global returns every instance's bindings, so globals
- * are filtered to the current instanceId client-side.
+ * are filtered to the current instanceId client-side. Rendered on the Vue-native
+ * design layer; API calls and payloads are unchanged.
  */
-import { computed, ref, type CSSProperties } from 'vue'
+import { computed, ref, useTemplateRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Empty, theme as antdTheme } from 'ant-design-vue'
 import {
-  CheckCircleOutlined,
-  CompassOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  GlobalOutlined,
-  LinkOutlined,
-  OrderedListOutlined,
-  PauseCircleOutlined,
-  PlayCircleOutlined,
-  PlusOutlined,
-  ReloadOutlined,
+  CheckCircleOutlined, CompassOutlined, DeleteOutlined, EditOutlined,
+  ExclamationCircleOutlined, GlobalOutlined, LinkOutlined, OrderedListOutlined,
+  PauseCircleOutlined, PlayCircleOutlined, PlusOutlined, ReloadOutlined, SearchOutlined,
 } from '@/components/icons'
 import { ApiError, isAbortError } from '@/api/http'
 import { useRequest } from '@/composables/useRequest'
@@ -47,21 +39,30 @@ import type {
   PluginConfigSchema,
 } from '@/types/plugin'
 import type { RouteResponse } from '@/types/route'
-import { getCategoryIcon, getCategoryTone, toneForLegacyColor, withAlpha } from '@/features/plugins/utils'
-import { message } from '@/utils/feedback'
+import { getCategoryIcon, getCategoryTone, toneForLegacyColor } from '@/features/plugins/utils'
+import { message, modal } from '@/utils/feedback'
 import { formatServerTime } from '@/utils/serverTime'
-import InlineStatChips from '@/components/InlineStatChips.vue'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnState from '@/components/vn/VnState.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import PluginSelectModal from './components/PluginSelectModal.vue'
 import BindingFormModal from './components/BindingFormModal.vue'
 import {
   parseConfigObject,
   parseSchema,
   summarizeConfig,
-  TONE_TOKEN,
   type BindingFormPayload,
   type ConfigSummary,
 } from './utils'
-import './plugin-bindings.css'
+import '@/styles/vue-native.css'
+import '@/styles/vue-native-shared.css'
+import './plugin-bindings-vue-native.css'
+
+// Named so the shell's KeepAlive can cache it.
+defineOptions({ name: 'PluginBindingsPage' })
 
 interface BindingAggregate {
   items: PluginBindingView[]
@@ -88,16 +89,21 @@ interface EditState {
 
 const route_ = useRoute()
 const { t } = useI18n()
-const { token } = antdTheme.useToken()
-
-const simpleImage = Empty.PRESENTED_IMAGE_SIMPLE
 
 const instanceId = computed(() => route_.params.instanceId as string | undefined)
+
+type ScopeFilter = 'all' | 'global' | 'route'
+type StatusFilter = 'all' | 'enabled' | 'disabled'
 
 const selectOpen = ref(false)
 const createState = ref<CreateState | null>(null)
 const editState = ref<EditState | null>(null)
 const togglingId = ref<string | null>(null)
+const scopeFilter = ref<ScopeFilter>('all')
+const statusFilter = ref<StatusFilter>('all')
+const searchTerm = ref('')
+const orderSort = ref<'none' | 'asc' | 'desc'>('none')
+const searchInput = useTemplateRef<{ focus: () => void }>('searchInput')
 
 // ==================== Data sources ====================
 
@@ -181,23 +187,114 @@ const rows = computed<BindingRow[]>(() => (bindingsRequest.data.value?.items ?? 
   updatedLabel: formatServerTime(binding.updatedAt || binding.createdAt),
 })))
 
-const stats = computed(() => ({
-  total: rows.value.length,
-  global: rows.value.filter((row) => row.routeId === GLOBAL_BINDING_ROUTE_ID).length,
-  route: rows.value.filter((row) => row.routeId !== GLOBAL_BINDING_ROUTE_ID).length,
-  enabled: rows.value.filter((row) => row.enabled).length,
+// ==================== Filters ====================
+
+const isGlobal = (row: BindingRow) => row.routeId === GLOBAL_BINDING_ROUTE_ID
+
+const inScope = computed(() => rows.value.filter((row) => {
+  if (scopeFilter.value === 'global') return isGlobal(row)
+  if (scopeFilter.value === 'route') return !isGlobal(row)
+  return true
 }))
 
-const statsItems = computed(() => [
-  { key: 'total', value: stats.value.total, label: t('plugin_bindings.stats_total'), icon: LinkOutlined },
-  { key: 'global', value: stats.value.global, label: t('plugin_bindings.stats_global'), tone: 'amber' as const, icon: GlobalOutlined },
-  { key: 'route', value: stats.value.route, label: t('plugin_bindings.stats_route'), tone: 'green' as const, icon: CompassOutlined },
-  { key: 'enabled', value: stats.value.enabled, label: t('plugin_bindings.stats_enabled'), tone: 'blue' as const, icon: CheckCircleOutlined },
+const statusCounts = computed(() => {
+  const enabled = inScope.value.filter((row) => row.enabled).length
+  return { total: inScope.value.length, enabled, disabled: inScope.value.length - enabled }
+})
+
+const scopeCounts = computed(() => {
+  const global = rows.value.filter(isGlobal).length
+  return { all: rows.value.length, global, route: rows.value.length - global }
+})
+
+const filteredRows = computed(() => {
+  const term = searchTerm.value.trim().toLowerCase()
+  const filtered = inScope.value.filter((row) => {
+    if (statusFilter.value === 'enabled' && !row.enabled) return false
+    if (statusFilter.value === 'disabled' && row.enabled) return false
+    if (term
+      && !row.pluginName.toLowerCase().includes(term)
+      && !(row.routeName && row.routeName.toLowerCase().includes(term))) return false
+    return true
+  })
+  if (orderSort.value === 'none') return filtered
+  const dir = orderSort.value === 'asc' ? 1 : -1
+  return [...filtered].sort((a, b) => (a.order - b.order) * dir)
+})
+
+const isFiltered = computed(() =>
+  scopeFilter.value !== 'all' || statusFilter.value !== 'all' || searchTerm.value.trim() !== '')
+
+const pageSize = 24
+const page = ref(1)
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / pageSize)))
+const visibleRows = computed(() => {
+  const start = (Math.min(page.value, pageCount.value) - 1) * pageSize
+  return filteredRows.value.slice(start, start + pageSize)
+})
+
+watch([scopeFilter, statusFilter, searchTerm], () => { page.value = 1 })
+watch(pageCount, (count) => { page.value = Math.min(page.value, count) })
+watch(instanceId, () => {
+  createState.value = null
+  editState.value = null
+  selectOpen.value = false
+  page.value = 1
+}, { flush: 'sync' })
+
+function resetFilters() {
+  scopeFilter.value = 'all'
+  statusFilter.value = 'all'
+  searchTerm.value = ''
+  searchInput.value?.focus()
+}
+
+function selectStat(key: string) {
+  statusFilter.value = key as StatusFilter
+}
+
+function toggleOrderSort() {
+  orderSort.value = orderSort.value === 'none' ? 'asc' : orderSort.value === 'asc' ? 'desc' : 'none'
+}
+
+const scopeOptions = computed<VnSegmentOption<ScopeFilter>[]>(() => [
+  { key: 'all', label: t('common.all'), count: scopeCounts.value.all },
+  { key: 'global', label: t('plugin_bindings.global'), count: scopeCounts.value.global, icon: GlobalOutlined },
+  { key: 'route', label: t('plugin_bindings.stats_route'), count: scopeCounts.value.route, icon: CompassOutlined },
 ])
+
+const statItems = computed<VnStatItem[]>(() => {
+  const c = statusCounts.value
+  return [
+    {
+      key: 'all',
+      value: c.total,
+      label: t('plugin_bindings.stats_total'),
+      icon: LinkOutlined,
+      active: statusFilter.value === 'all',
+    },
+    {
+      key: 'enabled',
+      value: c.enabled,
+      label: t('plugin_bindings.stats_enabled'),
+      icon: CheckCircleOutlined,
+      accent: 'var(--vn-ok)',
+      active: statusFilter.value === 'enabled',
+    },
+    {
+      key: 'disabled',
+      value: c.disabled,
+      label: t('plugin_bindings.disabled_binding'),
+      icon: PauseCircleOutlined,
+      accent: 'var(--vn-idle)',
+      active: statusFilter.value === 'disabled',
+    },
+  ]
+})
 
 // ==================== Presentation helpers ====================
 
-const getPopupContainer = () => document.body
+const popupContainer = () => document.body
 
 const errorMessage = (error: unknown, fallbackKey: string): string =>
   (error instanceof ApiError && error.message ? error.message : t(fallbackKey))
@@ -206,54 +303,10 @@ function pluginOf(binding: PluginBindingView): Plugin | undefined {
   return pluginById.value.get(binding.pluginId)
 }
 
-function pluginChipStyle(binding: PluginBindingView): CSSProperties {
+function pluginTone(binding: PluginBindingView): string {
   const plugin = pluginOf(binding)
-  const tone = plugin?.color ? toneForLegacyColor(plugin.color) : getCategoryTone(plugin?.category ?? 'other')
-  const color = String(token.value[TONE_TOKEN[tone]])
-  return {
-    color,
-    background: withAlpha(color, 0.12),
-    borderColor: withAlpha(color, 0.32),
-  }
+  return plugin?.color ? toneForLegacyColor(plugin.color) : getCategoryTone(plugin?.category ?? 'other')
 }
-
-const configTooltipStyle: CSSProperties = {
-  whiteSpace: 'pre-wrap',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 'var(--text-xs)',
-  maxWidth: '420px',
-  maxHeight: '320px',
-  overflow: 'auto',
-}
-
-const pagination = {
-  defaultPageSize: 10,
-  showSizeChanger: true,
-  showQuickJumper: true,
-  pageSizeOptions: ['10', '20', '50'],
-}
-
-const columns = computed(() => [
-  { title: t('plugin_bindings.plugin'), dataIndex: 'pluginName', key: 'pluginName', width: 170 },
-  { title: t('plugin_bindings.binding_scope'), dataIndex: 'routeName', key: 'routeName', width: 140 },
-  {
-    title: t('plugin_bindings.order'),
-    dataIndex: 'order',
-    key: 'order',
-    width: 110,
-    sorter: (a: BindingRow, b: BindingRow) => a.order - b.order,
-  },
-  { title: t('plugin_bindings.status'), dataIndex: 'enabled', key: 'enabled', width: 110 },
-  { title: t('plugin_bindings.config_summary'), key: 'config', width: 190 },
-  {
-    title: t('plugin_bindings.updated'),
-    dataIndex: 'updatedAt',
-    key: 'updatedAt',
-    width: 180,
-    className: 'binding-col-time',
-  },
-  { title: t('plugin_bindings.actions'), key: 'actions', width: 150, fixed: 'right' as const },
-])
 
 const rowKey = (row: BindingRow) => `${row.routeId}:${row.bindingId}`
 
@@ -354,42 +407,75 @@ async function handleToggle(binding: BindingRow) {
   }
 }
 
-async function handleDelete(binding: BindingRow) {
-  try {
-    if (binding.routeId === GLOBAL_BINDING_ROUTE_ID) {
-      await deleteGlobalBinding(binding.bindingId)
-    } else {
-      await deleteRouteBinding(binding.routeId, binding.bindingId)
-    }
-    message.success(t('plugin_bindings.unbind_success'))
-    bindingsRequest.run()
-  } catch (error) {
-    message.error(errorMessage(error, 'plugin_bindings.unbind_failed'))
-  }
+function handleDelete(binding: BindingRow) {
+  modal.confirm({
+    title: t('common.confirm'),
+    content: t('plugin_bindings.unbind_confirm'),
+    okText: t('common.yes'),
+    okType: 'primary',
+    zIndex: 1200,
+    okButtonProps: { danger: true },
+    cancelText: t('common.no'),
+    wrapClassName: 'vn-portal',
+    onOk: async () => {
+      try {
+        if (binding.routeId === GLOBAL_BINDING_ROUTE_ID) {
+          await deleteGlobalBinding(binding.bindingId)
+        } else {
+          await deleteRouteBinding(binding.routeId, binding.bindingId)
+        }
+        message.success(t('plugin_bindings.unbind_success'))
+        bindingsRequest.run()
+      } catch (error) {
+        message.error(errorMessage(error, 'plugin_bindings.unbind_failed'))
+      }
+    },
+  })
 }
 </script>
 
 <template>
-  <div class="plugin-bindings-page">
-    <div class="page-header-modern">
-      <div class="page-header-left">
-        <h3 class="page-title-main has-glyph ant-typography">
-          <span class="page-header-glyph" aria-hidden="true"><LinkOutlined /></span>
-          {{ t('plugin_bindings.plugins_title') }}
-        </h3>
-        <span class="binding-page-subtitle">{{ t('plugin_bindings.plugins_desc') }}</span>
-      </div>
-      <div class="page-header-right">
-        <InlineStatChips :items="statsItems" />
+  <div class="plugin-bindings-page vn-bindings vn-scope">
+    <VnToolbar
+      :title="t('plugin_bindings.plugins_title')"
+      :lede="t('plugin_bindings.plugins_desc')"
+    >
+      <template #actions>
+        <VnIconButton
+          :icon="ReloadOutlined"
+          :label="t('common.refresh')"
+          :disabled="bindingsRequest.loading.value"
+          @click="bindingsRequest.run()"
+        />
         <a-button type="primary" class="create-btn" @click="selectOpen = true">
-          <template #icon><PlusOutlined /></template>
-          {{ t('plugin_bindings.create_binding') }}
+          <template #icon><PlusOutlined /></template>{{ t('plugin_bindings.create_binding') }}
         </a-button>
-        <a-button :loading="bindingsRequest.loading.value" @click="bindingsRequest.run()">
-          <template #icon><ReloadOutlined /></template>
-          {{ t('common.refresh') }}
-        </a-button>
-      </div>
+      </template>
+    </VnToolbar>
+
+    <!-- Scope, status metrics and search share one tool row. -->
+    <div class="vn-metarow">
+      <VnSegmented v-model="scopeFilter" :options="scopeOptions" :label="t('plugin_bindings.binding_scope')" />
+      <VnStatRail
+        :items="statItems"
+        :label="t('plugin_bindings.binding_scope')"
+        @select="selectStat"
+      />
+      <a-input
+        ref="searchInput"
+        v-model:value="searchTerm"
+        :aria-label="t('plugin_bindings.search_placeholder')"
+        :placeholder="t('plugin_bindings.search_placeholder')"
+        allow-clear
+        class="vn-search"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <span class="vn-filterbar-spacer" />
+      <span class="vn-result-count" role="status">{{ t('plugin_bindings.results', { count: filteredRows.length }) }}</span>
+      <a-button v-if="isFiltered" type="text" size="small" @click="resetFilters">
+        {{ t('common.reset') }}
+      </a-button>
     </div>
 
     <a-alert
@@ -419,140 +505,144 @@ async function handleDelete(binding: BindingRow) {
       </template>
     </a-alert>
 
-    <a-card
+    <!-- Error -->
+    <VnState
       v-if="loadError && rows.length === 0"
-      :bordered="false"
-      class="card-base bindings-state-card"
+      :icon="ExclamationCircleOutlined"
+      tone="err"
+      :title="t('plugin_bindings.load_bindings_failed')"
+      :hint="loadError.message"
     >
-      <a-result
-        status="error"
-        :title="t('plugin_bindings.load_bindings_failed')"
-        :sub-title="loadError.message"
-      >
-        <template #extra>
-          <a-button type="primary" @click="bindingsRequest.run()">
-            <template #icon><ReloadOutlined /></template>
-            {{ t('common.refresh') }}
-          </a-button>
-        </template>
-      </a-result>
-    </a-card>
+      <template #actions>
+        <a-button type="primary" @click="bindingsRequest.run()">
+          <template #icon><ReloadOutlined /></template>{{ t('common.refresh') }}
+        </a-button>
+      </template>
+    </VnState>
 
-    <a-card v-else :bordered="false" class="card-base bindings-table-card">
-      <a-table
-        :columns="columns"
-        :data-source="rows"
-        :row-key="rowKey"
-        :loading="tableLoading"
-        :pagination="rows.length > pagination.defaultPageSize ? pagination : false"
-        :scroll="{ x: 1050 }"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'pluginName'">
-            <span class="binding-plugin-chip" :style="pluginChipStyle(record)" :title="record.pluginName">
-              <component :is="getCategoryIcon(pluginOf(record)?.category ?? '')" />
-              <span class="binding-plugin-text">{{ record.pluginName }}</span>
-            </span>
-          </template>
-          <template v-else-if="column.key === 'routeName'">
-            <span v-if="record.routeId === GLOBAL_BINDING_ROUTE_ID" class="binding-scope is-global">
-              <GlobalOutlined />{{ t('plugin_bindings.global') }}
-            </span>
-            <span v-else class="binding-scope" :title="record.routeId">
-              <CompassOutlined />{{ record.routeName || record.routeId }}
-            </span>
-          </template>
-          <template v-else-if="column.key === 'order'">
-            <span class="binding-order">
-              <OrderedListOutlined />{{ record.order }}
-            </span>
-          </template>
-          <template v-else-if="column.key === 'enabled'">
-            <span :class="['binding-status-pill', record.enabled ? 'binding-pill-success' : 'binding-pill-neutral']">
-              <i class="binding-status-dot" aria-hidden="true" />
-              {{ record.enabled ? t('plugin_bindings.active') : t('plugin_bindings.disabled_binding') }}
-            </span>
-          </template>
-          <template v-else-if="column.key === 'config'">
-            <a-tooltip
-              v-if="record.configInfo"
-              :title="record.configInfo.title"
-              :get-popup-container="getPopupContainer"
-              :overlay-style="configTooltipStyle"
-            >
-              <span class="binding-config-summary">{{ record.configInfo.text }}</span>
-            </a-tooltip>
-            <span v-else class="binding-config-empty">{{ t('plugin_bindings.no_config') }}</span>
-          </template>
-          <template v-else-if="column.key === 'updatedAt'">
-            <span class="binding-time">{{ record.updatedLabel }}</span>
-          </template>
-          <template v-else-if="column.key === 'actions'">
-            <div class="binding-row-actions">
-              <a-tooltip :title="t('plugin_bindings.edit_config')" :get-popup-container="getPopupContainer">
-                <a-button
-                  type="text"
-                  class="binding-action"
-                  :disabled="togglingId === record.bindingId"
-                  @click="openEdit(record)"
+    <!-- Initial load -->
+    <div v-else-if="tableLoading && rows.length === 0" class="vn-panel vn-panel-flush vn-skel-tile">
+      <div v-for="n in 6" :key="n" class="vn-skel vn-skel-line" :style="{ width: `${88 - n * 9}%` }" />
+    </div>
+
+    <!-- Empty -->
+    <VnState
+      v-else-if="rows.length === 0"
+      :icon="LinkOutlined"
+      :title="t('plugin_bindings.bindings_empty')"
+    >
+      <template #actions>
+        <a-button type="primary" @click="selectOpen = true">
+          <template #icon><PlusOutlined /></template>{{ t('plugin_bindings.create_binding') }}
+        </a-button>
+      </template>
+    </VnState>
+
+    <!-- Filtered-empty -->
+    <VnState
+      v-else-if="filteredRows.length === 0"
+      :icon="SearchOutlined"
+      :title="t('plugin_bindings.bindings_empty')"
+    >
+      <template #actions>
+        <a-button @click="resetFilters">{{ t('common.reset') }}</a-button>
+      </template>
+    </VnState>
+
+    <!-- Bindings table -->
+    <template v-else>
+      <div class="vn-panel vn-panel-flush vn-tablewrap">
+        <table class="vn-table">
+          <thead>
+            <tr>
+              <th>{{ t('plugin_bindings.plugin') }}</th>
+              <th>{{ t('plugin_bindings.binding_scope') }}</th>
+              <th class="vn-sort-head" @click="toggleOrderSort">
+                {{ t('plugin_bindings.order') }}<span v-if="orderSort !== 'none'" class="vn-sort-arrow">{{ orderSort === 'asc' ? '▲' : '▼' }}</span>
+              </th>
+              <th>{{ t('common.status') }}</th>
+              <th>{{ t('plugin_bindings.config_summary') }}</th>
+              <th>{{ t('plugin_bindings.updated') }}</th>
+              <th class="vn-table-actions-head">{{ t('common.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="record in visibleRows" :key="rowKey(record)" class="vn-row">
+              <td>
+                <span class="vn-plugin-chip" :title="record.pluginName">
+                  <component :is="getCategoryIcon(pluginOf(record)?.category ?? '')" :class="'vn-pstone-' + pluginTone(record)" />
+                  <span class="vn-plugin-chip-text">{{ record.pluginName }}</span>
+                </span>
+              </td>
+              <td>
+                <span v-if="record.routeId === GLOBAL_BINDING_ROUTE_ID" class="vn-binding-scope">
+                  <GlobalOutlined /><span class="vn-binding-scope-text">{{ t('plugin_bindings.global') }}</span>
+                </span>
+                <span v-else class="vn-binding-scope" :title="record.routeId">
+                  <CompassOutlined /><span class="vn-binding-scope-text">{{ record.routeName || record.routeId }}</span>
+                </span>
+              </td>
+              <td>
+                <span class="vn-binding-order"><OrderedListOutlined />{{ record.order }}</span>
+              </td>
+              <td>
+                <VnBadge :tone="record.enabled ? 'ok' : 'idle'">
+                  {{ record.enabled ? t('plugin_bindings.active') : t('plugin_bindings.disabled_binding') }}
+                </VnBadge>
+              </td>
+              <td>
+                <a-tooltip
+                  v-if="record.configInfo"
+                  :title="record.configInfo.title"
+                  overlay-class-name="vn-tooltip"
+                  :get-popup-container="popupContainer"
+                  :overlay-style="{ whiteSpace: 'pre-wrap', maxWidth: '420px', maxHeight: '320px', overflow: 'auto' }"
                 >
-                  <template #icon><EditOutlined /></template>
-                </a-button>
-              </a-tooltip>
-              <a-tooltip
-                :title="record.enabled ? t('plugin_bindings.disable_binding') : t('plugin_bindings.enable_binding')"
-                :get-popup-container="getPopupContainer"
-              >
-                <a-button
-                  type="text"
-                  class="binding-action"
-                  :loading="togglingId === record.bindingId"
-                  @click="handleToggle(record)"
-                >
-                  <template #icon>
-                    <PauseCircleOutlined v-if="record.enabled" />
-                    <PlayCircleOutlined v-else />
-                  </template>
-                </a-button>
-              </a-tooltip>
-              <a-popconfirm
-                :title="t('plugin_bindings.unbind_confirm')"
-                :ok-text="t('common.yes')"
-                :cancel-text="t('common.no')"
-                :ok-button-props="{ danger: true }"
-                :get-popup-container="getPopupContainer"
-                overlay-class-name="plugin-confirm-popover"
-                @confirm="handleDelete(record)"
-              >
-                <a-tooltip :title="t('plugin_bindings.unbind')" :get-popup-container="getPopupContainer">
-                  <a-button type="text" class="binding-action binding-action-danger" :disabled="togglingId === record.bindingId">
-                    <template #icon><DeleteOutlined /></template>
-                  </a-button>
+                  <span class="vn-config-summary">{{ record.configInfo.text }}</span>
                 </a-tooltip>
-              </a-popconfirm>
-            </div>
-          </template>
-        </template>
+                <span v-else class="vn-config-empty">{{ t('plugin_bindings.no_config') }}</span>
+              </td>
+              <td><span class="vn-binding-time">{{ record.updatedLabel }}</span></td>
+              <td>
+                <div class="vn-iconbtn-group">
+                  <VnIconButton
+                    :icon="EditOutlined"
+                    :label="t('plugin_bindings.edit_config')"
+                    :disabled="togglingId === record.bindingId"
+                    @click="openEdit(record)"
+                  />
+                  <VnIconButton
+                    :icon="record.enabled ? PauseCircleOutlined : PlayCircleOutlined"
+                    :label="record.enabled ? t('plugin_bindings.disable_binding') : t('plugin_bindings.enable_binding')"
+                    :disabled="togglingId === record.bindingId"
+                    @click="handleToggle(record)"
+                  />
+                  <VnIconButton
+                    :icon="DeleteOutlined"
+                    :label="t('plugin_bindings.unbind')"
+                    danger
+                    :disabled="togglingId === record.bindingId"
+                    @click="handleDelete(record)"
+                  />
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-        <template #emptyText>
-          <a-empty :image="simpleImage" class="bindings-empty">
-            <template #description>
-              <span class="bindings-empty-text">
-                <LinkOutlined />
-                {{ t('plugin_bindings.bindings_empty') }}
-              </span>
-            </template>
-            <a-button type="primary" @click="selectOpen = true">
-              <template #icon><PlusOutlined /></template>
-              {{ t('plugin_bindings.create_binding') }}
-            </a-button>
-          </a-empty>
-        </template>
-      </a-table>
-    </a-card>
+      <a-pagination
+        v-if="pageCount > 1"
+        v-model:current="page"
+        :page-size="pageSize"
+        :total="filteredRows.length"
+        :show-size-changer="false"
+        class="vn-pagination"
+      />
+    </template>
 
     <PluginSelectModal
-      v-if="selectOpen"
+      :open="selectOpen"
       :plugins="enabledPlugins"
       :loading="pluginsRequest.loading.value"
       @select="handlePluginSelect"
@@ -560,11 +650,11 @@ async function handleDelete(binding: BindingRow) {
     />
 
     <BindingFormModal
-      v-if="createState"
+      :open="!!createState"
       mode="create"
-      :plugin="createState.plugin"
-      :schema="createState.schema"
-      :initial-config="createState.defaults"
+      :plugin="createState?.plugin ?? null"
+      :schema="createState?.schema ?? { fields: [] }"
+      :initial-config="createState?.defaults ?? {}"
       :initial-order="0"
       :routes="routes"
       :on-submit="handleCreateSubmit"
@@ -572,13 +662,13 @@ async function handleDelete(binding: BindingRow) {
     />
 
     <BindingFormModal
-      v-if="editState"
+      :open="!!editState"
       mode="edit"
-      :plugin="editState.plugin"
-      :schema="editState.schema"
-      :initial-config="editState.initialConfig"
-      :initial-order="editState.binding.order"
-      :binding="editState.binding"
+      :plugin="editState?.plugin ?? null"
+      :schema="editState?.schema ?? { fields: [] }"
+      :initial-config="editState?.initialConfig ?? {}"
+      :initial-order="editState?.binding.order ?? 0"
+      :binding="editState?.binding"
       :on-submit="handleEditSubmit"
       @close="editState = null"
     />

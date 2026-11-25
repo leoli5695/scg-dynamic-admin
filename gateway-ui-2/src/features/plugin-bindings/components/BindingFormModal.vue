@@ -24,6 +24,9 @@ const props = defineProps<{
   routes?: RouteResponse[]
   /** Edit mode: binding being edited. */
   binding?: PluginBindingView
+  /** Kept mounted by the page and toggled here (unmounting an open antd modal
+   *  leaks its dialog tree; see perf audit 2026-11-20). */
+  open?: boolean
   onSubmit: (payload: BindingFormPayload) => Promise<boolean>
 }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
@@ -31,6 +34,7 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 const { t } = useI18n()
 
 const isEdit = computed(() => props.mode === 'edit')
+const isOpen = computed(() => props.open !== false)
 const bindType = ref<'GLOBAL' | 'ROUTE'>('GLOBAL')
 const formRef = ref<FormInstance>()
 const saving = ref(false)
@@ -43,6 +47,17 @@ const model = reactive<{
   order: props.initialOrder ?? 0,
   routeId: undefined,
   config: { ...props.initialConfig },
+})
+
+// Kept mounted: rebuild the form every time the dialog opens.
+watch(isOpen, (open) => {
+  if (!open) return
+  model.order = props.initialOrder ?? 0
+  model.routeId = undefined
+  model.config = { ...props.initialConfig }
+  bindType.value = 'GLOBAL'
+  saving.value = false
+  formRef.value?.clearValidate()
 })
 
 const fields = computed(() => props.schema.fields ?? [])
@@ -60,9 +75,6 @@ const routeOptions = computed(() => (props.routes ?? []).map((route) => ({
   value: route.id,
   label: `${route.routeName || route.id} · ${route.uri || ''}${route.enabled === false ? ` (${t('common.disabled')})` : ''}`,
 })))
-
-// The editor scroll container would clip an in-place dropdown.
-const getPopupContainer = () => document.body
 
 // Leaving ROUTE mode should not keep a stale "select a route" error visible.
 watch(bindType, () => {
@@ -94,51 +106,46 @@ async function handleSubmit() {
 
 <template>
   <a-modal
-    :open="true"
-    :width="720"
+    :open="isOpen"
+    :width="600"
     :footer="null"
-    wrap-class-name="plugin-bindings-editor-modal"
+    :style="{ top: '24px' }"
+    wrap-class-name="vn-portal vn-modal"
     :closable="!saving"
     :keyboard="!saving"
     :mask-closable="false"
-    :destroy-on-close="true"
     @cancel="emit('close')"
   >
     <template #title>
-      <div v-if="isEdit" class="binding-modal-header">
-        <span class="binding-modal-icon edit"><EditOutlined /></span>
-        <span class="binding-modal-title-text">
-          <span class="binding-modal-title">{{ t('plugin_bindings.edit_title') }}</span>
-          <span class="binding-modal-subtitle">
-            {{ binding?.pluginName }} · {{ scopeName }}
-          </span>
+      <div class="vn-modal-head">
+        <span class="vn-modal-head-glyph" aria-hidden="true">
+          <EditOutlined v-if="isEdit" />
+          <component :is="getCategoryIcon(plugin?.category ?? '')" v-else />
         </span>
-      </div>
-      <div v-else class="binding-modal-header">
-        <span class="binding-modal-icon">
-          <component :is="getCategoryIcon(plugin?.category ?? '')" />
-        </span>
-        <span class="binding-modal-title-text">
-          <span class="binding-modal-title">{{ plugin?.pluginName }}</span>
-          <span class="binding-modal-subtitle">{{ t('plugin_bindings.create_binding') }}</span>
-        </span>
+        <div style="min-width: 0">
+          <div class="vn-modal-title">{{ isEdit ? t('plugin_bindings.edit_title') : plugin?.pluginName }}</div>
+          <div class="vn-modal-subtitle">
+            {{ isEdit ? `${binding?.pluginName} · ${scopeName}` : t('plugin_bindings.create_binding') }}
+          </div>
+        </div>
       </div>
     </template>
 
     <a-form
       ref="formRef"
       layout="vertical"
+      class="vn-form"
       :model="model"
       :disabled="saving"
       scroll-to-first-error
     >
-      <div class="binding-editor-scroll">
-        <div class="form-section">
-          <div class="form-section-header">
-            <CompassOutlined class="form-section-icon" />
-            <span class="form-section-title">{{ t('plugin_bindings.binding_scope') }}</span>
+      <div class="vn-modal-scroll">
+        <div class="form-section-modern">
+          <div class="section-header">
+            <CompassOutlined class="section-icon" />
+            <span class="section-title">{{ t('plugin_bindings.binding_scope') }}</span>
           </div>
-          <div class="form-section-content">
+          <div class="section-content">
             <a-alert class="binding-modal-alert" type="info" show-icon>
               <template #message>
                 {{ isEdit ? scopeName : t('plugin_bindings.bind_notice') }}
@@ -170,9 +177,9 @@ async function handleSubmit() {
                   v-model:value="model.routeId"
                   show-search
                   option-filter-prop="label"
+                  popup-class-name="vn-portal"
                   :placeholder="t('plugin_bindings.select_route_placeholder')"
                   :options="routeOptions"
-                  :get-popup-container="getPopupContainer"
                 />
               </a-form-item>
             </template>
@@ -187,12 +194,12 @@ async function handleSubmit() {
           </div>
         </div>
 
-        <div class="form-section">
-          <div class="form-section-header">
-            <SettingOutlined class="form-section-icon" />
-            <span class="form-section-title">{{ t('plugin_bindings.plugin_config') }}</span>
+        <div class="form-section-modern">
+          <div class="section-header">
+            <SettingOutlined class="section-icon" />
+            <span class="section-title">{{ t('plugin_bindings.plugin_config') }}</span>
           </div>
-          <div class="form-section-content">
+          <div class="section-content">
             <a-alert
               v-if="fields.length === 0"
               class="binding-modal-alert"
@@ -220,7 +227,7 @@ async function handleSubmit() {
         </div>
       </div>
 
-      <div class="binding-modal-footer">
+      <div class="modal-footer-modern">
         <a-button :disabled="saving" @click="emit('close')">{{ t('common.cancel') }}</a-button>
         <a-button type="primary" :loading="saving" @click="handleSubmit">
           <template #icon>

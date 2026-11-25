@@ -1,16 +1,15 @@
 <script setup lang="ts">
 /**
- * Alerts tab (/instances/:instanceId/alerts) — Vue port of
- * gateway-ui/src/features/alert/index.tsx.
+ * Alerts tab (/instances/:instanceId/alerts) on the Vue-native design layer.
  * Email recipients + alert level/language, five threshold editors with live
  * readings, and the server-paginated alert history with clear/refresh.
- * Visual language follows the login skin (2026-11-20): transparent canvas,
- * login panels, periwinkle→violet accents and capsule badges.
+ * API calls and payloads are unchanged.
  */
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  BellOutlined, ExclamationCircleOutlined, ExperimentOutlined, InboxOutlined, PlusOutlined, ReloadOutlined,
+  ExclamationCircleOutlined, ExperimentOutlined, HistoryOutlined,
+  InboxOutlined, PlusOutlined, ReloadOutlined, SettingOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import {
@@ -25,16 +24,25 @@ import {
 } from '@/api/alerts'
 import { message } from '@/utils/feedback'
 import { useInstanceDetail } from '@/features/instance-detail/context'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnState from '@/components/vn/VnState.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import {
   defaultThresholdState,
   EMAIL_PATTERN,
+  evaluateThresholds,
   mergeThresholdConfig,
   type AlertFormState,
 } from './utils'
 import CurrentMetricsCard from './components/CurrentMetricsCard.vue'
 import ThresholdCards from './components/ThresholdCards.vue'
 import HistoryTable from './components/HistoryTable.vue'
-import './alert.css'
+import '@/styles/vue-native.css'
+import '@/styles/vn-pages.css'
+import './alert-vue-native.css'
+
+defineOptions({ name: 'AlertsPage' })
 
 const { t } = useI18n()
 const detail = useInstanceDetail()
@@ -85,6 +93,25 @@ const historyTotal = computed(() => historyRequest.data.value?.totalElements ?? 
 
 const metricsRequest = useRequest((signal) => getAlertThresholdMetrics({ signal }))
 const metrics = computed(() => metricsRequest.data.value)
+
+const thresholdStatus = computed(() => evaluateThresholds(formState, metrics.value))
+const enabledCount = computed(() =>
+  [formState.cpu, formState.memory, formState.http, formState.instance, formState.thread]
+    .filter((g) => g.enabled).length)
+const overCount = computed(() => Object.values(thresholdStatus.value).filter(Boolean).length)
+
+const statItems = computed<VnStatItem[]>(() => [
+  { key: 'recipients', value: emails.value.length, label: t('alert.email_recipients'), icon: InboxOutlined },
+  { key: 'enabled', value: enabledCount.value, label: t('alert.threshold_config'), icon: SettingOutlined, accent: 'var(--vn-ok)' },
+  { key: 'over', value: overCount.value, label: t('alert.over_threshold'), icon: ExclamationCircleOutlined, accent: overCount.value > 0 ? 'var(--vn-warn)' : undefined },
+  { key: 'history', value: historyTotal.value, label: t('alert.history'), icon: HistoryOutlined, accent: 'var(--vn-info)' },
+])
+
+function refreshAll() {
+  configRequest.run()
+  metricsRequest.run()
+  historyRequest.run()
+}
 
 function handleHistoryPageChange(page: number, pageSize: number): void {
   historyPage.value = page
@@ -189,94 +216,96 @@ async function handleClearHistory(): Promise<void> {
 </script>
 
 <template>
-  <div class="alert-page">
-    <div class="page-header-modern alert-page-header">
-      <div class="page-header-left">
-        <h3 class="page-title-main has-glyph">
-          <span class="page-header-glyph" aria-hidden="true"><BellOutlined /></span>
-          {{ t('alert.title') }}
-        </h3>
-        <span class="page-subtitle">{{ t('alert.subtitle') }}</span>
-      </div>
-      <div class="page-header-right">
+  <div class="alert-page vn-alert vn-scope vnp-scope">
+    <VnToolbar :title="t('alert.title')" :lede="t('alert.subtitle')">
+      <template #actions>
+        <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" @click="refreshAll" />
         <a-popconfirm
           :title="t('alert.test_email_confirm')"
           :ok-text="t('common.confirm')"
           :cancel-text="t('common.cancel')"
+          overlay-class-name="vn-portal vnp-portal"
           @confirm="handleTestEmail"
         >
           <a-button :disabled="emails.length === 0">
-            <template #icon><ExperimentOutlined /></template>
-            {{ t('alert.test_email') }}
+            <template #icon><ExperimentOutlined /></template>{{ t('alert.test_email') }}
           </a-button>
         </a-popconfirm>
-      </div>
+      </template>
+    </VnToolbar>
+
+    <div class="vn-metarow">
+      <VnStatRail :items="statItems" :label="t('alert.title')" />
+      <span class="vn-filterbar-spacer" />
+      <span class="vn-result-count" role="status">{{ t('alert.items_total', { count: historyTotal }) }}</span>
     </div>
 
-    <div v-if="configRequest.loading.value && !config" class="alert-loading">
+    <div v-if="configRequest.loading.value && !config" class="vn-alert-loading">
       <a-spin size="large" />
     </div>
 
-    <section v-else-if="configRequest.error.value && !config" class="lg-panel alert-state-panel">
-      <span class="alert-state-icon is-error"><ExclamationCircleOutlined /></span>
-      <h2 class="alert-state-title">{{ t('alert.load_failed') }}</h2>
-      <p class="alert-state-hint" :title="configRequest.error.value.message">
-        {{ configRequest.error.value.message }} — {{ t('alert.load_failed_hint') }}
-      </p>
-      <a-button type="primary" @click="configRequest.run()">
-        <template #icon><ReloadOutlined /></template>
-        {{ t('common.refresh') }}
-      </a-button>
-    </section>
+    <VnState
+      v-else-if="configRequest.error.value && !config"
+      :icon="ExclamationCircleOutlined"
+      tone="err"
+      :title="t('alert.load_failed')"
+      :hint="`${configRequest.error.value.message} — ${t('alert.load_failed_hint')}`"
+    >
+      <template #actions>
+        <a-button type="primary" @click="configRequest.run()">
+          <template #icon><ReloadOutlined /></template>{{ t('common.refresh') }}
+        </a-button>
+      </template>
+    </VnState>
 
     <template v-else>
-      <div class="alert-settings-grid">
-        <section class="lg-panel alert-panel">
-          <header class="alert-panel-head">
-            <span class="alert-panel-title"><InboxOutlined /> {{ t('alert.email_settings') }}</span>
+      <div class="vn-alert-settings-grid">
+        <section class="vn-panel">
+          <header class="vn-panel-head">
+            <span class="vnp-panel-head"><InboxOutlined />{{ t('alert.email_settings') }}</span>
           </header>
-          <div class="alert-panel-body">
-            <div class="alert-field">
-              <span class="alert-field-label">{{ t('alert.email_recipients') }}</span>
+          <div class="vn-panel-body">
+            <div class="vn-alert-field">
+              <span class="vn-alert-field-label">{{ t('alert.email_recipients') }}</span>
               <a-space-compact block>
                 <a-input
                   v-model:value="emailInput"
+                  allow-clear
                   :placeholder="t('alert.email_placeholder')"
                   :aria-label="t('alert.email_placeholder')"
                   @press-enter="handleAddEmail"
                 />
                 <a-button type="primary" @click="handleAddEmail">
-                  <template #icon><PlusOutlined /></template>
-                  {{ t('common.add') }}
+                  <template #icon><PlusOutlined /></template>{{ t('common.add') }}
                 </a-button>
               </a-space-compact>
             </div>
 
-            <div class="alert-email-list">
+            <div class="vn-alert-email-list">
               <a-tag
                 v-for="email in emails"
                 :key="email"
                 closable
-                class="alert-email-pill"
+                class="vn-alert-email-pill"
                 @close="handleRemoveEmail(email)"
               >
                 {{ email }}
               </a-tag>
-              <span v-if="emails.length === 0" class="alert-empty-hint">{{ t('alert.no_emails') }}</span>
+              <span v-if="emails.length === 0" class="vnp-hint">{{ t('alert.no_emails') }}</span>
             </div>
 
-            <div class="alert-field-row">
-              <label class="alert-field">
-                <span class="alert-field-label">{{ t('alert.email_language') }}</span>
+            <div class="vn-alert-field-row">
+              <label class="vn-alert-field">
+                <span class="vn-alert-field-label">{{ t('alert.email_language') }}</span>
                 <a-select
                   v-model:value="formState.emailLanguage"
-                  class="alert-language-select"
+                  class="vn-alert-language-select"
                   :options="languageOptions"
                   :aria-label="t('alert.email_language')"
                 />
               </label>
-              <label class="alert-field alert-field-switch">
-                <span class="alert-field-label">{{ t('alert.enabled') }}</span>
+              <label class="vn-alert-field vn-alert-field-switch">
+                <span class="vn-alert-field-label">{{ t('alert.enabled') }}</span>
                 <a-switch
                   v-model:checked="formState.enabled"
                   :checked-children="t('common.enabled')"
@@ -285,7 +314,7 @@ async function handleClearHistory(): Promise<void> {
               </label>
             </div>
 
-            <p class="alert-panel-hint">{{ t('alert.recipients_hint') }}</p>
+            <p class="vnp-hint">{{ t('alert.recipients_hint') }}</p>
           </div>
         </section>
 
@@ -299,11 +328,9 @@ async function handleClearHistory(): Promise<void> {
 
       <ThresholdCards :state="formState" :metrics="metrics" />
 
-      <div class="alert-save-row">
-        <span class="alert-panel-hint">{{ t('alert.threshold_hint') }}</span>
-        <a-button type="primary" :loading="saving" @click="handleSave">
-          {{ t('alert.save_config') }}
-        </a-button>
+      <div class="vn-alert-save-row">
+        <span class="vnp-hint">{{ t('alert.threshold_hint') }}</span>
+        <a-button type="primary" :loading="saving" @click="handleSave">{{ t('alert.save_config') }}</a-button>
       </div>
 
       <HistoryTable

@@ -1,10 +1,8 @@
 <script setup lang="ts">
 /**
- * Request tracing page — Vue port of gateway-ui/src/features/trace/index.tsx.
- * Error/slow trace tables with server-side pagination, statistics, JSON/CSV
- * export and the distributed full-chain tab. Visual language follows the login
- * skin (2026-11-20): transparent canvas, login panels, periwinkle→violet
- * accents, capsule badges and DOM/CSS waterfalls (no canvas).
+ * Request tracing page on the Vue-native design layer. Error/slow trace tables
+ * with server-side pagination, statistics, JSON/CSV export and the distributed
+ * full-chain tab. API calls and payloads are unchanged.
  */
 import { computed, reactive, ref, watch, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
@@ -13,7 +11,7 @@ import dayjs, { type Dayjs } from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import {
-  BranchesOutlined, ClockCircleOutlined, CloseCircleOutlined, DeleteOutlined,
+  BranchesOutlined, ClockCircleOutlined, CloseCircleOutlined, CopyOutlined, DeleteOutlined,
   DownOutlined, DownloadOutlined, ExclamationCircleOutlined, EyeOutlined,
   ReloadOutlined, SearchOutlined, SettingOutlined,
 } from '@/components/icons'
@@ -25,14 +23,24 @@ import {
 } from '@/api/traces'
 import type { RequestTrace, TraceConfig, TraceStats } from '@/api/traces'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
 import { parseServerTime } from '@/utils/serverTime'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import {
   ALL_COLUMNS, COLUMN_LABEL_KEYS, DEFAULT_VISIBLE_COLUMNS, TIME_RANGE_OPTIONS,
   exportTraces, getStatusTone,
 } from './traceUtils'
 import TraceDetailDrawer from './components/TraceDetailDrawer.vue'
 import FullChainTab from './components/FullChainTab.vue'
-import './trace.css'
+import '@/styles/vue-native.css'
+import '@/styles/vn-pages.css'
+import './trace-vue-native.css'
+
+defineOptions({ name: 'TracePage' })
 
 type TraceTab = 'errors' | 'slow' | 'distributed'
 
@@ -197,6 +205,19 @@ const methodOptions = computed(() => [
   { value: 'DELETE', label: 'DELETE' },
 ])
 
+const tabOptions = computed<VnSegmentOption<TraceTab>[]>(() => [
+  { key: 'errors', label: t('trace.error_traces'), icon: CloseCircleOutlined },
+  { key: 'slow', label: t('trace.slow_traces'), icon: ClockCircleOutlined },
+  { key: 'distributed', label: t('trace.distributed_traces'), icon: BranchesOutlined },
+])
+
+const statItems = computed<VnStatItem[]>(() => [
+  { key: 'total', value: stats.value?.total ?? 0, label: t('trace.total'), icon: BranchesOutlined },
+  { key: 'errorsToday', value: stats.value?.errorsToday ?? 0, label: t('trace.errors_today'), icon: CloseCircleOutlined, accent: 'var(--vn-err)' },
+  { key: 'errorsLastHour', value: stats.value?.errorsLastHour ?? 0, label: t('trace.errors_last_hour'), icon: ClockCircleOutlined, accent: 'var(--vn-warn)' },
+  { key: 'replay', value: replayTotal.value, label: t('trace.replay_count'), icon: ReloadOutlined, accent: 'var(--vn-info)' },
+])
+
 function onTimeRangeChange(value: string | number) {
   if (value === 'custom') {
     customRange.value = [dayjs().subtract(1, 'hour'), dayjs()]
@@ -211,7 +232,7 @@ function hasAnyFilter(): boolean {
   return Boolean(filters.path || filters.method || filters.statusCode || filters.traceId)
 }
 
-function handleTabChange(key: string | number) {
+watch(activeTab, (key) => {
   if (key === 'distributed') {
     appliedFilters.value = { ...EMPTY_FILTERS }
     filters.path = ''
@@ -226,10 +247,19 @@ function handleTabChange(key: string | number) {
     appliedFilters.value = { ...EMPTY_FILTERS }
   }
   page.value = 0
-}
+})
 
 function applyFilters() {
   appliedFilters.value = { ...filters, statusCode: filters.statusCode.trim() }
+  page.value = 0
+}
+
+function resetFilters() {
+  filters.path = ''
+  filters.method = ''
+  filters.statusCode = ''
+  filters.traceId = ''
+  appliedFilters.value = { ...EMPTY_FILTERS }
   page.value = 0
 }
 
@@ -294,8 +324,13 @@ function onCustomRangeChange(value: [Dayjs | null, Dayjs | null] | null | undefi
   page.value = 0
 }
 
-function statusTone(statusCode?: number): string {
-  return getStatusTone(statusCode)
+function statusTone(statusCode?: number): 'ok' | 'warn' | 'err' | 'info' | 'idle' {
+  const tone = getStatusTone(statusCode)
+  if (tone === 'success') return 'ok'
+  if (tone === 'warning') return 'warn'
+  if (tone === 'error') return 'err'
+  if (tone === 'info') return 'info'
+  return 'idle'
 }
 
 function formatTraceTime(value?: string): string {
@@ -304,10 +339,16 @@ function formatTraceTime(value?: string): string {
   return parsed.isValid() ? parsed.format('MM-DD HH:mm:ss') : '-'
 }
 
-function latencyTone(ms?: number): string {
-  if ((ms ?? 0) > 3000) return 'text-danger'
-  if ((ms ?? 0) > 1000) return 'text-warning'
+function latencyClass(ms?: number): string {
+  if ((ms ?? 0) > 3000) return 'vn-ink-err'
+  if ((ms ?? 0) > 1000) return 'vn-ink-warn'
   return ''
+}
+
+async function copyTraceId(text?: string) {
+  if (!text) return
+  if (await copyText(text)) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
 }
 
 const columns = computed<ColumnsType<RequestTrace>>(() => {
@@ -333,7 +374,7 @@ const columns = computed<ColumnsType<RequestTrace>>(() => {
         parseServerTime(a.traceTime).getTime() - parseServerTime(b.traceTime).getTime(),
     },
     { title: t('trace.replay_count'), dataIndex: 'replayCount', key: 'replayCount', width: 90 },
-    { title: '', key: 'actions', width: 64, fixed: 'right' },
+    { title: '', key: 'actions', width: 84, fixed: 'right', align: 'right' },
   ]
   return all.filter((column) => visibleColumns.value.includes(column.key as string))
 })
@@ -357,26 +398,14 @@ function rowClassName(record: RequestTrace): string {
 </script>
 
 <template>
-  <div class="trace-page">
-    <header class="trace-page-header">
-      <div class="trace-page-heading">
-        <span class="lg-eyebrow">{{ t('trace.eyebrow') }}</span>
-        <h1 class="trace-page-title">
-          <span class="lg-icon-tile" aria-hidden="true"><BranchesOutlined /></span>
-          {{ t('trace.title') }}
-        </h1>
-        <p class="trace-page-subtitle">{{ t('trace.subtitle') }}</p>
-      </div>
-      <div class="trace-page-actions">
-        <a-button :loading="loading" @click="reload">
-          <template #icon><ReloadOutlined /></template>
-          {{ t('common.refresh') }}
-        </a-button>
-        <a-dropdown>
+  <div class="trace-page vn-trace vn-scope vnp-scope">
+    <VnToolbar :title="t('trace.title')" :lede="t('trace.subtitle')">
+      <template #actions>
+        <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" :disabled="loading" @click="reload" />
+        <a-dropdown :trigger="['click']">
           <a-button>
-            <template #icon><DownloadOutlined /></template>
-            {{ t('trace.export') }}
-            <DownOutlined class="trace-export-caret" />
+            <template #icon><DownloadOutlined /></template>{{ t('trace.export') }}
+            <DownOutlined />
           </a-button>
           <template #overlay>
             <a-menu @click="onExportMenu">
@@ -385,234 +414,187 @@ function rowClassName(record: RequestTrace): string {
             </a-menu>
           </template>
         </a-dropdown>
-      </div>
-    </header>
+      </template>
+    </VnToolbar>
 
-    <section class="trace-stats" aria-label="trace statistics">
-      <div class="lg-panel trace-stat">
-        <div class="trace-stat-head">
-          <span class="lg-section-title">{{ t('trace.total') }}</span>
-          <span class="icon-tile icon-tile--sm trace-stat-icon is-info"><BranchesOutlined /></span>
-        </div>
-        <div class="trace-stat-value">{{ stats?.total ?? 0 }}</div>
-      </div>
-      <div class="lg-panel trace-stat">
-        <div class="trace-stat-head">
-          <span class="lg-section-title">{{ t('trace.errors_today') }}</span>
-          <span class="icon-tile icon-tile--sm trace-stat-icon is-error"><CloseCircleOutlined /></span>
-        </div>
-        <div class="trace-stat-value is-error">{{ stats?.errorsToday ?? 0 }}</div>
-      </div>
-      <div class="lg-panel trace-stat">
-        <div class="trace-stat-head">
-          <span class="lg-section-title">{{ t('trace.errors_last_hour') }}</span>
-          <span class="icon-tile icon-tile--sm trace-stat-icon is-warning"><ClockCircleOutlined /></span>
-        </div>
-        <div class="trace-stat-value is-warning">{{ stats?.errorsLastHour ?? 0 }}</div>
-      </div>
-      <div class="lg-panel trace-stat">
-        <div class="trace-stat-head">
-          <span class="lg-section-title">{{ t('trace.replay_count') }}</span>
-          <span class="icon-tile icon-tile--sm trace-stat-icon is-primary"><ReloadOutlined /></span>
-        </div>
-        <div class="trace-stat-value">{{ replayTotal }}</div>
-      </div>
-    </section>
+    <div class="vn-metarow">
+      <VnSegmented v-model="activeTab" :options="tabOptions" :label="t('trace.title')" />
+      <VnStatRail :items="statItems" :label="t('trace.title')" />
+      <a-input
+        v-model:value="filters.traceId"
+        :placeholder="t('trace.filter_trace_id')"
+        allow-clear
+        class="vn-search"
+        :aria-label="t('trace.filter_trace_id')"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <span class="vn-filterbar-spacer" />
+      <span class="vn-result-count" role="status">{{ t('trace.pagination_total', { count: total }) }}</span>
+      <a-button v-if="hasAnyFilter()" type="text" size="small" @click="resetFilters">{{ t('common.reset') }}</a-button>
+    </div>
 
-    <section class="lg-panel trace-filter-panel">
-      <div class="trace-filter-row">
-        <a-segmented
-          :value="segmentedValue"
-          :options="timeRangeOptions"
-          class="trace-time-seg"
-          @change="(value: string | number) => onTimeRangeChange(value)"
-        />
-        <a-range-picker
-          v-if="customRange"
-          :value="customRangeValue"
-          show-time
-          format="YYYY-MM-DD HH:mm"
-          class="trace-range-picker"
-          @change="onCustomRangeChange"
-        />
-        <span class="trace-filter-spacer" />
-        <a-popover trigger="click" placement="bottomRight">
-          <template #content>
-            <div class="trace-columns-pop">
-              <span class="lg-section-title">{{ t('trace.visible_columns') }}</span>
-              <a-checkbox
-                v-for="column in ALL_COLUMNS"
-                :key="column"
-                :checked="visibleColumns.includes(column)"
-                :disabled="column === 'actions'"
-                @change="columnToggleHandlers[column]"
-              >
-                {{ t(COLUMN_LABEL_KEYS[column]) }}
-              </a-checkbox>
-              <a-button size="small" class="trace-columns-reset" @click="visibleColumns = [...DEFAULT_VISIBLE_COLUMNS]">
-                {{ t('common.reset') }}
-              </a-button>
-            </div>
-          </template>
-          <a-button>
-            <template #icon><SettingOutlined /></template>
-            {{ t('trace.columns') }}
-          </a-button>
-        </a-popover>
-      </div>
-
-      <div class="trace-filter-row">
-        <a-input
-          v-model:value="filters.path"
-          :placeholder="t('trace.filter_path')"
-          allow-clear
-          class="trace-filter-input is-path"
-        >
-          <template #prefix><SearchOutlined /></template>
-        </a-input>
-        <a-select
-          :value="filters.method || undefined"
-          :placeholder="t('trace.filter_method')"
-          :options="methodOptions"
-          allow-clear
-          class="trace-filter-select"
-          @change="(value: string | undefined) => (filters.method = value || '')"
-        />
-        <a-input
-          v-model:value="filters.statusCode"
-          :placeholder="t('trace.filter_status')"
-          allow-clear
-          class="trace-filter-input is-status"
-        />
-        <a-input
-          v-model:value="filters.traceId"
-          :placeholder="t('trace.filter_trace_id')"
-          allow-clear
-          class="trace-filter-input is-trace"
-        >
-          <template #prefix><SearchOutlined /></template>
-        </a-input>
-        <a-button type="primary" @click="applyFilters">
-          <template #icon><SearchOutlined /></template>
-          {{ t('common.search') }}
-        </a-button>
-      </div>
-    </section>
-
-    <section class="lg-panel trace-table-panel">
-      <a-tabs v-model:activeKey="activeTab" class="trace-tabs" @change="handleTabChange">
-        <a-tab-pane key="errors">
-          <template #tab><CloseCircleOutlined /> {{ t('trace.error_traces') }}</template>
-        </a-tab-pane>
-        <a-tab-pane key="slow">
-          <template #tab><ClockCircleOutlined /> {{ t('trace.slow_traces') }}</template>
-        </a-tab-pane>
-        <a-tab-pane key="distributed">
-          <template #tab><BranchesOutlined /> {{ t('trace.distributed_traces') }}</template>
-        </a-tab-pane>
-        <template #rightExtra>
-          <div v-if="activeTab !== 'distributed'" class="trace-danger-actions">
-            <a-popconfirm
-              :title="t('trace.delete_old_confirm')"
-              :ok-text="t('common.confirm')"
-              :cancel-text="t('common.cancel')"
-              @confirm="handleDeleteOld"
+    <div class="vn-trace-filterbar">
+      <a-select
+        :value="segmentedValue"
+        :options="timeRangeOptions"
+        class="vn-trace-time-select"
+        popup-class-name="vn-portal vnp-portal"
+        :aria-label="t('trace.time_range_custom')"
+        @change="(value: string | number) => onTimeRangeChange(value)"
+      />
+      <a-range-picker
+        v-if="customRange"
+        :value="customRangeValue"
+        show-time
+        format="YYYY-MM-DD HH:mm"
+        class="vn-trace-range-picker"
+        @change="onCustomRangeChange"
+      />
+      <a-input
+        v-model:value="filters.path"
+        :placeholder="t('trace.filter_path')"
+        allow-clear
+        class="vn-trace-filter-input is-path"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <a-select
+        :value="filters.method || undefined"
+        :placeholder="t('trace.filter_method')"
+        :options="methodOptions"
+        allow-clear
+        class="vn-trace-filter-select"
+        popup-class-name="vn-portal vnp-portal"
+        @change="(value: string | undefined) => (filters.method = value || '')"
+      />
+      <a-input
+        v-model:value="filters.statusCode"
+        :placeholder="t('trace.filter_status')"
+        allow-clear
+        class="vn-trace-filter-input is-status"
+      />
+      <a-popover trigger="click" placement="bottomRight" overlay-class-name="vn-portal vnp-portal">
+        <template #content>
+          <div class="vn-trace-columns-pop">
+            <span class="vnp-panel-head">{{ t('trace.visible_columns') }}</span>
+            <a-checkbox
+              v-for="column in ALL_COLUMNS"
+              :key="column"
+              :checked="visibleColumns.includes(column)"
+              :disabled="column === 'actions'"
+              @change="columnToggleHandlers[column]"
             >
-              <a-button type="text" size="small" class="trace-danger-btn">
-                <template #icon><DeleteOutlined /></template>
-                {{ t('trace.delete_old') }}
-              </a-button>
-            </a-popconfirm>
-            <a-popconfirm
-              :title="t('trace.delete_all_confirm')"
-              :ok-text="t('common.confirm')"
-              :cancel-text="t('common.cancel')"
-              @confirm="handleDeleteAll"
-            >
-              <a-button type="text" size="small" danger class="trace-danger-btn">
-                <template #icon><DeleteOutlined /></template>
-                {{ t('trace.delete_all') }}
-              </a-button>
-            </a-popconfirm>
+              {{ t(COLUMN_LABEL_KEYS[column]) }}
+            </a-checkbox>
+            <a-button size="small" @click="visibleColumns = [...DEFAULT_VISIBLE_COLUMNS]">{{ t('common.reset') }}</a-button>
           </div>
         </template>
-      </a-tabs>
+        <a-button>
+          <template #icon><SettingOutlined /></template>{{ t('trace.columns') }}
+        </a-button>
+      </a-popover>
+      <a-button type="primary" @click="applyFilters">
+        <template #icon><SearchOutlined /></template>{{ t('common.search') }}
+      </a-button>
+    </div>
 
-      <a-spin :spinning="loading">
-        <div v-show="activeTab !== 'distributed'">
-          <a-table
-            :columns="columns"
-            :data-source="traces"
-            :pagination="pagination"
-            :row-class-name="rowClassName"
-            row-key="id"
-            size="small"
-            :scroll="{ x: 960 }"
-            class="trace-table"
+    <section class="vn-panel">
+      <header v-if="activeTab !== 'distributed'" class="vn-panel-head">
+        <span class="vnp-panel-head">{{ t('trace.error_traces') }}</span>
+        <span class="vn-trace-danger-actions">
+          <a-popconfirm
+            :title="t('trace.delete_old_confirm')"
+            :ok-text="t('common.confirm')"
+            :cancel-text="t('common.cancel')"
+            overlay-class-name="vn-portal vnp-portal"
+            @confirm="handleDeleteOld"
           >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'traceId'">
-                <a-tooltip :title="record.traceId">
-                  <a-typography-text :copyable="{ text: record.traceId, tooltips: false }" class="trace-mono">
-                    {{ record.traceId?.slice(0, 8) }}…
-                  </a-typography-text>
-                </a-tooltip>
-              </template>
-              <template v-else-if="column.key === 'method'">
-                <span :class="['method-pill', `method-${(record.method || '').toLowerCase()}`]">{{ record.method }}</span>
-              </template>
-              <template v-else-if="column.key === 'path'">
-                <a-tooltip :title="record.uri" placement="topLeft">
-                  <span class="trace-mono">{{ record.path || '-' }}</span>
-                </a-tooltip>
-              </template>
-              <template v-else-if="column.key === 'statusCode'">
-                <span :class="['status-badge', `status-badge-${statusTone(record.statusCode)}`]">
-                  <i :class="['status-dot', `status-dot-${statusTone(record.statusCode)}`]" />
-                  {{ record.statusCode }}
-                </span>
-              </template>
-              <template v-else-if="column.key === 'latencyMs'">
-                <span :class="['trace-latency', latencyTone(record.latencyMs)]">{{ record.latencyMs }}ms</span>
-              </template>
-              <template v-else-if="column.key === 'clientIp'">
-                <span class="trace-mono">{{ record.clientIp || '-' }}</span>
-              </template>
-              <template v-else-if="column.key === 'traceTime'">
-                <span class="trace-time">{{ formatTraceTime(record.traceTime) }}</span>
-              </template>
-              <template v-else-if="column.key === 'replayCount'">
-                <span v-if="record.replayCount" class="count-pill">{{ record.replayCount }}</span>
-                <span v-else class="trace-muted">0</span>
-              </template>
-              <template v-else-if="column.key === 'actions'">
-                <a-tooltip :title="t('trace.view_details')">
-                  <a-button type="text" class="action-btn trace-row-action" @click="handleViewDetail(record)">
-                    <template #icon><EyeOutlined /></template>
-                  </a-button>
-                </a-tooltip>
-              </template>
-            </template>
-            <template #emptyText>
-              <div v-if="!loading" :class="['trace-empty', loadError ? 'is-error' : '']">
-                <span :class="['icon-tile', loadError ? 'trace-empty-error-icon' : 'icon-tile--muted']">
-                  <ExclamationCircleOutlined v-if="loadError" />
-                  <BranchesOutlined v-else />
-                </span>
-                <p class="trace-empty-title">
-                  {{ loadError || t('trace.pagination_total', { count: 0 }) }}
-                </p>
-                <a-button v-if="loadError" type="primary" @click="reload">
-                  <template #icon><ReloadOutlined /></template>
-                  {{ t('common.refresh') }}
-                </a-button>
-              </div>
-            </template>
-          </a-table>
-        </div>
+            <a-button type="text" size="small">
+              <template #icon><DeleteOutlined /></template>{{ t('trace.delete_old') }}
+            </a-button>
+          </a-popconfirm>
+          <a-popconfirm
+            :title="t('trace.delete_all_confirm')"
+            :ok-text="t('common.confirm')"
+            :cancel-text="t('common.cancel')"
+            overlay-class-name="vn-portal vnp-portal"
+            @confirm="handleDeleteAll"
+          >
+            <a-button type="text" size="small" danger>
+              <template #icon><DeleteOutlined /></template>{{ t('trace.delete_all') }}
+            </a-button>
+          </a-popconfirm>
+        </span>
+      </header>
 
-        <FullChainTab v-if="activeTab === 'distributed'" :trace-config="traceConfig" />
-      </a-spin>
+      <div class="vn-panel-body vn-trace-table-body">
+        <a-spin :spinning="loading">
+          <div v-show="activeTab !== 'distributed'">
+            <a-table
+              :columns="columns"
+              :data-source="traces"
+              :pagination="pagination"
+              :row-class-name="rowClassName"
+              row-key="id"
+              size="small"
+              :scroll="{ x: 960 }"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'traceId'">
+                  <a-tooltip :title="record.traceId" overlay-class-name="vn-tooltip">
+                    <span class="vn-mono">{{ record.traceId?.slice(0, 8) }}…</span>
+                  </a-tooltip>
+                </template>
+                <template v-else-if="column.key === 'method'">
+                  <span :class="['method-pill', `method-${(record.method || '').toLowerCase()}`]">{{ record.method }}</span>
+                </template>
+                <template v-else-if="column.key === 'path'">
+                  <a-tooltip :title="record.uri" placement="topLeft" overlay-class-name="vn-tooltip">
+                    <span class="vn-mono">{{ record.path || '-' }}</span>
+                  </a-tooltip>
+                </template>
+                <template v-else-if="column.key === 'statusCode'">
+                  <VnBadge :tone="statusTone(record.statusCode)">{{ record.statusCode }}</VnBadge>
+                </template>
+                <template v-else-if="column.key === 'latencyMs'">
+                  <span :class="latencyClass(record.latencyMs)">{{ record.latencyMs }}ms</span>
+                </template>
+                <template v-else-if="column.key === 'clientIp'">
+                  <span class="vn-mono vnp-cell-muted">{{ record.clientIp || '-' }}</span>
+                </template>
+                <template v-else-if="column.key === 'traceTime'">
+                  <span class="vnp-cell-muted">{{ formatTraceTime(record.traceTime) }}</span>
+                </template>
+                <template v-else-if="column.key === 'replayCount'">
+                  <span v-if="record.replayCount" class="vn-chip"><span class="vn-chip-num">{{ record.replayCount }}</span></span>
+                  <span v-else class="vnp-cell-muted">0</span>
+                </template>
+                <template v-else-if="column.key === 'actions'">
+                  <div class="vn-iconbtn-group">
+                    <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyTraceId(record.traceId)" />
+                    <VnIconButton :icon="EyeOutlined" :label="t('trace.view_details')" @click="handleViewDetail(record)" />
+                  </div>
+                </template>
+              </template>
+              <template #emptyText>
+                <div v-if="!loading" class="vn-trace-empty">
+                  <span :class="['vn-trace-empty-icon', loadError ? 'vn-ink-err' : '']">
+                    <ExclamationCircleOutlined v-if="loadError" />
+                    <BranchesOutlined v-else />
+                  </span>
+                  <p class="vn-trace-empty-title">{{ loadError || t('trace.pagination_total', { count: 0 }) }}</p>
+                  <a-button v-if="loadError" type="primary" @click="reload">
+                    <template #icon><ReloadOutlined /></template>{{ t('common.refresh') }}
+                  </a-button>
+                </div>
+              </template>
+            </a-table>
+          </div>
+
+          <FullChainTab v-if="activeTab === 'distributed'" :trace-config="traceConfig" />
+        </a-spin>
+      </div>
     </section>
 
     <TraceDetailDrawer

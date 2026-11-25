@@ -3,9 +3,9 @@
  * Step 1 of the create flow: pick an enabled plugin, grouped by category.
  * Mirrors the React PluginSelectModal (cards instead of a plain list).
  */
-import { computed, type CSSProperties } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { theme as antdTheme, Empty } from 'ant-design-vue'
+import { Empty } from 'ant-design-vue'
 import { ArrowRightOutlined, AppstoreAddOutlined, PlusOutlined } from '@/components/icons'
 import { BUILTIN_JAR_PATH, type Plugin } from '@/types/plugin'
 import {
@@ -13,13 +13,15 @@ import {
   getCategoryTone,
   getPluginDescription,
   toneForLegacyColor,
-  withAlpha,
 } from '@/features/plugins/utils'
-import { categoryLabelKey, TONE_TOKEN } from '../utils'
+import { categoryLabelKey } from '../utils'
 
 const props = defineProps<{
   plugins: Plugin[]
   loading: boolean
+  /** Kept mounted by the page and toggled here (unmounting an open antd modal
+   *  leaks its dialog tree; see perf audit 2026-11-20). */
+  open?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'select', plugin: Plugin): void
@@ -27,8 +29,8 @@ const emit = defineEmits<{
 }>()
 
 const { t, te, locale } = useI18n()
-const { token } = antdTheme.useToken()
 
+const isOpen = computed(() => props.open !== false)
 const simpleImage = Empty.PRESENTED_IMAGE_SIMPLE
 
 const groups = computed(() => {
@@ -47,14 +49,9 @@ function categoryLabel(category?: string | null): string {
   return key && te(key) ? t(key) : (category || 'other')
 }
 
-function iconStyle(plugin: Plugin): CSSProperties {
+function toneClass(plugin: Plugin): string {
   const tone = plugin.color ? toneForLegacyColor(plugin.color) : getCategoryTone(plugin.category)
-  const color = String(token.value[TONE_TOKEN[tone]])
-  return {
-    color,
-    background: withAlpha(color, 0.12),
-    borderColor: withAlpha(color, 0.28),
-  }
+  return `vn-pstone-${tone}`
 }
 
 function descriptionOf(plugin: Plugin): string | undefined {
@@ -64,20 +61,20 @@ function descriptionOf(plugin: Plugin): string | undefined {
 
 <template>
   <a-modal
-    :open="true"
+    :open="isOpen"
     :footer="null"
     :width="880"
-    wrap-class-name="plugin-bindings-picker-modal"
-    :destroy-on-close="true"
+    :style="{ top: '24px' }"
+    wrap-class-name="vn-portal vn-modal plugin-picker-modal"
     @cancel="emit('cancel')"
   >
     <template #title>
-      <div class="binding-modal-header">
-        <span class="binding-modal-icon"><PlusOutlined /></span>
-        <span class="binding-modal-title-text">
-          <span class="binding-modal-title">{{ t('plugin_bindings.select_plugin') }}</span>
-          <span class="binding-modal-subtitle">{{ t('plugin_bindings.select_plugin_desc') }}</span>
-        </span>
+      <div class="vn-modal-head">
+        <span class="vn-modal-head-glyph" aria-hidden="true"><PlusOutlined /></span>
+        <div>
+          <div class="vn-modal-title">{{ t('plugin_bindings.select_plugin') }}</div>
+          <div class="vn-modal-subtitle">{{ t('plugin_bindings.select_plugin_desc') }}</div>
+        </div>
       </div>
     </template>
 
@@ -111,7 +108,7 @@ function descriptionOf(plugin: Plugin): string | undefined {
               :title="plugin.pluginName"
               @click="emit('select', plugin)"
             >
-              <span class="binding-plugin-icon" :style="iconStyle(plugin)">
+              <span :class="['binding-plugin-icon', toneClass(plugin)]">
                 <component :is="getCategoryIcon(plugin.category)" />
               </span>
               <span class="binding-plugin-body">

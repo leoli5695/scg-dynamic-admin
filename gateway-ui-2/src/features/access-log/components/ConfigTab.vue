@@ -74,7 +74,7 @@ const targetIcon = (target: string) => TARGET_ICONS[target] ?? FileTextOutlined
   <a-form :model="form" layout="vertical" class="al-config-form">
     <div class="al-config-grid">
       <!-- Basic settings -->
-      <section class="lg-panel al-panel">
+      <section class="vn-panel al-panel">
         <header class="al-panel-head">
           <span class="al-panel-title"><SettingOutlined /> {{ t('access_log.basic_settings') }}</span>
         </header>
@@ -213,7 +213,7 @@ const targetIcon = (target: string) => TARGET_ICONS[target] ?? FileTextOutlined
       </section>
 
       <!-- Log content settings -->
-      <section class="lg-panel al-panel">
+      <section class="vn-panel al-panel">
         <header class="al-panel-head">
           <span class="al-panel-title"><FileTextOutlined /> {{ t('access_log.content_settings') }}</span>
         </header>
@@ -256,7 +256,7 @@ const targetIcon = (target: string) => TARGET_ICONS[target] ?? FileTextOutlined
     </div>
 
     <!-- File rotation — only when file output is enabled -->
-    <section v-if="showFileConfig" class="lg-panel al-panel">
+    <section v-if="showFileConfig" class="vn-panel al-panel">
       <header class="al-panel-head">
         <span class="al-panel-title"><InboxOutlined /> {{ t('access_log.file_settings') }}</span>
       </header>
@@ -273,7 +273,7 @@ const targetIcon = (target: string) => TARGET_ICONS[target] ?? FileTextOutlined
     </section>
 
     <!-- Fluent Bit collection guide -->
-    <section class="lg-panel al-panel">
+    <section class="vn-panel al-panel">
       <header class="al-panel-head">
         <span class="al-panel-title"><InfoCircleOutlined /> {{ t('access_log.advanced_config') }}</span>
       </header>

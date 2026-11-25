@@ -1,0 +1,423 @@
+/**
+ * Routes page composition on the Vue-native layer.
+ * Layout only — surfaces, ink, radii and control chrome come from
+ * styles/vue-native.css; shared catalog/portal patterns from
+ * styles/vue-native-shared.css. Nothing leaks outside `.vn-scope` / `.vn-portal`.
+ */
+
+.vn-routes {
+  padding: 0;
+  min-height: 100%;
+}
+
+/* ==================== Tile bands ==================== */
+.vn-routes .vn-tile-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  height: 24px;
+  flex: none;
+}
+
+.vn-routes .vn-route-uri {
+  font-family: var(--vn-mono);
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.vn-routes .vn-chip-key {
+  font-weight: 600;
+  color: var(--vn-ink);
+}
+
+.vn-routes .vn-chip-value {
+  font-family: var(--vn-mono);
+  font-size: 11px;
+  color: var(--vn-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vn-routes .vn-chip-weight {
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink-3);
+}
+
+/* ==================== Table view ==================== */
+.vn-routes .vn-route-target {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--vn-mono);
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+/* ==================== Form rows (create / edit modal) ==================== */
+.vn-portal .form-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vn-portal .form-item-row + .form-item-row {
+  margin-top: 8px;
+}
+
+.vn-portal .predicate-type-select {
+  width: 118px;
+  flex: none;
+}
+
+.vn-portal .predicate-value-control {
+  flex: 1;
+  min-width: 0;
+}
+
+.vn-portal .form-item-row > .action-btn {
+  flex: none;
+}
+
+.vn-portal .form-row-name .form-item-order {
+  flex: none;
+  width: 110px;
+}
+
+.vn-portal .routing-mode-segmented {
+  width: 100%;
+}
+
+/* Weight summary above the multi-service binding rows. */
+.vn-portal .weight-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vn-portal .weight-bar-hint {
+  font-size: 11px;
+  color: var(--vn-warn);
+}
+
+.vn-portal .binding-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vn-portal .binding-row + .binding-row {
+  margin-top: 8px;
+}
+
+.vn-portal .binding-row-service {
+  flex: 1;
+  min-width: 0;
+}
+
+.vn-portal .binding-row-weight {
+  width: 108px;
+  flex: none;
+}
+
+.vn-portal .binding-row > .action-btn {
+  flex: none;
+}
+
+/* Static / Nacos origin tag inside service select options. */
+.vn-portal .service-option-tag {
+  float: right;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-3);
+  font-size: 10.5px;
+  line-height: 1.7;
+}
+
+.vn-portal .select-group-icon {
+  margin-right: 5px;
+  color: var(--vn-ink-3);
+}
+
+/* AI upstream cards mirror the service instance rows. */
+.vn-portal .upstream-card {
+  background: var(--vn-surface);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 9px 10px 10px;
+}
+
+.vn-portal .upstream-card + .upstream-card {
+  margin-top: 8px;
+}
+
+/* Auto margin, not space-between: a tooltip popup container injected as a
+   sibling must not drag the remove button to the centre. */
+.vn-portal .upstream-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 7px;
+}
+
+.vn-portal .upstream-head > .action-btn {
+  margin-left: auto;
+}
+
+.vn-portal .upstream-index {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .upstream-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vn-portal .upstream-service-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.vn-portal .upstream-weight {
+  width: 108px;
+  flex: none;
+}
+
+.vn-portal .mapping-block {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--vn-line-soft);
+}
+
+.vn-portal .mapping-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+  margin-bottom: 6px;
+}
+
+.vn-portal .mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vn-portal .mapping-row + .mapping-row {
+  margin-top: 6px;
+}
+
+.vn-portal .mapping-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.vn-portal .mapping-arrow {
+  flex: none;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .mapping-row > .action-btn {
+  flex: none;
+}
+
+.vn-portal .inline-add-btn.ant-btn {
+  padding-inline: 0;
+  height: 24px;
+  font-size: 11.5px;
+}
+
+.vn-portal .model-predicates {
+  margin-top: 10px;
+}
+
+.vn-portal .subsection-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+  margin-bottom: 7px;
+}
+
+.vn-portal .subsection-title .anticon {
+  font-size: var(--vn-glyph-sm);
+  color: var(--vn-brand);
+}
+
+.vn-portal .model-predicate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vn-portal .model-predicate-row + .model-predicate-row {
+  margin-top: 8px;
+}
+
+.vn-portal .model-match-type {
+  width: 110px;
+  flex: none;
+}
+
+.vn-portal .model-match-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.vn-portal .model-predicate-row > .action-btn {
+  flex: none;
+}
+
+/* Gray rules */
+.vn-portal .gray-rules-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vn-portal .gray-rules-hint {
+  font-size: 11px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .gray-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vn-portal .gray-rule-row + .gray-rule-row {
+  margin-top: 8px;
+}
+
+.vn-portal .gray-rule-type {
+  width: 104px;
+  flex: none;
+}
+
+.vn-portal .gray-rule-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.vn-portal .gray-rule-weight {
+  width: 104px;
+  flex: none;
+}
+
+.vn-portal .gray-rule-target {
+  flex: 1.2;
+  min-width: 0;
+}
+
+.vn-portal .gray-rule-row > .action-btn {
+  flex: none;
+}
+
+.vn-portal .add-predicate-btn-modern.ant-btn {
+  width: 100%;
+  height: 32px;
+  margin-top: 8px;
+}
+
+.vn-portal .section-content > .add-predicate-btn-modern.ant-btn:first-child {
+  margin-top: 0;
+}
+
+.vn-portal .plugins-guide-alert.ant-alert {
+  margin-bottom: 8px;
+}
+
+.vn-portal .section-hint {
+  display: block;
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--vn-ink-3);
+}
+
+/* ==================== Detail drawer extras ==================== */
+.vn-portal .vn-binding-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--vn-ink);
+}
+
+.vn-portal .vn-binding-weight {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-rule-type {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  color: var(--vn-brand);
+}
+
+.vn-portal .vn-rule-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--vn-mono);
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-binding-target {
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .vn-instance-card.vn-binding-card {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vn-portal .vn-binding-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.vn-portal .vn-binding-main > .vn-binding-weight {
+  margin-left: auto;
+}
+
+.vn-portal .vn-binding-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

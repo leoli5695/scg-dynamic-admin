@@ -53,3 +53,13 @@ export function methodTone(method?: string): Tone {
 export function progressPercent(value: number | undefined): number {
   return Math.min(100, Math.max(0, value || 0))
 }
+
+/** Map the legacy capsule tone buckets onto the Vue-native badge tones. */
+export type VnTone = 'ok' | 'warn' | 'err' | 'info' | 'idle'
+export function vnTone(tone: Tone): VnTone {
+  if (tone === 'success') return 'ok'
+  if (tone === 'warning') return 'warn'
+  if (tone === 'error') return 'err'
+  if (tone === 'info') return 'info'
+  return 'idle'
+}

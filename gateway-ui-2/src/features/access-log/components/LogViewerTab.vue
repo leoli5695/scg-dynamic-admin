@@ -14,7 +14,7 @@ import { useI18n } from 'vue-i18n'
 import type { Dayjs } from 'dayjs'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import {
-  ClockCircleOutlined, ClusterOutlined, ExclamationCircleOutlined, FileTextOutlined,
+  ClockCircleOutlined, ClusterOutlined, CopyOutlined, ExclamationCircleOutlined, FileTextOutlined,
   HistoryOutlined, ReloadOutlined, SearchOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
@@ -28,6 +28,11 @@ import type {
   AccessLogEntriesPage, AccessLogEntry, AccessLogStats, DeployMode,
 } from '@/api/accessLog'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
 import {
   HISTORY_RANGE_OPTIONS, METHOD_FILTER_OPTIONS, STATUS_FILTER_OPTIONS,
   rangeToSeconds, type HistoryRange,
@@ -140,10 +145,36 @@ const historyRangeOptions = computed(() => HISTORY_RANGE_OPTIONS.map((range) => 
 })))
 const methodOptions = METHOD_FILTER_OPTIONS.map((method) => ({ value: method, label: method }))
 const statusOptions = STATUS_FILTER_OPTIONS.map((code) => ({ value: code, label: String(code) }))
-const viewModeOptions = computed(() => [
-  { value: 'realtime', label: t('access_log.realtime_mode') },
-  { value: 'history', label: t('access_log.history_mode') },
+const vnViewModeOptions = computed<VnSegmentOption<string>[]>(() => [
+  { key: 'realtime', label: t('access_log.realtime_mode'), icon: ClockCircleOutlined },
+  { key: 'history', label: t('access_log.history_mode'), icon: HistoryOutlined },
 ])
+
+const viewModeSeg = computed<string>({
+  get: () => logViewMode.value,
+  set: (value) => handleViewModeChange(value),
+})
+
+const statItems = computed<VnStatItem[]>(() => [
+  { key: 'total', value: stats.value?.totalRequests ?? 0, label: t('access_log.total_requests'), icon: FileTextOutlined },
+  { key: 'avg', value: stats.value?.avgDuration ?? 0, label: t('access_log.avg_duration'), icon: ClockCircleOutlined, accent: 'var(--vn-info)' },
+])
+
+function statusBadgeTone(code: number): 'ok' | 'warn' | 'err' | 'info' | 'idle' {
+  const tone = getStatusTone(code)
+  switch (tone) {
+    case 'success': return 'ok'
+    case 'warning': return 'warn'
+    case 'error': return 'err'
+    case 'info': return 'info'
+    default: return 'idle'
+  }
+}
+
+async function copyValue(text: string) {
+  if (await copyText(text)) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
+}
 
 const viewDateValue = computed(() => viewDate.value ?? undefined)
 
@@ -370,34 +401,36 @@ const rowKey = (record: AccessLogEntry): string =>
 
 <template>
   <div class="al-viewer">
-    <!-- View mode + log source -->
-    <section class="lg-panel al-source-panel">
-      <div class="al-source-row">
-        <span class="lg-section-title">{{ t('access_log.view_mode') }}</span>
-        <a-segmented
-          :value="logViewMode"
-          :options="viewModeOptions"
-          @change="handleViewModeChange"
-        >
-          <template #label="{ value }">
-            <span class="al-seg-label">
-              <HistoryOutlined v-if="value === 'history'" />
-              <ClockCircleOutlined v-else />
-              <span>{{ value === 'history' ? t('access_log.history_mode') : t('access_log.realtime_mode') }}</span>
-            </span>
-          </template>
-        </a-segmented>
-        <span v-if="logViewMode === 'history'" class="lg-chip">{{ t('access_log.history_mode_desc') }}</span>
-        <span v-if="logViewMode === 'realtime' && isK8s && selectedPod" class="lg-chip is-live">
-          <ClockCircleOutlined /> {{ t('access_log.realtime_stdout') }}
-        </span>
-      </div>
+    <!-- Tool row: view mode + compact stats + path search + count -->
+    <div class="vn-metarow">
+      <VnSegmented v-model="viewModeSeg" :options="vnViewModeOptions" :label="t('access_log.view_mode')" />
+      <VnStatRail :items="statItems" :label="t('access_log.total_requests')" />
+      <a-input
+        :value="pathDraft"
+        :placeholder="t('access_log.path_contains')"
+        allow-clear
+        class="vn-search"
+        @update:value="onPathInput"
+        @press-enter="commitFilters({ path: pathDraft.trim() || undefined })"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <span class="vn-filterbar-spacer" />
+      <span class="vn-result-count" role="status">{{ t('access_log.total_entries', { count: total }) }}</span>
+      <VnIconButton :icon="ReloadOutlined" :label="t('access_log.refresh')" :disabled="loading" @click="reload" />
+    </div>
 
+    <!-- Log source + status/method distributions -->
+    <section class="vn-panel al-source-panel">
       <div v-if="isK8s" class="al-source-row">
         <span class="al-source-title"><ClusterOutlined /> {{ t('access_log.k8s_viewer_title') }}</span>
         <span class="al-source-hint">
           {{ logViewMode === 'history' ? t('access_log.k8s_viewer_desc_history') : t('access_log.k8s_viewer_desc_realtime') }}
         </span>
+        <span v-if="logViewMode === 'realtime' && selectedPod" class="vn-chip is-live">
+          <ClockCircleOutlined /> {{ t('access_log.realtime_stdout') }}
+        </span>
+        <span v-if="logViewMode === 'history'" class="vn-chip">{{ t('access_log.history_mode_desc') }}</span>
       </div>
       <div v-if="isK8s" class="al-source-row">
         <a-select
@@ -445,48 +478,25 @@ const rowKey = (record: AccessLogEntry): string =>
         :message="t('access_log.local_viewer_title')"
         :description="t('access_log.local_viewer_desc')"
       />
-    </section>
 
-    <!-- Aggregate stats -->
-    <section v-if="stats" class="al-stats">
-      <div class="lg-panel al-stat">
-        <span class="lg-section-title">{{ t('access_log.total_requests') }}</span>
-        <span class="al-stat-value">{{ stats.totalRequests }}</span>
-      </div>
-      <div class="lg-panel al-stat">
-        <span class="lg-section-title">{{ t('access_log.avg_duration') }}</span>
-        <span class="al-stat-value">{{ stats.avgDuration }}<em>ms</em></span>
-      </div>
-      <div class="lg-panel al-stat">
-        <span class="lg-section-title">{{ t('access_log.status_codes') }}</span>
-        <span class="al-stat-pills">
-          <span
-            v-for="[code, count] in statusEntries"
-            :key="code"
-            :class="['status-badge', `status-badge-${getStatusTone(Number(code))}`]"
-          >
-            <i :class="['status-dot', `status-dot-${getStatusTone(Number(code))}`]" />
-            {{ code }}: {{ count }}
-          </span>
-          <span v-if="statusEntries.length === 0" class="al-muted">-</span>
+      <div v-if="stats" class="al-source-row al-dist-row">
+        <span class="al-source-title">{{ t('access_log.status_codes') }}</span>
+        <VnBadge v-for="[code, count] in statusEntries" :key="code" :tone="statusBadgeTone(Number(code))">
+          {{ code }}: {{ count }}
+        </VnBadge>
+        <span v-if="statusEntries.length === 0" class="al-muted">-</span>
+        <span class="al-dist-sep" />
+        <span class="al-source-title">{{ t('access_log.methods') }}</span>
+        <span v-for="[method, count] in methodEntries" :key="method" :class="['vn-method', `is-${getMethodTone(method)}`]">
+          {{ method }}: {{ count }}
         </span>
-      </div>
-      <div class="lg-panel al-stat">
-        <span class="lg-section-title">{{ t('access_log.methods') }}</span>
-        <span class="al-stat-pills">
-          <span
-            v-for="[method, count] in methodEntries"
-            :key="method"
-            :class="['al-method-pill', `al-method-${getMethodTone(method)}`]"
-          >{{ method }}: {{ count }}</span>
-          <span v-if="methodEntries.length === 0" class="al-muted">-</span>
-        </span>
+        <span v-if="methodEntries.length === 0" class="al-muted">-</span>
       </div>
     </section>
 
-    <!-- Filters -->
-    <section class="lg-panel al-filter-panel">
-      <div class="al-filter-row">
+    <!-- Log table -->
+    <div class="vn-panel al-table-panel">
+      <div class="al-filter-strip">
         <a-select
           v-if="logViewMode === 'history'"
           :value="historyTimeRange"
@@ -502,16 +512,6 @@ const rowKey = (record: AccessLogEntry): string =>
           class="al-date-picker"
           @change="(date: Dayjs | null) => handleDateChange(date)"
         />
-        <a-input
-          :value="pathDraft"
-          :placeholder="t('access_log.path_contains')"
-          allow-clear
-          class="al-filter-input is-path"
-          @update:value="onPathInput"
-          @press-enter="commitFilters({ path: pathDraft.trim() || undefined })"
-        >
-          <template #prefix><SearchOutlined /></template>
-        </a-input>
         <a-select
           :value="filters.method"
           :placeholder="t('access_log.method')"
@@ -538,15 +538,8 @@ const rowKey = (record: AccessLogEntry): string =>
         >
           <template #prefix><SearchOutlined /></template>
         </a-input>
-        <a-button :loading="loading" @click="reload">
-          <template #icon><ReloadOutlined /></template>
-          {{ t('access_log.refresh') }}
-        </a-button>
       </div>
-    </section>
 
-    <!-- Log table -->
-    <section class="lg-panel al-table-panel">
       <a-table
         :columns="columns"
         :data-source="entries"
@@ -562,37 +555,31 @@ const rowKey = (record: AccessLogEntry): string =>
             <span class="al-time"><ClockCircleOutlined /> {{ formatClock(record['@timestamp']) }}</span>
           </template>
           <template v-else-if="column.key === 'method'">
-            <span :class="['al-method-pill', `al-method-${getMethodTone(record.method)}`]">{{ record.method }}</span>
+            <span :class="['vn-method', `is-${getMethodTone(record.method)}`]">{{ record.method }}</span>
           </template>
           <template v-else-if="column.key === 'path'">
-            <span class="al-mono" :title="record.path">{{ record.path }}</span>
+            <span class="vn-mono al-path" :title="record.path">{{ record.path }}</span>
           </template>
           <template v-else-if="column.key === 'statusCode'">
-            <span :class="['status-badge', `status-badge-${getStatusTone(record.statusCode)}`]">
-              <i :class="['status-dot', `status-dot-${getStatusTone(record.statusCode)}`]" />
-              {{ record.statusCode }}
-            </span>
+            <VnBadge :tone="statusBadgeTone(record.statusCode)">{{ record.statusCode }}</VnBadge>
           </template>
           <template v-else-if="column.key === 'durationMs'">
             <span :class="['al-duration', getDurationTone(record.durationMs)]">{{ record.durationMs }}ms</span>
           </template>
           <template v-else-if="column.key === 'clientIp'">
-            <span class="al-mono">{{ record.clientIp || '-' }}</span>
+            <span class="vn-mono">{{ record.clientIp || '-' }}</span>
           </template>
           <template v-else-if="column.key === 'auth'">
-            <a-tooltip v-if="record.authType" :title="`${t('access_log.col_policy')}${record.authPolicy || '-'}`">
-              <span class="al-pill is-violet">{{ record.authType }}</span>
+            <a-tooltip v-if="record.authType" :title="`${t('access_log.col_policy')}${record.authPolicy || '-'}`" overlay-class-name="vn-tooltip">
+              <span class="vn-chip">{{ record.authType }}</span>
             </a-tooltip>
             <span v-else class="al-muted">-</span>
           </template>
           <template v-else-if="column.key === 'traceId'">
-            <a-typography-text
-              v-if="record.traceId"
-              class="al-mono"
-              :copyable="{ text: record.traceId, tooltips: false }"
-            >
-              {{ record.traceId }}
-            </a-typography-text>
+            <span v-if="record.traceId" class="al-copy-cell">
+              <span class="vn-mono">{{ record.traceId }}</span>
+              <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyValue(record.traceId)" />
+            </span>
             <span v-else class="al-muted">-</span>
           </template>
         </template>
@@ -606,14 +593,12 @@ const rowKey = (record: AccessLogEntry): string =>
         </template>
 
         <template #emptyText>
-          <div v-if="!loading" :class="['al-empty', loadError ? 'is-error' : '']">
-            <span :class="['icon-tile', loadError ? 'al-empty-error-icon' : 'icon-tile--muted']">
+          <div v-if="!loading" class="al-empty">
+            <span :class="['vn-state-glyph', loadError && 'is-err']" aria-hidden="true">
               <ExclamationCircleOutlined v-if="loadError" />
               <FileTextOutlined v-else />
             </span>
-            <p class="al-empty-title">
-              {{ loadError || t('access_log.total_entries', { count: 0 }) }}
-            </p>
+            <p class="vn-state-title">{{ loadError || t('access_log.total_entries', { count: 0 }) }}</p>
             <a-button v-if="loadError" type="primary" @click="reload">
               <template #icon><ReloadOutlined /></template>
               {{ t('common.refresh') }}
@@ -621,6 +606,6 @@ const rowKey = (record: AccessLogEntry): string =>
           </div>
         </template>
       </a-table>
-    </section>
+    </div>
   </div>
 </template>

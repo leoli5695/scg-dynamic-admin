@@ -8,6 +8,7 @@
   "diagnostic.run_failed": "诊断运行失败",
   "diagnostic.no_data": "无数据",
   "diagnostic.warnings": "警告",
+  "diagnostic.status_critical": "严重",
   "diagnostic.errors": "错误",
   "diagnostic.score": "健康评分",
   "diagnostic.status": "状态",

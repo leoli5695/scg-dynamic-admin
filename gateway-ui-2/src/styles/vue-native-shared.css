@@ -1,0 +1,708 @@
+/**
+ * Shared "Vue Native" catalog + portal patterns for pages beyond services.
+ * Additive layer: every rule is scoped to `.vn-scope` (page root) or
+ * `.vn-portal` (teleported antd root) and mirrors the services baseline
+ * (features/services/services-vue-native.css) declaration-for-declaration,
+ * so loading both never changes the services page. Nothing here redefines
+ * a token or matches an element outside those two scopes.
+ */
+
+/* ==================== Catalog grid ==================== */
+.vn-scope .vn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* 1600-class viewports read four-up; 1440 stays three-up. */
+@media (min-width: 1500px) {
+  .vn-scope .vn-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .vn-scope .vn-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .vn-scope .vn-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.vn-scope .vn-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px 10px 15px;
+  transition: border-color var(--vn-fast) var(--vn-ease), background var(--vn-fast) var(--vn-ease);
+}
+
+/* Health rail: the only place a status colour fills an area. */
+.vn-scope .vn-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--vn-rail);
+}
+
+.vn-scope .vn-rail-ok { --vn-rail: var(--vn-ok); }
+.vn-scope .vn-rail-warn { --vn-rail: var(--vn-warn); }
+.vn-scope .vn-rail-err { --vn-rail: var(--vn-err); }
+.vn-scope .vn-rail-idle { --vn-rail: var(--vn-line-strong); }
+
+.vn-scope .vn-tile:hover {
+  border-color: var(--vn-line-strong);
+  background: var(--vn-surface-raised);
+}
+
+.vn-scope .vn-tile-head,
+.vn-scope .vn-tile-identity,
+.vn-scope .vn-tile-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.vn-scope .vn-tile-head {
+  justify-content: space-between;
+}
+
+.vn-scope .vn-tile-glyph {
+  flex: none;
+  font-size: var(--vn-glyph-lg);
+}
+
+.vn-scope .vn-tile-meta {
+  flex-wrap: wrap;
+}
+
+.vn-scope .vn-tile-name {
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vn-ink);
+  font: inherit;
+  font-weight: 620;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vn-scope .vn-tile-name:hover {
+  text-decoration: underline;
+}
+
+.vn-scope .vn-tile-name:focus-visible {
+  outline: 2px solid var(--vn-ok);
+  outline-offset: -2px;
+}
+
+.vn-scope .vn-tile-endpoint,
+.vn-scope .vn-tile-warning {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .vn-tile-warning {
+  color: var(--vn-err);
+}
+
+.vn-scope .vn-tile-warning-text {
+  margin-inline-start: 5px;
+}
+
+/* Fixed tile bands: every card in a row shares the same band offsets. */
+.vn-scope .vn-tile-band {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 24px;
+  flex: none;
+}
+
+.vn-scope .vn-band-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+  white-space: nowrap;
+}
+
+.vn-scope .vn-band-label .anticon {
+  font-size: var(--vn-glyph-sm);
+}
+
+.vn-scope .vn-band-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink-2);
+  letter-spacing: 0;
+}
+
+/* +N overflow marker lives in the band head so it is never clipped away. */
+.vn-scope .vn-band-more {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-brand);
+  background: var(--vn-brand-soft);
+  border-radius: var(--vn-r-chip);
+  padding: 1px 6px;
+  line-height: 1.5;
+}
+
+.vn-scope .vn-chips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.vn-scope .vn-chips > .vn-chip {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.vn-scope .vn-chips > .vn-chip > .vn-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vn-scope .vn-tile-empty {
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .vn-pagination {
+  display: flex;
+  justify-content: end;
+  margin-top: 12px;
+}
+
+.vn-scope .vn-more-btn.ant-btn,
+.vn-portal .vn-more-btn.ant-btn {
+  flex: none;
+  padding-inline: 8px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.vn-scope .vn-more-btn.ant-btn {
+  min-width: 28px;
+  height: 28px;
+}
+
+/* ==================== Table view ==================== */
+.vn-scope .vn-tablewrap {
+  overflow-x: auto;
+}
+
+.vn-scope .vn-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.vn-scope .vn-table thead th {
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+  background: var(--vn-surface-sunken);
+  border-bottom: 1px solid var(--vn-line);
+  white-space: nowrap;
+}
+
+.vn-scope .vn-table-actions-head {
+  text-align: right;
+}
+
+.vn-scope .vn-table tbody td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--vn-line-soft);
+  vertical-align: middle;
+}
+
+.vn-scope .vn-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.vn-scope .vn-row {
+  transition: background var(--vn-fast) var(--vn-ease);
+}
+
+.vn-scope .vn-row:hover {
+  background: var(--vn-surface-raised);
+}
+
+.vn-scope .vn-table tbody td:last-child {
+  text-align: right;
+}
+
+.vn-scope .vn-row-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.vn-scope .vn-row-glyph {
+  font-size: var(--vn-glyph);
+  color: var(--vn-ink-3);
+  flex: none;
+}
+
+.vn-scope .vn-row-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vn-scope .vn-row-id {
+  color: var(--vn-ink-3);
+  font-size: 11px;
+}
+
+.vn-scope .vn-row-dim {
+  color: var(--vn-ink-2);
+}
+
+/* ==================== Loading skeleton ==================== */
+.vn-scope .vn-skel-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.vn-scope .vn-skel-line {
+  height: 10px;
+}
+
+.vn-scope .vn-skel-block {
+  height: 54px;
+}
+
+/* ==================== Create / edit modal ==================== */
+.vn-portal.vn-modal .ant-modal {
+  max-width: calc(100vw - 32px);
+  padding-bottom: 0;
+}
+
+.vn-portal.vn-modal .ant-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 86vh;
+}
+
+.vn-portal.vn-modal .ant-modal .ant-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.vn-portal .vn-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.vn-portal .vn-modal-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vn-portal .vn-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vn-portal .vn-modal-head-glyph {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-brand-line);
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+  font-size: var(--vn-glyph);
+}
+
+.vn-portal .vn-modal-title {
+  font-size: 14.5px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  color: var(--vn-ink);
+}
+
+.vn-portal .vn-modal-subtitle {
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+  margin-top: 1px;
+}
+
+/* Sections are nested flat panels, not bordered fieldsets. */
+.vn-portal .form-section-modern {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 12px;
+}
+
+.vn-portal .section-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.vn-portal .section-header .section-icon {
+  font-size: var(--vn-glyph-sm);
+  color: var(--vn-brand);
+}
+
+.vn-portal .section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .section-subtitle {
+  font-size: 11px;
+  color: var(--vn-ink-3);
+  margin-left: auto;
+}
+
+.vn-portal .section-content .ant-form-item {
+  margin-bottom: 10px;
+}
+
+.vn-portal .section-content > .ant-form-item:last-child,
+.vn-portal .section-content > .form-row:last-child .ant-form-item {
+  margin-bottom: 0;
+}
+
+.vn-portal .form-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.vn-portal .form-item-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.vn-portal .ant-form-item .ant-form-item-label {
+  padding-bottom: 3px;
+}
+
+.vn-portal .modal-footer-modern {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 11px 18px;
+  border-top: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+
+.vn-portal .vn-form .ant-select-arrow,
+.vn-portal .vn-form .ant-form-item-tooltip {
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-readonly {
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: var(--vn-r-control);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* ==================== Detail drawer ==================== */
+.vn-portal.vn-drawer.ant-drawer .ant-drawer-content-wrapper {
+  box-shadow: var(--vn-shadow-pop);
+}
+
+.vn-portal .vn-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Right alignment uses an auto margin, never space-between: the app's
+   ConfigProvider injects popup containers as extra children and a gap or
+   space-between would let them drag the close button off the edge. */
+.vn-portal .vn-detail-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+
+.vn-portal .vn-detail-head > .action-btn {
+  margin-left: auto;
+}
+
+.vn-portal .vn-detail-head-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-right: 10px;
+  min-width: 0;
+}
+
+.vn-portal .vn-detail-glyph {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-brand);
+  font-size: var(--vn-glyph-lg);
+}
+
+.vn-portal .vn-detail-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  color: var(--vn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .vn-detail-idrow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.vn-portal .vn-detail-id {
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .vn-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vn-portal .vn-detail-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vn-portal .vn-detail-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-detail-section {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 12px;
+}
+
+.vn-portal .vn-detail-section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-detail-section-head .anticon {
+  font-size: var(--vn-glyph-sm);
+  color: var(--vn-brand);
+}
+
+.vn-portal .vn-detail-section-head .vn-count {
+  margin-left: auto;
+  color: var(--vn-ink-3);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.vn-portal .vn-kv {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.vn-portal .vn-kv-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vn-portal .vn-kv-wide {
+  grid-column: 1 / -1;
+}
+
+.vn-portal .vn-kv-label {
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .vn-kv-value {
+  font-size: 12.5px;
+  color: var(--vn-ink);
+  overflow-wrap: anywhere;
+}
+
+.vn-portal .vn-instance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vn-portal .vn-instance-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+
+.vn-portal .vn-instance-addr {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.vn-portal .vn-instance-addr .vn-mono {
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-instance-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .vn-detail-empty {
+  font-size: 12px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .vn-detail-actions {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+
+.vn-portal .vn-detail-actions > .ant-btn-primary {
+  flex: 1;
+}
+
+/* Code facts inside drawers / modals. */
+.vn-portal .vn-codeblock {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+  font-family: var(--vn-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--vn-ink-2);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.vn-portal .vn-code-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.vn-portal .vn-code-item + .vn-code-item {
+  margin-top: 8px;
+}
+
+.vn-portal .vn-code-item-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--vn-ink);
+}

@@ -12,7 +12,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  AppstoreOutlined, ArrowLeftOutlined, CloudServerOutlined,
+  AppstoreOutlined, ArrowLeftOutlined,
   CloudSyncOutlined, ClusterOutlined, DatabaseOutlined, SettingOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
@@ -21,7 +21,13 @@ import { getClusterImages, getClusters } from '@/api/kubernetes'
 import { ApiError } from '@/api/http'
 import type { InstanceCreateRequest } from '@/types/instance'
 import { message } from '@/utils/feedback'
-import './instances.css'
+import VnPanel from '@/components/vn/VnPanel.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
+import '@/styles/vue-native.css'
+import '@/styles/vue-native-shared.css'
+import './instances-vue-native.css'
+
+defineOptions({ name: 'InstanceCreatePage' })
 
 /** Parsed local image: [registry/][namespace/]image[:tag]. */
 interface LocalImage {
@@ -145,24 +151,21 @@ function handleCancel() {
 </script>
 
 <template>
-  <div class="instance-create-page">
-    <a-card class="instance-create-panel" :bordered="false">
-      <div class="instance-create-inner">
-        <div class="ic-header">
-          <a-button type="text" class="ic-back" @click="handleCancel">
-            <template #icon><ArrowLeftOutlined /></template>
-          </a-button>
-          <div class="ic-header-icon"><CloudServerOutlined /></div>
-          <div class="ic-header-copy">
-            <h1 class="ic-title">{{ t('instance.create_instance') }}</h1>
-            <p class="ic-subtitle">{{ t('instance.page_subtitle') }}</p>
-          </div>
-        </div>
+  <div class="instance-create-page vn-instances vn-scope">
+    <VnToolbar
+      :title="t('instance.create_instance')"
+      :lede="t('instance.page_subtitle')"
+    >
+      <template #actions>
+        <a-button @click="handleCancel">
+          <template #icon><ArrowLeftOutlined /></template>{{ t('common.back') }}
+        </a-button>
+      </template>
+    </VnToolbar>
 
-        <a-divider class="ic-divider" />
-
-        <a-spin :spinning="loading">
-          <a-form :model="formState" layout="vertical" @finish="handleSubmit">
+    <VnPanel class="vn-create-panel">
+      <a-spin :spinning="loading">
+        <a-form :model="formState" layout="vertical" @finish="handleSubmit">
             <!-- Basic Info -->
             <section class="ic-section">
               <div class="ic-section-header">
@@ -173,12 +176,12 @@ function handleCancel() {
                 <a-row :gutter="16">
                   <a-col :span="12">
                     <a-form-item name="instanceName" :label="t('instance.instance_name')" :rules="[{ required: true, message: t('common.required') }]">
-                      <a-input v-model:value="formState.instanceName" size="large" :placeholder="t('instance.instance_name_placeholder')" />
+                      <a-input v-model:value="formState.instanceName" :placeholder="t('instance.instance_name_placeholder')" />
                     </a-form-item>
                   </a-col>
                   <a-col :span="12">
                     <a-form-item name="clusterId" :label="t('instance.cluster')" :rules="[{ required: true, message: t('common.required') }]">
-                      <a-select v-model:value="formState.clusterId" size="large" :placeholder="t('instance.select_cluster')">
+                      <a-select v-model:value="formState.clusterId" :placeholder="t('instance.select_cluster')" popup-class-name="vn-portal">
                         <a-select-option
                           v-for="cluster in connectedClusters"
                           :key="cluster.id"
@@ -186,7 +189,7 @@ function handleCancel() {
                         >
                           <ClusterOutlined class="ic-cluster-icon" />
                           {{ cluster.clusterName }}
-                          <a-tag color="blue" class="ic-option-tag">{{ cluster.clusterVersion }}</a-tag>
+                          <span class="ic-option-tag">{{ cluster.clusterVersion }}</span>
                         </a-select-option>
                       </a-select>
                     </a-form-item>
@@ -195,12 +198,12 @@ function handleCancel() {
                 <a-row :gutter="16">
                   <a-col :span="12">
                     <a-form-item name="namespace" :label="t('instance.namespace')" :rules="[{ required: true, message: t('common.required') }]">
-                      <a-input v-model:value="formState.namespace" size="large" :placeholder="t('instance.namespace_placeholder')" />
+                      <a-input v-model:value="formState.namespace" :placeholder="t('instance.namespace_placeholder')" />
                     </a-form-item>
                   </a-col>
                   <a-col :span="12">
                     <a-form-item name="createNamespace" :label="t('instance.create_namespace')">
-                      <a-select v-model:value="createNamespaceValue" size="large">
+                      <a-select v-model:value="createNamespaceValue" popup-class-name="vn-portal">
                         <a-select-option value="yes">{{ t('common.yes') }}</a-select-option>
                         <a-select-option value="no">{{ t('common.no') }}</a-select-option>
                       </a-select>
@@ -222,24 +225,24 @@ function handleCancel() {
                 <a-row :gutter="16">
                   <a-col :span="12">
                     <a-form-item name="nacosServerAddr" :label="t('instance.nacos_server_addr')" :tooltip="t('instance.nacos_server_addr_tooltip')">
-                      <a-input v-model:value="formState.nacosServerAddr" size="large" :placeholder="t('instance.nacos_server_addr_placeholder')" />
+                      <a-input v-model:value="formState.nacosServerAddr" :placeholder="t('instance.nacos_server_addr_placeholder')" />
                     </a-form-item>
                   </a-col>
                   <a-col :span="12">
                     <a-form-item name="redisServerAddr" :label="t('instance.redis_server_addr')" :tooltip="t('instance.redis_server_addr_tooltip')">
-                      <a-input v-model:value="formState.redisServerAddr" size="large" :placeholder="t('instance.redis_server_addr_placeholder')" />
+                      <a-input v-model:value="formState.redisServerAddr" :placeholder="t('instance.redis_server_addr_placeholder')" />
                     </a-form-item>
                   </a-col>
                 </a-row>
                 <a-row :gutter="16">
                   <a-col :span="12">
                     <a-form-item name="jaegerServerAddr" :label="t('instance.jaeger_server_addr')" :tooltip="t('instance.jaeger_server_addr_tooltip')">
-                      <a-input v-model:value="formState.jaegerServerAddr" size="large" :placeholder="t('instance.jaeger_server_addr_placeholder')" />
+                      <a-input v-model:value="formState.jaegerServerAddr" :placeholder="t('instance.jaeger_server_addr_placeholder')" />
                     </a-form-item>
                   </a-col>
                   <a-col :span="12">
                     <a-form-item name="prometheusServerAddr" :label="t('instance.prometheus_server_addr')" :tooltip="t('instance.prometheus_server_addr_tooltip')">
-                      <a-input v-model:value="formState.prometheusServerAddr" size="large" :placeholder="t('instance.prometheus_server_addr_placeholder')" />
+                      <a-input v-model:value="formState.prometheusServerAddr" :placeholder="t('instance.prometheus_server_addr_placeholder')" />
                     </a-form-item>
                   </a-col>
                 </a-row>
@@ -256,7 +259,7 @@ function handleCancel() {
                 <a-row :gutter="16">
                   <a-col :span="8">
                     <a-form-item name="specType" :label="t('instance.spec_type')" :rules="[{ required: true }]">
-                      <a-select v-model:value="formState.specType" size="large">
+                      <a-select v-model:value="formState.specType" popup-class-name="vn-portal">
                         <a-select-option v-for="spec in specOptions" :key="spec.type" :value="spec.type">
                           {{ spec.type === 'custom' ? t('instance.spec_custom') : t(`instance.spec_${spec.type}`) }}
                         </a-select-option>
@@ -266,18 +269,18 @@ function handleCancel() {
                   <template v-if="selectedSpecType === 'custom'">
                     <a-col :span="8">
                       <a-form-item name="cpuCores" :label="t('instance.cpu_cores')" :rules="[{ required: true, message: t('common.required') }]">
-                        <a-input-number v-model:value="formState.cpuCores" :min="0.1" :max="16" :step="0.5" size="large" :style="{ width: '100%' }" placeholder="1.0" />
+                        <a-input-number v-model:value="formState.cpuCores" :min="0.1" :max="16" :step="0.5" :style="{ width: '100%' }" placeholder="1.0" />
                       </a-form-item>
                     </a-col>
                     <a-col :span="8">
                       <a-form-item name="memoryMB" :label="t('instance.memory_mb')" :rules="[{ required: true, message: t('common.required') }]">
-                        <a-input-number v-model:value="formState.memoryMB" :min="128" :max="16384" :step="128" size="large" :style="{ width: '100%' }" placeholder="1024" />
+                        <a-input-number v-model:value="formState.memoryMB" :min="128" :max="16384" :step="128" :style="{ width: '100%' }" placeholder="1024" />
                       </a-form-item>
                     </a-col>
                   </template>
                   <a-col :span="8">
                     <a-form-item name="replicas" :label="t('instance.replicas')" :rules="[{ required: true }]">
-                      <a-input-number v-model:value="formState.replicas" :min="1" :max="10" size="large" :style="{ width: '100%' }" />
+                      <a-input-number v-model:value="formState.replicas" :min="1" :max="10" :style="{ width: '100%' }" />
                     </a-form-item>
                   </a-col>
                 </a-row>
@@ -294,7 +297,7 @@ function handleCancel() {
                 <a-row :gutter="16">
                   <a-col :span="12">
                     <a-form-item name="imagePullPolicy" :label="t('instance.image_pull_policy')" :tooltip="t('instance.image_pull_policy_tooltip')">
-                      <a-select v-model:value="formState.imagePullPolicy" size="large" :style="{ width: '100%' }">
+                      <a-select v-model:value="formState.imagePullPolicy" :style="{ width: '100%' }" popup-class-name="vn-portal">
                         <a-select-option value="IfNotPresent">{{ t('instance.pull_if_not_present') }}</a-select-option>
                         <a-select-option value="Always">{{ t('instance.pull_always') }}</a-select-option>
                         <a-select-option value="Never">{{ t('instance.pull_never') }}</a-select-option>
@@ -308,7 +311,7 @@ function handleCancel() {
                     >
                       <a-spin v-if="selectedImagePullPolicy === 'Never' && loadingImages" tip="Loading images..." />
                       <div v-else-if="selectedImagePullPolicy === 'Never' && localImages.length > 0" class="ic-field-stack">
-                        <a-select v-model:value="selectedImageNamespace" size="large" :style="{ width: '100%' }" placeholder="Filter by namespace">
+                        <a-select v-model:value="selectedImageNamespace" :style="{ width: '100%' }" placeholder="Filter by namespace" popup-class-name="vn-portal">
                           <a-select-option value="all">All Namespaces ({{ localImages.length }})</a-select-option>
                           <a-select-option v-for="ns in namespaces" :key="ns" :value="ns">
                             {{ ns }} ({{ localImages.filter((img) => img.namespace === ns).length }})
@@ -317,31 +320,31 @@ function handleCancel() {
                         <a-select
                           v-model:value="formState.image"
                           show-search
-                          size="large"
+                         
                           :placeholder="selectedImageNamespace ? `Select from ${selectedImageNamespace}` : 'Select local image'"
                           option-filter-prop="label"
                           :loading="loadingImages"
                           allow-clear
                           :style="{ width: '100%' }"
-                        >
+                         popup-class-name="vn-portal">
                           <a-select-option v-for="img in filteredImages" :key="img.name" :value="img.name" :label="img.name">
-                            <a-tag color="blue">{{ img.namespace }}</a-tag>
+                            <span class="vn-chip">{{ img.namespace }}</span>
                             <span class="ic-option-image">{{ img.image }}</span>
-                            <a-tag color="green">{{ img.tag }}</a-tag>
+                            <span class="vn-chip">{{ img.tag }}</span>
                           </a-select-option>
                         </a-select>
                       </div>
                       <a-input
                         v-else-if="selectedImagePullPolicy === 'Never'"
                         v-model:value="formState.image"
-                        size="large"
+                       
                         placeholder="No local images found. Enter manually."
                         :style="{ width: '100%' }"
                       />
                       <a-input
                         v-else
                         v-model:value="formState.image"
-                        size="large"
+                       
                         placeholder="e.g., my-gateway:latest"
                         :style="{ width: '100%' }"
                       />
@@ -349,21 +352,20 @@ function handleCancel() {
                   </a-col>
                 </a-row>
                 <a-form-item name="description" :label="t('instance.description')">
-                  <a-textarea v-model:value="formState.description" :rows="3" size="large" show-count :maxlength="500" />
+                  <a-textarea v-model:value="formState.description" :rows="3" show-count :maxlength="500" />
                 </a-form-item>
               </div>
             </section>
 
             <!-- Footer -->
             <div class="ic-footer">
-              <a-button size="large" @click="handleCancel">{{ t('common.cancel') }}</a-button>
-              <a-button type="primary" size="large" html-type="submit" :loading="submitting">
+              <a-button @click="handleCancel">{{ t('common.cancel') }}</a-button>
+              <a-button type="primary" html-type="submit" :loading="submitting">
                 {{ t('instance.create_and_deploy') }}
               </a-button>
             </div>
           </a-form>
         </a-spin>
-      </div>
-    </a-card>
+    </VnPanel>
   </div>
 </template>

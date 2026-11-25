@@ -1,5 +1,6 @@
 {
   "access_log.title": "Access Log Configuration",
+  "access_log.description_helper": "Configure access-log collection and output, and inspect realtime or historical requests",
   "access_log.basic_settings": "Basic Settings",
   "access_log.content_settings": "Log Content Settings",
   "access_log.file_settings": "File Settings",

@@ -27,7 +27,7 @@ const { t } = useI18n()
     :closable="!busy"
     :keyboard="!busy"
     :mask-closable="!busy"
-    wrap-class-name="strategy-delete-modal"
+    wrap-class-name="vn-portal strategy-delete-modal"
     @cancel="emit('cancel')"
   >
     <div class="strategy-delete-body">

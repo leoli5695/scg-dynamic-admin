@@ -95,7 +95,7 @@ const colSpan = (field: StrategyTypeField): number => {
             style="width: 180px"
             :list-height="200"
             @update:value="changeDimensionType(index, $event)"
-          />
+           popup-class-name="vn-portal"/>
         </div>
       </template>
       <template #extra>

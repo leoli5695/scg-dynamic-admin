@@ -50,7 +50,7 @@ defineExpose({ exportPng })
 <template>
   <div class="fcw-chart" data-waterfall-chart>
     <div v-if="rows.length === 0" class="fcw-empty">
-      <span class="icon-tile icon-tile--muted"><FilterOutlined /></span>
+      <span class="vn-state-glyph" aria-hidden="true"><FilterOutlined /></span>
       <span>{{ t('filterChain.no_data') }}</span>
     </div>
 

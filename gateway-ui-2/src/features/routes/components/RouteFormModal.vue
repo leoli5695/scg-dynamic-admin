@@ -176,27 +176,28 @@ function gotoPluginBindings() {
     :open="isOpen"
     :footer="null"
     :width="600"
-    :style="{ top: 'var(--space-6)' }"
+    :style="{ top: '24px' }"
     :class="['route-modal', isEdit ? 'route-edit-modal' : 'route-create-modal']"
-    :mask-closable="true"
+    wrap-class-name="vn-portal vn-modal"
+    :mask-closable="!submitting"
+    :keyboard="!submitting"
+    :closable="!submitting"
     @cancel="emit('cancel')"
   >
     <template #title>
-      <div class="modal-header-modern">
-        <div class="modal-title-wrapper">
-          <div :class="['modal-icon-wrapper', isEdit ? 'edit' : '']">
-            <EditOutlined v-if="isEdit" /><PlusOutlined v-else />
-          </div>
-          <div class="modal-title-text">
-            <div class="modal-title">{{ t(isEdit ? 'routes.edit' : 'routes.create') }}</div>
-            <div class="modal-subtitle">{{ t(isEdit ? 'routes.edit_description' : 'routes.create_description') }}</div>
-          </div>
+      <div class="vn-modal-head">
+        <span class="vn-modal-head-glyph" aria-hidden="true">
+          <EditOutlined v-if="isEdit" /><PlusOutlined v-else />
+        </span>
+        <div>
+          <div class="vn-modal-title">{{ t(isEdit ? 'routes.edit' : 'routes.create') }}</div>
+          <div class="vn-modal-subtitle">{{ t(isEdit ? 'routes.edit_description' : 'routes.create_description') }}</div>
         </div>
       </div>
     </template>
 
-    <a-form :model="formState" layout="vertical" class="route-form" @finish="handleFinish">
-      <div class="modal-scroll">
+    <a-form :model="formState" layout="vertical" class="vn-form" @finish="handleFinish">
+      <div class="vn-modal-scroll">
         <!-- Basic info -->
         <div class="form-section-modern">
           <div class="section-header">

@@ -36,7 +36,7 @@ function errorRate(route: TopologyNode): number {
 <template>
   <aside class="topology-ranking" :aria-label="t('topology.top_routes')">
     <div class="topology-ranking-header">
-      <span class="icon-tile icon-tile--sm"><FundOutlined /></span>
+      <FundOutlined class="topology-ranking-glyph" />
       <div>
         <span class="topology-ranking-title">{{ t('topology.top_routes') }}</span>
         <small>{{ t('topology.top_routes_hint') }}</small>

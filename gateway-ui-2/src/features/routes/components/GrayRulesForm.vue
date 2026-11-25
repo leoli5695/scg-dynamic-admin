@@ -52,7 +52,7 @@ function serviceIdOf(s: Partial<RouteServiceBinding>): string {
 
     <template v-if="enabled">
       <div v-for="(rule, idx) in rules" :key="idx" class="gray-rule-row">
-        <a-select v-model:value="rule.type" :placeholder="t('routes.rule_type')" size="small" class="gray-rule-type">
+        <a-select v-model:value="rule.type" :placeholder="t('routes.rule_type')" size="small" class="gray-rule-type" popup-class-name="vn-portal">
           <a-select-option value="HEADER">Header</a-select-option>
           <a-select-option value="COOKIE">Cookie</a-select-option>
           <a-select-option value="QUERY">Query</a-select-option>
@@ -69,7 +69,7 @@ function serviceIdOf(s: Partial<RouteServiceBinding>): string {
             show-search
             size="small"
             class="gray-rule-target"
-            popup-class-name="gray-rule-select-dropdown"
+            popup-class-name="vn-portal gray-rule-select-dropdown"
           >
             <a-select-option
               v-for="(s, sIdx) in configuredServices"
@@ -81,7 +81,7 @@ function serviceIdOf(s: Partial<RouteServiceBinding>): string {
           </a-select>
         </a-tooltip>
         <a-tooltip v-if="rules.length > 1" :title="t('common.delete')">
-          <a-button type="text" danger class="action-btn" :aria-label="t('common.delete')" @click="removeRule(idx)">
+          <a-button type="text" danger class="action-btn vn-iconbtn" :aria-label="t('common.delete')" @click="removeRule(idx)">
             <template #icon><DeleteOutlined /></template>
           </a-button>
         </a-tooltip>

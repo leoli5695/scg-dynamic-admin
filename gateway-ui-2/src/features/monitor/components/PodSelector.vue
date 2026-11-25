@@ -1,15 +1,16 @@
 <script setup lang="ts">
 /**
- * Pod picker with a summary strip for the currently selected pod.
- * Port of gateway-ui components/PodSelector.tsx; degrades to nothing when the
- * instance has no K8s pods (the page then shows aggregated metrics).
+ * Pod picker with a summary strip for the currently selected pod, on the
+ * Vue-native layer. Degrades to nothing when the instance has no K8s pods.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ContainerOutlined, ReloadOutlined } from '@/components/icons'
 import parseServerTime from '@/utils/serverTime'
 import type { InstancePod } from '@/types/instance'
-import { podTone } from '../utils'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import { podTone, vnTone } from '../utils'
 
 const props = defineProps<{
   pods: InstancePod[]
@@ -37,50 +38,38 @@ const readyContainers = computed(() => {
 function onSelect(value: unknown): void {
   if (typeof value === 'string') emit('select', value)
 }
-
-function getPopupContainer(trigger: HTMLElement): HTMLElement {
-  return (trigger.parentElement as HTMLElement) || document.body
-}
 </script>
 
 <template>
-  <div class="lg-panel monitor-pod-panel">
-    <span class="monitor-pod-label">
-      <span class="icon-tile icon-tile--sm"><ContainerOutlined /></span>
+  <div class="vn-panel vn-monitor-pod-panel">
+    <span class="vn-monitor-pod-label">
+      <ContainerOutlined />
       {{ t('monitor.select_pod') }}
     </span>
     <a-select
-      class="monitor-pod-select"
+      class="vn-monitor-pod-select"
       :value="selectedPodName"
       :options="options"
       :loading="loading"
       show-search
       option-filter-prop="label"
       :list-height="200"
-      :get-popup-container="getPopupContainer"
+      popup-class-name="vn-portal vnp-portal"
       @change="onSelect"
-    >
-      <template #suffixIcon>
-        <span class="monitor-pod-refresh" :title="t('common.refresh')" @click.stop="emit('refresh')">
-          <ReloadOutlined :spin="loading" />
-        </span>
-      </template>
-    </a-select>
+    />
+    <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" :disabled="loading" @click="emit('refresh')" />
 
     <template v-if="selectedPod">
-      <span class="monitor-pod-divider" aria-hidden="true" />
-      <div class="monitor-pod-meta">
-        <span :class="['status-badge', `status-badge-${podTone(selectedPod.phase)}`]">
-          <i :class="['status-dot', `status-dot-${podTone(selectedPod.phase)}`]" />
-          {{ selectedPod.phase || 'Unknown' }}
+      <span class="vn-monitor-pod-divider" aria-hidden="true" />
+      <div class="vn-monitor-pod-meta">
+        <VnBadge :tone="vnTone(podTone(selectedPod.phase))">{{ selectedPod.phase || 'Unknown' }}</VnBadge>
+        <span class="vn-monitor-pod-meta-item">
+          IP: <span class="vn-mono">{{ selectedPod.podIP || '—' }}</span>
         </span>
-        <span class="monitor-pod-meta-item">
-          IP: <code class="monitor-code">{{ selectedPod.podIP || '—' }}</code>
-        </span>
-        <span v-if="selectedPod.startTime" class="monitor-pod-meta-item">
+        <span v-if="selectedPod.startTime" class="vn-monitor-pod-meta-item">
           {{ t('monitor.pod_start_time') }}: {{ parseServerTime(selectedPod.startTime).toLocaleString() }}
         </span>
-        <span v-if="readyContainers" class="monitor-pod-meta-item">
+        <span v-if="readyContainers" class="vn-monitor-pod-meta-item">
           {{ t('monitor.container_ready') }}: {{ readyContainers.ready }}/{{ readyContainers.total }}
         </span>
       </div>

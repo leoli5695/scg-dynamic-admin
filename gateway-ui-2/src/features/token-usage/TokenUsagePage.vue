@@ -9,7 +9,7 @@ import { computed, onActivated, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  ApiOutlined, BarChartOutlined, ClockCircleOutlined, FundOutlined, InfoCircleOutlined,
+  ApiOutlined, BarChartOutlined, ClockCircleOutlined, EyeOutlined, InfoCircleOutlined,
   ReloadOutlined, TeamOutlined, ThunderboltOutlined,
 } from '@/components/icons'
 import dayjs from 'dayjs'
@@ -38,9 +38,17 @@ import { isUsageUnresolved, usageTokenValue } from './usagePresentation'
 import {
   defaultUsageRange, normalizeUsageQuery, readUsageQuery, updateUsageQuery, type UsageQuery,
 } from './usageQuery'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnState from '@/components/vn/VnState.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import TokenUsageReconciliationDrawer from './TokenUsageReconciliationDrawer.vue'
 import MetricSparkline from './components/MetricSparkline.vue'
-import './token-usage.css'
+import '@/styles/vue-native.css'
+import '@/styles/vn-pages.css'
+import './token-usage-vue-native.css'
 
 use([
   SVGRenderer, BarChart, LineChart, PieChart,
@@ -51,13 +59,15 @@ const route = useRoute()
 const router = useRouter()
 const { t, te } = useI18n()
 
-/** Login page series colours: periwinkle → violet → cyan. */
-const CHART_PALETTE = ['#6998ef', '#a492ea', '#4fd6e6', '#8ab0ff', '#b6a6f2', '#7fdfe8', '#5b7fd6', '#8a72ce']
-const AXIS_TEXT = '#95a3bc'
-const AXIS_LINE = 'rgba(145, 169, 222, 0.18)'
-const AXIS_GRID = 'rgba(145, 169, 222, 0.08)'
-const TOOLTIP_BG = '#17233c'
-const PANEL_EDGE = '#101a2e'
+defineOptions({ name: 'TokenUsagePage' })
+
+/** Vue-native series palette: green primary, info blue, periwinkle, amber. */
+const CHART_PALETTE = ['#42d392', '#5b9cf8', '#7f9dff', '#f0b429', '#4fd6e6', '#33a06f', '#8ab0ff', '#f2555a']
+const AXIS_TEXT = '#9aa7bd'
+const AXIS_LINE = '#253048'
+const AXIS_GRID = '#1c2537'
+const TOOLTIP_BG = '#1a2233'
+const PANEL_EDGE = '#121826'
 /** Stable identity: vue-echarts re-inits (and disposes) when initOptions identity changes. */
 const CHART_INIT_OPTIONS = { renderer: 'svg' as const }
 
@@ -87,11 +97,11 @@ function horizontalFade(from: string, to: string) {
 
 const chartTooltip = {
   backgroundColor: TOOLTIP_BG,
-  borderColor: 'rgba(145, 169, 222, 0.23)',
+  borderColor: '#253048',
   borderWidth: 1,
   padding: [8, 12] as [number, number],
-  textStyle: { color: '#edf2ff', fontSize: 12 },
-  extraCssText: 'border-radius:10px;box-shadow:0 12px 28px rgba(4,7,15,0.46);',
+  textStyle: { color: '#e6ebf5', fontSize: 12 },
+  extraCssText: 'border-radius:6px;box-shadow:0 18px 44px -20px rgba(0,0,0,0.7);',
 }
 
 const chartLegend = {
@@ -111,7 +121,7 @@ function baseOption(): EChartsOption {
     tooltip: {
       trigger: 'axis',
       ...chartTooltip,
-      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(105, 152, 239, 0.06)' } },
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(66, 211, 146, 0.06)' } },
     },
     grid: { left: 48, right: 24, top: 32, bottom: 28 },
   }
@@ -120,8 +130,8 @@ function baseOption(): EChartsOption {
 function barOption(rows: { key: string; totalTokens: number }[], horizontal: boolean): EChartsOption {
   const max = Math.max(...rows.map((r) => r.totalTokens), 1)
   const gradient = horizontal
-    ? horizontalFade('rgba(105, 152, 239, 0.92)', 'rgba(164, 146, 234, 0.68)')
-    : verticalFade('rgba(105, 152, 239, 0.92)', 'rgba(164, 146, 234, 0.55)')
+    ? horizontalFade('rgba(66, 211, 146, 0.92)', 'rgba(91, 156, 248, 0.68)')
+    : verticalFade('rgba(66, 211, 146, 0.92)', 'rgba(91, 156, 248, 0.55)')
   const ordered = horizontal ? [...rows].reverse() : rows
   return {
     ...baseOption(),
@@ -152,7 +162,7 @@ function barOption(rows: { key: string; totalTokens: number }[], horizontal: boo
         type: 'bar',
         barWidth: horizontal ? 10 : '34%',
         showBackground: horizontal,
-        backgroundStyle: { color: 'rgba(145, 169, 222, 0.06)', borderRadius: 6 },
+        backgroundStyle: { color: 'rgba(37, 48, 72, 0.5)', borderRadius: 6 },
         data: ordered.map((r) => ({
           value: r.totalTokens,
           itemStyle: { color: gradient, borderRadius: horizontal ? 6 : [4, 4, 0, 0] },
@@ -399,8 +409,8 @@ const timeseriesOption = computed<EChartsOption>(() => {
         stack: 'tokens',
         barWidth: '46%',
         data: series.value.map((bucket) => bucket.promptTokens),
-        itemStyle: { color: verticalFade('rgba(105, 152, 239, 0.95)', 'rgba(105, 152, 239, 0.28)') },
-        emphasis: { itemStyle: { color: '#8ab0ff' } },
+        itemStyle: { color: verticalFade('rgba(66, 211, 146, 0.95)', 'rgba(66, 211, 146, 0.28)') },
+        emphasis: { itemStyle: { color: '#55e0a3' } },
       },
       {
         name: t('tokenUsage.chart.completion'),
@@ -409,10 +419,10 @@ const timeseriesOption = computed<EChartsOption>(() => {
         barWidth: '46%',
         data: series.value.map((bucket) => bucket.completionTokens),
         itemStyle: {
-          color: verticalFade('rgba(164, 146, 234, 0.95)', 'rgba(164, 146, 234, 0.24)'),
+          color: verticalFade('rgba(91, 156, 248, 0.95)', 'rgba(91, 156, 248, 0.24)'),
           borderRadius: [3, 3, 0, 0],
         },
-        emphasis: { itemStyle: { color: '#b6a6f2' } },
+        emphasis: { itemStyle: { color: '#7f9dff' } },
       },
       {
         name: t('tokenUsage.chart.total'),
@@ -420,7 +430,7 @@ const timeseriesOption = computed<EChartsOption>(() => {
         smooth: 0.35,
         symbol: 'none',
         data: series.value.map((bucket) => bucket.totalTokens),
-        lineStyle: { width: 2, color: '#4fd6e6', shadowBlur: 10, shadowColor: 'rgba(79, 214, 230, 0.35)' },
+        lineStyle: { width: 2, color: '#7f9dff', shadowBlur: 10, shadowColor: 'rgba(127, 157, 255, 0.35)' },
         z: 3,
       },
     ],
@@ -440,8 +450,8 @@ const pieOption = computed<EChartsOption>(() => {
       top: '34%',
       textAlign: 'center',
       itemGap: 3,
-      textStyle: { color: '#edf2ff', fontSize: 22, fontWeight: 600 },
-      subtextStyle: { color: '#95a3bc', fontSize: 10 },
+      textStyle: { color: '#e6ebf5', fontSize: 22, fontWeight: 600 },
+      subtextStyle: { color: '#9aa7bd', fontSize: 10 },
     },
     legend: {
       ...chartLegend,
@@ -483,6 +493,23 @@ const routeBarOption = computed<EChartsOption>(
 const modelBarOption = computed<EChartsOption>(
   () => barOption(modelReq.data.value?.rows ?? [], false),
 )
+
+const tabOptions = computed<VnSegmentOption<'daily' | 'unresolved'>[]>(() => [
+  { key: 'daily', label: t('tokenUsage.tabs.daily'), icon: BarChartOutlined },
+  { key: 'unresolved', label: t('tokenUsage.tabs.unresolved'), icon: InfoCircleOutlined },
+])
+
+const tabValue = computed<'daily' | 'unresolved'>({
+  get: () => (queryState.value.unresolvedOnly ? 'unresolved' : 'daily'),
+  set: (value) => setQuery({ unresolvedOnly: value === 'unresolved' }),
+})
+
+const statItems = computed<VnStatItem[]>(() => [
+  { key: 'events', value: eventsReq.data.value?.total ?? 0, label: t('tokenUsage.table.title'), icon: BarChartOutlined },
+  { key: 'routes', value: overview.value?.activeRoutes ?? 0, label: t('tokenUsage.filter.route'), icon: ApiOutlined, accent: 'var(--vn-info)' },
+  { key: 'models', value: overview.value?.activeModels ?? 0, label: t('tokenUsage.filter.model'), icon: ThunderboltOutlined },
+  { key: 'unresolved', value: overview.value?.unknownUsageRequests ?? 0, label: t('tokenUsage.tabs.unresolved'), icon: InfoCircleOutlined, accent: 'var(--vn-warn)' },
+])
 
 const columns = computed<ColumnsType>(() => [
   {
@@ -530,8 +557,9 @@ const columns = computed<ColumnsType>(() => [
   {
     title: t('tokenUsage.details.action'),
     key: 'details',
-    width: 80,
+    width: 64,
     fixed: 'right',
+    align: 'right',
   },
 ])
 
@@ -560,10 +588,6 @@ function closeDrawer() {
   reconcilingOpen.value = false
 }
 
-function onTabChange(key: string | number) {
-  setQuery({ unresolvedOnly: key === 'unresolved' })
-}
-
 function onGranularityChange(value: unknown) {
   setQuery({ granularity: value === 'day' ? 'day' : 'hour' })
 }
@@ -586,23 +610,20 @@ function onModelSearch(value: unknown) {
 </script>
 
 <template>
-  <div class="token-usage-page">
-    <header class="token-page-header">
-      <div class="token-page-heading">
-        <span class="lg-eyebrow">{{ t('tokenUsage.workspace_label') }}</span>
-        <h1 class="token-page-title">
-          <span class="lg-icon-tile" aria-hidden="true"><FundOutlined /></span>
-          {{ t('tokenUsage.title') }}
-        </h1>
-        <p class="token-page-subtitle">{{ t('tokenUsage.subtitle') }}</p>
-      </div>
-      <div class="token-page-actions">
-        <a-button :disabled="refreshing" @click="refresh">
-          <template #icon><ReloadOutlined :spin="refreshing" /></template>
-          {{ t('common.refresh') }}
-        </a-button>
-      </div>
-    </header>
+  <div class="token-usage-page vn-token vn-scope vnp-scope">
+    <VnToolbar :title="t('tokenUsage.title')" :lede="t('tokenUsage.subtitle')">
+      <template #actions>
+        <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" :disabled="refreshing" @click="refresh" />
+      </template>
+    </VnToolbar>
+
+    <div class="vn-metarow">
+      <VnSegmented v-model="tabValue" :options="tabOptions" :label="t('tokenUsage.table.title')" />
+      <VnStatRail :items="statItems" :label="t('tokenUsage.title')" />
+      <span class="vn-filterbar-spacer" />
+      <span class="vn-result-count" role="status">{{ eventsReq.data.value?.total ?? 0 }} {{ t('tokenUsage.table.title') }}</span>
+      <a-button type="text" size="small" @click="resetFilters">{{ t('tokenUsage.reset') }}</a-button>
+    </div>
 
     <div
       v-if="(overview?.unknownUsageRequests ?? 0) > 0 || (overview?.failedSettlementRequests ?? 0) > 0"
@@ -621,24 +642,22 @@ function onModelSearch(value: unknown) {
       </a-button>
     </div>
 
-    <section class="token-metrics" aria-label="usage metrics">
-      <a-card :bordered="false" class="token-metric metric-blue has-spark">
-        <div class="token-metric-heading">
-          <span class="lg-section-title">{{ t('tokenUsage.card.requests') }}</span>
-          <span class="icon-tile icon-tile--sm token-metric-icon"><ApiOutlined /></span>
+    <section class="vn-token-metrics" aria-label="usage metrics">
+      <section class="vn-panel vn-token-metric">
+        <div class="vn-token-metric-heading">
+          <span class="vnp-panel-head"><ApiOutlined />{{ t('tokenUsage.card.requests') }}</span>
         </div>
-        <div class="token-metric-value">{{ overview?.requests ?? '—' }}</div>
-        <div class="token-metric-caption">{{ t('tokenUsage.requests_hint') }}</div>
-        <MetricSparkline :data="requestSpark" tone="var(--primary-light)" />
-      </a-card>
+        <div class="vn-token-metric-value">{{ overview?.requests ?? '—' }}</div>
+        <div class="vn-token-metric-caption">{{ t('tokenUsage.requests_hint') }}</div>
+        <MetricSparkline :data="requestSpark" tone="var(--vn-brand)" />
+      </section>
 
-      <a-card :bordered="false" class="token-metric metric-purple has-spark">
-        <div class="token-metric-heading">
-          <span class="lg-section-title">{{ t('tokenUsage.card.totalTokens') }}</span>
-          <span class="icon-tile icon-tile--sm token-metric-icon"><ThunderboltOutlined /></span>
+      <section class="vn-panel vn-token-metric">
+        <div class="vn-token-metric-heading">
+          <span class="vnp-panel-head"><ThunderboltOutlined />{{ t('tokenUsage.card.totalTokens') }}</span>
         </div>
-        <div class="token-metric-value">{{ overview?.totalTokens ?? '—' }}</div>
-        <div class="token-metric-caption">
+        <div class="vn-token-metric-value">{{ overview?.totalTokens ?? '—' }}</div>
+        <div class="vn-token-metric-caption">
           <template v-if="overview">
             {{ t('tokenUsage.card.totalTokens.sub', {
               prompt: overview.promptTokens, completion: overview.completionTokens,
@@ -646,31 +665,29 @@ function onModelSearch(value: unknown) {
           </template>
           <template v-else>{{ t('tokenUsage.tokens_hint') }}</template>
         </div>
-        <MetricSparkline :data="tokenSpark" tone="var(--accent-color)" />
-        <span v-if="tokenSplit" class="token-metric-accent" aria-hidden="true">
-          <i :style="{ width: `${tokenSplit.prompt}%`, background: 'linear-gradient(90deg, #6998ef, #8ab0ff)' }" />
-          <i :style="{ width: `${tokenSplit.completion}%`, background: 'linear-gradient(90deg, #a492ea, #b6a6f2)' }" />
+        <MetricSparkline :data="tokenSpark" tone="var(--vn-info)" />
+        <span v-if="tokenSplit" class="vn-token-metric-accent" aria-hidden="true">
+          <i :style="{ width: `${tokenSplit.prompt}%`, background: 'var(--vn-brand)' }" />
+          <i :style="{ width: `${tokenSplit.completion}%`, background: 'var(--vn-info)' }" />
         </span>
-      </a-card>
+      </section>
 
-      <a-card :bordered="false" class="token-metric metric-amber">
-        <div class="token-metric-heading">
-          <span class="lg-section-title">{{ t('tokenUsage.card.avgLatency') }}</span>
-          <span class="icon-tile icon-tile--sm token-metric-icon"><ClockCircleOutlined /></span>
+      <section class="vn-panel vn-token-metric">
+        <div class="vn-token-metric-heading">
+          <span class="vnp-panel-head"><ClockCircleOutlined />{{ t('tokenUsage.card.avgLatency') }}</span>
         </div>
-        <div class="token-metric-value">
-          {{ hasData ? (overview?.avgLatencyMs ?? '—') : '—' }}<span class="token-metric-unit">ms</span>
+        <div class="vn-token-metric-value">
+          {{ hasData ? (overview?.avgLatencyMs ?? '—') : '—' }}<span class="vn-token-metric-unit">ms</span>
         </div>
-        <div class="token-metric-caption">{{ t('tokenUsage.latency_hint') }}</div>
-      </a-card>
+        <div class="vn-token-metric-caption">{{ t('tokenUsage.latency_hint') }}</div>
+      </section>
 
-      <a-card :bordered="false" class="token-metric metric-green">
-        <div class="token-metric-heading">
-          <span class="lg-section-title">{{ t('tokenUsage.card.active') }}</span>
-          <span class="icon-tile icon-tile--sm token-metric-icon"><TeamOutlined /></span>
+      <section class="vn-panel vn-token-metric">
+        <div class="vn-token-metric-heading">
+          <span class="vnp-panel-head"><TeamOutlined />{{ t('tokenUsage.card.active') }}</span>
         </div>
-        <div class="token-metric-value">{{ overview?.activeTenants ?? '—' }}</div>
-        <div class="token-metric-caption">
+        <div class="vn-token-metric-value">{{ overview?.activeTenants ?? '—' }}</div>
+        <div class="vn-token-metric-caption">
           <template v-if="overview">
             {{ t('tokenUsage.card.active.sub', {
               tenants: overview.activeTenants,
@@ -680,93 +697,96 @@ function onModelSearch(value: unknown) {
           </template>
           <template v-else>{{ t('tokenUsage.active_hint') }}</template>
         </div>
-      </a-card>
+      </section>
     </section>
 
-    <p class="token-note">
+    <p class="vnp-hint vn-token-note">
       <InfoCircleOutlined aria-hidden="true" />
       <span>{{ t('tokenUsage.recordedTokensNote') }}</span>
     </p>
 
-    <a-card :bordered="false" class="token-filter-card">
-      <template #title>{{ t('tokenUsage.filters_title') }}</template>
-      <template #extra>
-        <a-button type="link" size="small" class="token-reset-btn" @click="resetFilters">
-          {{ t('tokenUsage.reset') }}
-        </a-button>
-      </template>
-      <div class="token-filters-grid">
-        <div class="token-filter-field token-filter-wide">
-          <span class="lg-section-title">{{ t('tokenUsage.filter.range') }}</span>
-          <a-range-picker
-            :aria-label="t('tokenUsage.filter.range')"
-            show-time
-            :allow-clear="false"
-            :value="rangeValue"
-            :presets="rangePresets"
-            @change="onRangeChange"
-          />
-        </div>
-        <div class="token-filter-field">
-          <span class="lg-section-title">{{ t('tokenUsage.filter.granularity') }}</span>
-          <a-select
-            :aria-label="t('tokenUsage.filter.granularity')"
-            :value="queryState.granularity"
-            :options="[
-              { value: 'hour', label: t('tokenUsage.filter.granularity.hour') },
-              { value: 'day', label: t('tokenUsage.filter.granularity.day') },
-            ]"
-            @change="onGranularityChange"
-          />
-        </div>
-        <div class="token-filter-field">
-          <span class="lg-section-title">{{ t('tokenUsage.filter.instance') }}</span>
-          <a-select
-            :aria-label="t('tokenUsage.filter.instance')"
-            allow-clear
-            show-search
-            option-filter-prop="label"
-            :placeholder="t('tokenUsage.filter.instance.all')"
-            :value="queryState.instanceId || undefined"
-            :options="instanceOptions"
-            @change="onInstanceChange"
-          />
-        </div>
-        <div class="token-filter-field">
-          <span class="lg-section-title">{{ t('tokenUsage.filter.tenant') }}</span>
-          <a-select
-            :aria-label="t('tokenUsage.filter.tenant')"
-            allow-clear
-            show-search
-            option-filter-prop="label"
-            :placeholder="t('tokenUsage.filter.tenant.all')"
-            :value="queryState.tenantId || undefined"
-            :options="tenantOptions"
-            @change="onTenantChange"
-          />
-        </div>
-        <div class="token-filter-field">
-          <span class="lg-section-title">{{ t('tokenUsage.filter.route') }}</span>
-          <a-input-search
-            v-model:value="routeDraft"
-            :aria-label="t('tokenUsage.filter.route')"
-            allow-clear
-            :placeholder="t('tokenUsage.filter.route.ph')"
-            @search="onRouteSearch"
-          />
-        </div>
-        <div class="token-filter-field token-filter-wide">
-          <span class="lg-section-title">{{ t('tokenUsage.filter.model') }}</span>
-          <a-input-search
-            v-model:value="modelDraft"
-            :aria-label="t('tokenUsage.filter.model')"
-            allow-clear
-            :placeholder="t('tokenUsage.filter.model.ph')"
-            @search="onModelSearch"
-          />
+    <section class="vn-panel">
+      <header class="vn-panel-head">
+        <span class="vnp-panel-head">{{ t('tokenUsage.filters_title') }}</span>
+        <a-button type="link" size="small" @click="resetFilters">{{ t('tokenUsage.reset') }}</a-button>
+      </header>
+      <div class="vn-panel-body">
+        <div class="vn-token-filters-grid">
+          <div class="vn-token-filter-field vn-token-filter-wide">
+            <span class="vn-token-filter-label">{{ t('tokenUsage.filter.range') }}</span>
+            <a-range-picker
+              :aria-label="t('tokenUsage.filter.range')"
+              show-time
+              :allow-clear="false"
+              :value="rangeValue"
+              :presets="rangePresets"
+              @change="onRangeChange"
+            />
+          </div>
+          <div class="vn-token-filter-field">
+            <span class="vn-token-filter-label">{{ t('tokenUsage.filter.granularity') }}</span>
+            <a-select
+              :aria-label="t('tokenUsage.filter.granularity')"
+              :value="queryState.granularity"
+              :options="[
+                { value: 'hour', label: t('tokenUsage.filter.granularity.hour') },
+                { value: 'day', label: t('tokenUsage.filter.granularity.day') },
+              ]"
+              popup-class-name="vn-portal vnp-portal"
+              @change="onGranularityChange"
+            />
+          </div>
+          <div class="vn-token-filter-field">
+            <span class="vn-token-filter-label">{{ t('tokenUsage.filter.instance') }}</span>
+            <a-select
+              :aria-label="t('tokenUsage.filter.instance')"
+              allow-clear
+              show-search
+              option-filter-prop="label"
+              :placeholder="t('tokenUsage.filter.instance.all')"
+              :value="queryState.instanceId || undefined"
+              :options="instanceOptions"
+              popup-class-name="vn-portal vnp-portal"
+              @change="onInstanceChange"
+            />
+          </div>
+          <div class="vn-token-filter-field">
+            <span class="vn-token-filter-label">{{ t('tokenUsage.filter.tenant') }}</span>
+            <a-select
+              :aria-label="t('tokenUsage.filter.tenant')"
+              allow-clear
+              show-search
+              option-filter-prop="label"
+              :placeholder="t('tokenUsage.filter.tenant.all')"
+              :value="queryState.tenantId || undefined"
+              :options="tenantOptions"
+              popup-class-name="vn-portal vnp-portal"
+              @change="onTenantChange"
+            />
+          </div>
+          <div class="vn-token-filter-field">
+            <span class="vn-token-filter-label">{{ t('tokenUsage.filter.route') }}</span>
+            <a-input-search
+              v-model:value="routeDraft"
+              :aria-label="t('tokenUsage.filter.route')"
+              allow-clear
+              :placeholder="t('tokenUsage.filter.route.ph')"
+              @search="onRouteSearch"
+            />
+          </div>
+          <div class="vn-token-filter-field vn-token-filter-wide">
+            <span class="vn-token-filter-label">{{ t('tokenUsage.filter.model') }}</span>
+            <a-input-search
+              v-model:value="modelDraft"
+              :aria-label="t('tokenUsage.filter.model')"
+              allow-clear
+              :placeholder="t('tokenUsage.filter.model.ph')"
+              @search="onModelSearch"
+            />
+          </div>
         </div>
       </div>
-    </a-card>
+    </section>
 
     <a-alert
       v-if="requestError"
@@ -777,117 +797,103 @@ function onModelSearch(value: unknown) {
       :description="requestError.message"
     />
 
-    <a-spin v-if="!hasData" :spinning="overviewReq.loading.value">
-      <div class="lg-panel token-state-card">
-        <div class="token-state">
-          <span :class="['token-state-icon', { 'is-error': !!requestError }]">
-            <BarChartOutlined />
-          </span>
-          <h3 class="token-state-title">
-            {{ t(requestError ? 'tokenUsage.load_failed' : 'tokenUsage.empty_title') }}
-          </h3>
-          <p class="token-state-hint">
-            {{ t(requestError ? 'tokenUsage.error_hint' : 'tokenUsage.empty') }}
-          </p>
-          <a-button @click="requestError ? refresh() : resetFilters()">
-            {{ t(requestError ? 'common.refresh' : 'tokenUsage.reset') }}
-          </a-button>
-        </div>
-      </div>
-    </a-spin>
+    <VnState
+      v-if="!hasData"
+      :icon="BarChartOutlined"
+      :tone="requestError ? 'err' : 'idle'"
+      :title="t(requestError ? 'tokenUsage.load_failed' : 'tokenUsage.empty_title')"
+      :hint="t(requestError ? 'tokenUsage.error_hint' : 'tokenUsage.empty')"
+    >
+      <template #actions>
+        <a-button @click="requestError ? refresh() : resetFilters()">
+          {{ t(requestError ? 'common.refresh' : 'tokenUsage.reset') }}
+        </a-button>
+      </template>
+    </VnState>
 
     <template v-else>
-      <a-row :gutter="[16, 16]" class="token-charts-row">
-        <a-col :xs="24" :lg="16">
-          <a-card :bordered="false" :title="t('tokenUsage.chart.timeseries')">
-            <v-chart class="token-chart token-chart-lg" :option="timeseriesOption" :init-options="CHART_INIT_OPTIONS" autoresize />
-          </a-card>
-        </a-col>
-        <a-col :xs="24" :lg="8">
-          <a-card :bordered="false" :title="t('tokenUsage.chart.tenantPie')">
-            <v-chart class="token-chart token-chart-lg" :option="pieOption" :init-options="CHART_INIT_OPTIONS" autoresize />
-          </a-card>
-        </a-col>
-      </a-row>
-      <a-row :gutter="[16, 16]" class="token-charts-row">
-        <a-col :xs="24" :lg="12">
-          <a-card :bordered="false" :title="t('tokenUsage.chart.routeBar')">
-            <v-chart class="token-chart token-chart-md" :option="routeBarOption" :init-options="CHART_INIT_OPTIONS" autoresize />
-          </a-card>
-        </a-col>
-        <a-col :xs="24" :lg="12">
-          <a-card :bordered="false" :title="t('tokenUsage.chart.modelBar')">
-            <v-chart class="token-chart token-chart-md" :option="modelBarOption" :init-options="CHART_INIT_OPTIONS" autoresize />
-          </a-card>
-        </a-col>
-      </a-row>
+      <div class="vn-token-charts-row vn-token-charts-wide">
+        <section class="vn-panel">
+          <header class="vn-panel-head"><span class="vnp-panel-head">{{ t('tokenUsage.chart.timeseries') }}</span></header>
+          <div class="vn-panel-body"><v-chart class="vn-token-chart vn-token-chart-lg" :option="timeseriesOption" :init-options="CHART_INIT_OPTIONS" autoresize /></div>
+        </section>
+        <section class="vn-panel">
+          <header class="vn-panel-head"><span class="vnp-panel-head">{{ t('tokenUsage.chart.tenantPie') }}</span></header>
+          <div class="vn-panel-body"><v-chart class="vn-token-chart vn-token-chart-lg" :option="pieOption" :init-options="CHART_INIT_OPTIONS" autoresize /></div>
+        </section>
+      </div>
+      <div class="vn-token-charts-row">
+        <section class="vn-panel">
+          <header class="vn-panel-head"><span class="vnp-panel-head">{{ t('tokenUsage.chart.routeBar') }}</span></header>
+          <div class="vn-panel-body"><v-chart class="vn-token-chart vn-token-chart-md" :option="routeBarOption" :init-options="CHART_INIT_OPTIONS" autoresize /></div>
+        </section>
+        <section class="vn-panel">
+          <header class="vn-panel-head"><span class="vnp-panel-head">{{ t('tokenUsage.chart.modelBar') }}</span></header>
+          <div class="vn-panel-body"><v-chart class="vn-token-chart vn-token-chart-md" :option="modelBarOption" :init-options="CHART_INIT_OPTIONS" autoresize /></div>
+        </section>
+      </div>
     </template>
 
-    <a-card :bordered="false" class="token-table-card" :title="t('tokenUsage.table.title')">
-      <a-tabs
-        class="token-tabs"
-        :active-key="queryState.unresolvedOnly ? 'unresolved' : 'daily'"
-        @change="onTabChange"
-      >
-        <a-tab-pane key="daily" :tab="t('tokenUsage.tabs.daily')" />
-        <a-tab-pane key="unresolved" :tab="t('tokenUsage.tabs.unresolved')" />
-      </a-tabs>
-      <a-table
-        row-key="id"
-        size="small"
-        :scroll="{ x: 1120 }"
-        :loading="eventsReq.loading.value"
-        :data-source="events"
-        :pagination="pagination"
-        :columns="columns"
-        :locale="{ emptyText: tableEmptyText }"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'time'">
-            {{ formatTime(record.requestTime) }}
-          </template>
-          <template v-else-if="column.key === 'tenant'">
-            {{ record.tenantId === '__unassigned__' ? t('tokenUsage.unassignedTenant') : record.tenantId }}
-          </template>
-          <template v-else-if="column.key === 'route'">
-            {{ record.routeId ?? '—' }}
-          </template>
-          <template v-else-if="column.key === 'model'">
-            {{ record.model ?? '—' }}
-          </template>
-          <template v-else-if="column.key === 'prompt'">
-            {{ formatToken(record, 'promptTokens') }}
-          </template>
-          <template v-else-if="column.key === 'completion'">
-            {{ formatToken(record, 'completionTokens') }}
-          </template>
-          <template v-else-if="column.key === 'total'">
-            {{ formatToken(record, 'totalTokens') }}
-          </template>
-          <template v-else-if="column.key === 'status'">
-            <span class="token-status-group">
-              <span :class="['status-badge', isUsageUnresolved(record) ? 'status-badge-warning' : 'status-badge-neutral']">
-                {{ statusLabel(record.usageStatus) }}
+    <section class="vn-panel">
+      <header class="vn-panel-head">
+        <span class="vnp-panel-head">{{ t('tokenUsage.table.title') }}</span>
+      </header>
+      <div class="vn-panel-body vn-token-table-body">
+        <a-table
+          row-key="id"
+          size="small"
+          :scroll="{ x: 1120 }"
+          :loading="eventsReq.loading.value"
+          :data-source="events"
+          :pagination="pagination"
+          :columns="columns"
+          :locale="{ emptyText: tableEmptyText }"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'time'">
+              <span class="vnp-cell-muted">{{ formatTime(record.requestTime) }}</span>
+            </template>
+            <template v-else-if="column.key === 'tenant'">
+              {{ record.tenantId === '__unassigned__' ? t('tokenUsage.unassignedTenant') : record.tenantId }}
+            </template>
+            <template v-else-if="column.key === 'route'">
+              <span class="vn-mono vnp-cell-muted">{{ record.routeId ?? '—' }}</span>
+            </template>
+            <template v-else-if="column.key === 'model'">
+              <span class="vn-mono vnp-cell-muted">{{ record.model ?? '—' }}</span>
+            </template>
+            <template v-else-if="column.key === 'prompt'">
+              {{ formatToken(record, 'promptTokens') }}
+            </template>
+            <template v-else-if="column.key === 'completion'">
+              {{ formatToken(record, 'completionTokens') }}
+            </template>
+            <template v-else-if="column.key === 'total'">
+              <span class="vnp-strong">{{ formatToken(record, 'totalTokens') }}</span>
+            </template>
+            <template v-else-if="column.key === 'status'">
+              <span class="vn-token-status-group">
+                <VnBadge :tone="isUsageUnresolved(record) ? 'warn' : 'idle'">
+                  {{ statusLabel(record.usageStatus) }}
+                </VnBadge>
+                <VnBadge
+                  v-if="['FAILED', 'PENDING'].includes(record.settlementStatus ?? '')"
+                  :tone="record.settlementStatus === 'FAILED' ? 'err' : 'warn'"
+                >
+                  {{ statusLabel(record.settlementStatus) }}
+                </VnBadge>
               </span>
-              <span
-                v-if="['FAILED', 'PENDING'].includes(record.settlementStatus ?? '')"
-                :class="['status-badge', record.settlementStatus === 'FAILED' ? 'status-badge-error' : 'status-badge-warning']"
-              >
-                {{ statusLabel(record.settlementStatus) }}
-              </span>
-            </span>
+            </template>
+            <template v-else-if="column.key === 'instance'">
+              <span class="vnp-cell-muted">{{ record.instanceId ?? '—' }}</span>
+            </template>
+            <template v-else-if="column.key === 'details'">
+              <VnIconButton :icon="EyeOutlined" :label="t('tokenUsage.details.action')" @click="openDrawer(record)" />
+            </template>
           </template>
-          <template v-else-if="column.key === 'instance'">
-            {{ record.instanceId ?? '—' }}
-          </template>
-          <template v-else-if="column.key === 'details'">
-            <a-button type="link" size="small" class="token-detail-link" @click="openDrawer(record)">
-              {{ t('tokenUsage.details.action') }}
-            </a-button>
-          </template>
-        </template>
-      </a-table>
-    </a-card>
+        </a-table>
+      </div>
+    </section>
 
     <TokenUsageReconciliationDrawer
       v-if="reconcilingSnapshot"

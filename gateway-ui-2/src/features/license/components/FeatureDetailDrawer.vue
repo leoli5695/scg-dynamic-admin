@@ -1,15 +1,16 @@
 <script setup lang="ts">
 /**
- * Feature detail drawer: edition/status chips, overview, key benefits and use
- * cases for one catalog entry. Rendered in a teleported drawer, so its styles
- * live at the top level of license.css.
+ * Feature detail drawer on the Vue-native layer: edition/status badges,
+ * overview, key benefits and use cases for one catalog entry. Kept mounted and
+ * driven through `open`.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { CheckCircleOutlined, RocketOutlined } from '@/components/icons'
+import { CheckCircleOutlined, CloseOutlined, RocketOutlined } from '@/components/icons'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
 import {
   EDITION_CONFIG,
-  EDITION_TONE,
   type LicenseFeatureDef,
 } from '../constants/featureCatalog'
 
@@ -18,21 +19,18 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 
 const { t } = useI18n()
 
-const editionTone = computed(() =>
-  props.feature ? EDITION_TONE[props.feature.requiredEdition] : '',
-)
+function editionTone(edition: string): 'ok' | 'info' | 'warn' {
+  if (edition === 'BASIC') return 'ok'
+  return edition === 'ADVANCED' ? 'info' : 'warn'
+}
 
 const statusChip = computed(() => {
   const feature = props.feature
-  if (!feature) return { label: '', tone: '' }
-  if (feature.requiredEdition === 'BASIC') {
-    return { label: t('licenseUI.free_to_use'), tone: 'status-badge-success' }
-  }
-  if (feature.enabled) return { label: t('licenseUI.authorized'), tone: 'status-badge-success' }
-  if (feature.requiredEdition === 'ADVANCED') {
-    return { label: t('licenseUI.requires_advanced'), tone: 'status-badge-info' }
-  }
-  return { label: t('licenseUI.requires_enterprise'), tone: 'license-chip-enterprise' }
+  if (!feature) return { label: '', tone: 'idle' as const }
+  if (feature.requiredEdition === 'BASIC') return { label: t('licenseUI.free_to_use'), tone: 'ok' as const }
+  if (feature.enabled) return { label: t('licenseUI.authorized'), tone: 'ok' as const }
+  if (feature.requiredEdition === 'ADVANCED') return { label: t('licenseUI.requires_advanced'), tone: 'info' as const }
+  return { label: t('licenseUI.requires_enterprise'), tone: 'warn' as const }
 })
 
 const needsUpgrade = computed(() =>
@@ -49,60 +47,64 @@ const upgradeEditionLabel = computed(() =>
     :open="!!feature"
     placement="right"
     :width="480"
-    :destroy-on-close="true"
+    :closable="false"
+    :mask-closable="true"
+    root-class-name="vn-portal vnp-portal vnp-drawer"
     @close="emit('close')"
   >
-    <template #title>
-      <span v-if="feature" class="license-drawer-title">
-        <component :is="feature.icon" />
-        <span>{{ t(feature.displayNameKey) }}</span>
-      </span>
-    </template>
-
-    <div v-if="feature" class="license-feature-detail">
-      <div class="license-detail-chips">
-        <span class="status-badge" :class="editionTone">
-          <component :is="EDITION_CONFIG[feature.requiredEdition].icon" />
-          {{ t(EDITION_CONFIG[feature.requiredEdition].labelKey) }}
-        </span>
-        <span class="status-badge" :class="statusChip.tone">{{ statusChip.label }}</span>
+    <div v-if="feature" class="vnp-detail">
+      <div class="vnp-detail-head">
+        <div class="vnp-detail-head-left">
+          <span class="vnp-detail-glyph" aria-hidden="true"><component :is="feature.icon" /></span>
+          <div style="min-width: 0">
+            <h4 class="vnp-detail-title">{{ t(feature.displayNameKey) }}</h4>
+          </div>
+        </div>
+        <VnIconButton :icon="CloseOutlined" :label="t('common.close')" @click="emit('close')" />
       </div>
 
-      <section class="license-detail-section">
-        <h4 class="lg-section-title">{{ t('licenseUI.feature_intro') }}</h4>
-        <p class="license-detail-copy">
-          {{ t(feature.detailedDescriptionKey || feature.descriptionKey) }}
-        </p>
-      </section>
+      <div class="vnp-detail-scroll">
+        <div class="vnp-detail-pills">
+          <VnBadge :tone="editionTone(feature.requiredEdition)">
+            <component :is="EDITION_CONFIG[feature.requiredEdition].icon" />
+            {{ t(EDITION_CONFIG[feature.requiredEdition].labelKey) }}
+          </VnBadge>
+          <VnBadge :tone="statusChip.tone">{{ statusChip.label }}</VnBadge>
+        </div>
 
-      <section v-if="feature.benefitKeys?.length" class="license-detail-section">
-        <h4 class="lg-section-title">{{ t('licenseUI.key_benefits') }}</h4>
-        <ul class="license-detail-list">
-          <li v-for="key in feature.benefitKeys" :key="key">
-            <CheckCircleOutlined class="license-detail-icon license-tone-success" />
-            <span>{{ t(key) }}</span>
-          </li>
-        </ul>
-      </section>
+        <section class="vnp-section">
+          <div class="vnp-section-head">{{ t('licenseUI.feature_intro') }}</div>
+          <p class="vnp-detail-desc">{{ t(feature.detailedDescriptionKey || feature.descriptionKey) }}</p>
+        </section>
 
-      <section v-if="feature.useCaseKeys?.length" class="license-detail-section">
-        <h4 class="lg-section-title">{{ t('licenseUI.use_cases') }}</h4>
-        <ul class="license-detail-list">
-          <li v-for="key in feature.useCaseKeys" :key="key">
-            <RocketOutlined class="license-detail-icon license-tone-primary" />
-            <span>{{ t(key) }}</span>
-          </li>
-        </ul>
-      </section>
+        <section v-if="feature.benefitKeys?.length" class="vnp-section">
+          <div class="vnp-section-head">{{ t('licenseUI.key_benefits') }}</div>
+          <ul class="vn-license-detail-list">
+            <li v-for="key in feature.benefitKeys" :key="key">
+              <CheckCircleOutlined class="vn-ink-ok" />
+              <span>{{ t(key) }}</span>
+            </li>
+          </ul>
+        </section>
 
-      <a-alert
-        v-if="needsUpgrade"
-        type="info"
-        show-icon
-        class="license-upgrade-alert"
-        :message="t('licenseUI.upgrade_hint_title')"
-        :description="t('licenseUI.upgrade_hint', { edition: upgradeEditionLabel })"
-      />
+        <section v-if="feature.useCaseKeys?.length" class="vnp-section">
+          <div class="vnp-section-head">{{ t('licenseUI.use_cases') }}</div>
+          <ul class="vn-license-detail-list">
+            <li v-for="key in feature.useCaseKeys" :key="key">
+              <RocketOutlined class="vn-ink-info" />
+              <span>{{ t(key) }}</span>
+            </li>
+          </ul>
+        </section>
+
+        <a-alert
+          v-if="needsUpgrade"
+          type="info"
+          show-icon
+          :message="t('licenseUI.upgrade_hint_title')"
+          :description="t('licenseUI.upgrade_hint', { edition: upgradeEditionLabel })"
+        />
+      </div>
     </div>
   </a-drawer>
 </template>

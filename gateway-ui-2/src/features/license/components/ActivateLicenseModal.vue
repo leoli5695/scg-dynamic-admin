@@ -2,6 +2,7 @@
 /**
  * Activate license modal: paste a license code or load it from a text file,
  * validate through POST /api/license/import and report the backend message.
+ * Vue-native matte portal; kept mounted and driven through `open`.
  */
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -65,44 +66,49 @@ function handleFile(file: File): boolean {
 <template>
   <a-modal
     :open="open"
-    :title="t('licenseUI.activate_modal_title')"
     :width="600"
     :footer="null"
+    wrap-class-name="vn-portal vnp-portal vnp-modal"
     @cancel="emit('close')"
   >
-    <a-form ref="formRef" layout="vertical" :model="formState" @finish="handleActivate">
-      <a-form-item name="licenseCode" :label="t('licenseUI.code_label')" :rules="rules">
-        <a-textarea
-          v-model:value="formState.licenseCode"
-          :rows="6"
-          :placeholder="t('licenseUI.code_placeholder')"
-          class="license-code-input"
-        />
-      </a-form-item>
+    <template #title>
+      <div class="vnp-modal-head">
+        <span class="vnp-modal-head-glyph" aria-hidden="true"><KeyOutlined /></span>
+        <div>
+          <div class="vnp-modal-title">{{ t('licenseUI.activate_modal_title') }}</div>
+          <div class="vnp-modal-subtitle">{{ t('licenseUI.code_hint') }}</div>
+        </div>
+      </div>
+    </template>
 
-      <div class="license-activate-hint">
-        <KeyOutlined />
-        <span>{{ t('licenseUI.code_hint') }}</span>
+    <a-form ref="formRef" layout="vertical" :model="formState" class="vnp-form" @finish="handleActivate">
+      <div class="vnp-modal-scroll">
+        <a-form-item name="licenseCode" :label="t('licenseUI.code_label')" :rules="rules">
+          <a-textarea
+            v-model:value="formState.licenseCode"
+            :rows="6"
+            :placeholder="t('licenseUI.code_placeholder')"
+            class="vn-mono"
+          />
+        </a-form-item>
+        <div class="vn-license-activate-hint">
+          <KeyOutlined />
+          <span>{{ t('licenseUI.code_hint') }}</span>
+        </div>
       </div>
 
-      <div class="license-modal-actions">
+      <div class="vnp-modal-foot">
         <a-upload
           accept=".txt,.lic,.json"
           :show-upload-list="false"
           :before-upload="handleFile"
-          class="license-file-upload"
         >
           <a-button>
-            <template #icon><FileTextOutlined /></template>
-            {{ t('licenseUI.upload_file') }}
+            <template #icon><FileTextOutlined /></template>{{ t('licenseUI.upload_file') }}
           </a-button>
         </a-upload>
-        <a-button :disabled="submitting" @click="emit('close')">
-          {{ t('common.cancel') }}
-        </a-button>
-        <a-button type="primary" html-type="submit" :loading="submitting">
-          {{ t('licenseUI.activate_submit') }}
-        </a-button>
+        <a-button :disabled="submitting" @click="emit('close')">{{ t('common.cancel') }}</a-button>
+        <a-button type="primary" html-type="submit" :loading="submitting">{{ t('licenseUI.activate_submit') }}</a-button>
       </div>
     </a-form>
   </a-modal>

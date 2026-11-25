@@ -405,5 +405,13 @@
   "strategy.impact_edit_bindings_hint": "Manage bindings in the route workbench. Configuration edits preserve existing bindings.",
   "strategy.retry": "Retry",
   "strategy.delete_confirm": "This strategy will be removed from this gateway instance. Routes bound to it lose this policy immediately.",
-  "strategy.empty_hint": "Strategies enforce traffic, security and resilience policies on every route of this gateway."
+  "strategy.empty_hint": "Strategies enforce traffic, security and resilience policies on every route of this gateway.",
+  "strategy.view_grid": "Cards",
+  "strategy.view_table": "Table",
+  "strategy.view_mode": "View mode",
+  "strategy.results": "{{count}} results",
+  "strategy.category": "Strategy Category",
+  "strategy.stats_scope": "{{category}} statistics",
+  "strategy.search_placeholder": "Search strategy name/type",
+  "strategy.more_actions": "More actions"
 }

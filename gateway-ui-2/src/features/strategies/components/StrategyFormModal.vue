@@ -5,7 +5,7 @@
  * (strategy_types.config_schema, enriched with AUTH / TOKEN_RATE_LIMITER
  * subSchemas by the backend).
  */
-import { computed, h, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { FormInstance } from 'ant-design-vue/es/form'
 import {
@@ -41,6 +41,9 @@ const props = defineProps<{
   submitting?: boolean
   lockBinding?: boolean
   initialRouteId?: string
+  /** Kept mounted by the page and toggled here (unmounting an open antd modal
+   *  leaks its dialog tree; see perf audit 2026-11-20). */
+  open?: boolean
   onSubmit: (body: StrategyDefinition) => Promise<void>
 }>()
 
@@ -101,8 +104,8 @@ const AI_SECURITY_DEFAULTS: StrategyFormValues = {
 }
 
 const isEdit = computed(() => props.mode === 'edit')
-const strategyTypeCode = props.strategy?.strategyType ?? props.typeInfo.typeCode
-const code = strategyTypeCode
+const isOpen = computed(() => props.open !== false)
+const code = computed(() => props.strategy?.strategyType ?? props.typeInfo.typeCode)
 const schema = computed(() => props.typeInfo.configSchema)
 
 function applyFieldsDefaults(target: StrategyFormValues, fields?: Array<{ name: string; type: string; default?: unknown }>) {
@@ -133,7 +136,7 @@ function buildInitialValues(): StrategyFormValues {
   const typeSchema = props.typeInfo.configSchema
   const subs = typeSchema?.subSchemas ?? {}
 
-  switch (code) {
+  switch (code.value) {
     case 'AUTH':
       if (values.authType === undefined) values.authType = 'JWT'
       applyNestedDefaults(values, subs[String(values.authType)])
@@ -192,6 +195,18 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const busy = computed(() => props.submitting || saving.value)
 
+// Kept mounted: rebuild the form every time the dialog opens.
+watch(isOpen, (open) => {
+  if (!open) return
+  for (const key of Object.keys(values)) delete values[key]
+  Object.assign(values, buildInitialValues())
+  saving.value = false
+  if (isEdit.value) {
+    runImpact()
+    if (expandingGlobal.value) runGlobalImpact()
+  }
+})
+
 // ============================================================
 // Affected-bindings impact (edit mode)
 // ============================================================
@@ -237,12 +252,6 @@ function retryImpact() {
   runImpact()
   if (expandingGlobal.value) runGlobalImpact()
 }
-
-onMounted(() => {
-  if (!isEdit.value) return
-  runImpact()
-  if (expandingGlobal.value) runGlobalImpact()
-})
 
 watch(() => values.scope, (scope) => {
   if (!isEdit.value || scope !== 'GLOBAL' || props.strategy?.scope === 'GLOBAL') return
@@ -298,15 +307,15 @@ async function handleFinish() {
   const body: StrategyDefinition = {
     strategyId: props.strategy?.strategyId ?? '',
     strategyName: String(values.strategyName ?? ''),
-    strategyType: strategyTypeCode,
+    strategyType: code.value,
     scope: values.scope === 'ROUTE' ? 'ROUTE' : 'GLOBAL',
     routeId: values.scope === 'ROUTE' ? String(values.routeId ?? '') : undefined,
     routeIds: values.scope === 'ROUTE' ? props.strategy?.routeIds ?? [] : [],
     priority: typeof values.priority === 'number' ? values.priority : 100,
     enabled: values.enabled !== false,
-    config: buildStrategyConfig(strategyTypeCode === 'AI_PROXY'
+    config: buildStrategyConfig(code.value === 'AI_PROXY'
       ? { ...(props.strategy?.config ?? {}), ...values }
-      : values, strategyTypeCode),
+      : values, code.value),
     description: values.description ? String(values.description) : undefined,
   }
   saving.value = true
@@ -320,40 +329,39 @@ async function handleFinish() {
 
 <template>
   <a-modal
-    :open="true"
-    :width="760"
+    :open="isOpen"
+    :width="600"
     :footer="null"
-    wrap-class-name="strategy-editor-modal"
+    :style="{ top: '24px' }"
+    wrap-class-name="vn-portal vn-modal"
     :closable="!busy"
     :keyboard="!busy"
     :mask-closable="false"
-    :destroy-on-close="true"
     @cancel="emit('cancel')"
   >
     <template #title>
-      <div class="strategy-modal-header">
-        <div class="strategy-modal-title-wrapper">
-          <a-button
-            v-if="!isEdit"
-            type="text"
-            class="strategy-modal-back"
-            @click="emit('backToTypeSelect')"
-          >
-            <template #icon><ArrowLeftOutlined /></template>
-            {{ t('common.back') }}
-          </a-button>
-          <span :class="['strategy-modal-icon', isEdit ? 'edit' : '']" aria-hidden="true">
-            <EditOutlined v-if="isEdit" />
-            <PlusOutlined v-else />
-          </span>
-          <span class="strategy-modal-title-text">
-            <span class="strategy-modal-title">
-              {{ isEdit ? t('strategy.edit') : `${t('strategy.create')} - ${typeName}` }}
-            </span>
-            <span class="strategy-modal-subtitle">
-              {{ isEdit ? t('strategy.edit_description') : (typeInfo.description || t('strategy.create_description')) }}
-            </span>
-          </span>
+      <div class="vn-modal-head">
+        <a-button
+          v-if="!isEdit"
+          type="text"
+          size="small"
+          class="vn-modal-back"
+          @click="emit('backToTypeSelect')"
+        >
+          <template #icon><ArrowLeftOutlined /></template>
+          {{ t('common.back') }}
+        </a-button>
+        <span class="vn-modal-head-glyph" aria-hidden="true">
+          <EditOutlined v-if="isEdit" />
+          <PlusOutlined v-else />
+        </span>
+        <div style="min-width: 0">
+          <div class="vn-modal-title">
+            {{ isEdit ? t('strategy.edit') : `${t('strategy.create')} - ${typeName}` }}
+          </div>
+          <div class="vn-modal-subtitle">
+            {{ isEdit ? t('strategy.edit_description') : (typeInfo.description || t('strategy.create_description')) }}
+          </div>
         </div>
       </div>
     </template>
@@ -361,12 +369,13 @@ async function handleFinish() {
     <a-form
       ref="formRef"
       layout="vertical"
+      class="vn-form"
       :model="values"
       :disabled="busy || impactBlocked"
       scroll-to-first-error
       @finish="handleFinish"
     >
-      <div class="strategy-editor-scroll">
+      <div class="vn-modal-scroll">
         <a-alert
           v-if="isEdit"
           :type="impactBlocked ? 'warning' : 'info'"
@@ -392,12 +401,11 @@ async function handleFinish() {
           </template>
         </a-alert>
 
-        <section class="strategy-form-section">
-          <header class="strategy-form-section-head">
-            <span class="strategy-form-section-index">01</span>
-            <ThunderboltOutlined />
-            <span class="strategy-form-section-title">{{ t('strategy.basic_info') }}</span>
-          </header>
+        <section class="form-section-modern">
+          <div class="section-header">
+            <ThunderboltOutlined class="section-icon" />
+            <span class="section-title">{{ t('strategy.basic_info') }}</span>
+          </div>
           <a-row :gutter="16">
             <a-col :span="12">
               <a-form-item
@@ -406,14 +414,13 @@ async function handleFinish() {
                 :rules="[{ required: true }]"
                 :extra="t('strategy.name_helper')"
               >
-                <a-input v-model:value="values.strategyName" size="large" :placeholder="t('strategy.name_placeholder')" />
+                <a-input v-model:value="values.strategyName" :placeholder="t('strategy.name_placeholder')" />
               </a-form-item>
             </a-col>
             <a-col :span="12">
               <a-form-item v-if="isEdit" :name="'scope'" :label="t('strategy.scope')" :extra="t('strategy.scope_helper')">
                 <a-radio-group
                   v-model:value="values.scope"
-                  size="large"
                   class="strategy-scope-switch"
                   :disabled="lockBinding"
                 >
@@ -442,7 +449,6 @@ async function handleFinish() {
               >
                 <a-radio-group
                   v-model:value="values.scope"
-                  size="large"
                   class="strategy-scope-switch"
                   :disabled="lockBinding"
                 >
@@ -465,9 +471,9 @@ async function handleFinish() {
               >
                 <a-select
                   v-model:value="values.routeId"
-                  size="large"
                   show-search
                   option-filter-prop="label"
+                  popup-class-name="vn-portal"
                   :placeholder="t('strategy.route_id_placeholder')"
                   :disabled="routeSelectDisabled"
                   :options="selectableRoutes.map((route) => ({
@@ -489,9 +495,9 @@ async function handleFinish() {
               >
                 <a-select
                   v-model:value="values.routeId"
-                  size="large"
                   show-search
                   option-filter-prop="label"
+                  popup-class-name="vn-portal"
                   :placeholder="t('strategy.route_id_placeholder')"
                   :disabled="routeSelectDisabled"
                   :options="selectableRoutes.map((route) => ({
@@ -504,13 +510,12 @@ async function handleFinish() {
           </a-row>
         </section>
 
-        <section class="strategy-form-section">
-          <header class="strategy-form-section-head">
-            <span class="strategy-form-section-index">02</span>
-            <SettingOutlined />
-            <span class="strategy-form-section-title">{{ t('strategy.config') }}</span>
-            <span class="strategy-form-section-hint">{{ t('strategy.config_helper') }}</span>
-          </header>
+        <section class="form-section-modern">
+          <div class="section-header">
+            <SettingOutlined class="section-icon" />
+            <span class="section-title">{{ t('strategy.config') }}</span>
+            <span class="section-subtitle">{{ t('strategy.config_helper') }}</span>
+          </div>
             <AiSecurityFields v-if="code === 'AI_SECURITY'" :values="values" />
 
             <template v-else-if="!schema" />
@@ -522,6 +527,7 @@ async function handleFinish() {
                     <a-select
                       :value="values.authType"
                       :options="authTypeOptions"
+                      popup-class-name="vn-portal"
                       @update:value="handleAuthTypeChange"
                     />
                   </a-form-item>
@@ -575,16 +581,15 @@ async function handleFinish() {
             <DynamicConfigFields v-else :schema="schema" :values="values" />
         </section>
 
-        <section class="strategy-form-section">
-          <header class="strategy-form-section-head">
-            <span class="strategy-form-section-index">03</span>
-            <SettingOutlined />
-            <span class="strategy-form-section-title">{{ t('strategy.advanced_settings') }}</span>
-          </header>
+        <section class="form-section-modern">
+          <div class="section-header">
+            <SettingOutlined class="section-icon" />
+            <span class="section-title">{{ t('strategy.advanced_settings') }}</span>
+          </div>
           <a-row :gutter="16">
             <a-col :span="8">
               <a-form-item :name="'priority'" :label="t('strategy.priority')" :extra="t('strategy.priority_helper')">
-                <a-input-number v-model:value="values.priority" :min="1" :max="1000" size="large" style="width: 100%" />
+                <a-input-number v-model:value="values.priority" :min="1" :max="1000" style="width: 100%" />
               </a-form-item>
             </a-col>
             <a-col :span="8">
@@ -603,7 +608,7 @@ async function handleFinish() {
         </section>
       </div>
 
-      <div class="strategy-modal-footer">
+      <div class="modal-footer-modern">
         <div class="strategy-footer-meta">
           <a-tag class="strategy-type-tag">{{ typeName }}</a-tag>
           <span>{{ values.scope === 'GLOBAL' ? t('strategy.scope_global') : t('strategy.scope_route') }}</span>

@@ -1,21 +1,23 @@
 <script setup lang="ts">
 /**
  * Audit diff drawer — Vue port of gateway-ui/.../audit-logs/components/DiffDrawer.tsx.
- * Basic info, field-level change table and the raw old/new comparison on a dark
+ * Basic info, field-level change table and the raw old/new comparison on a matte
  * dual-column surface. Backend diff entries use `path` for whole-node changes and
- * `field` otherwise; both are accepted.
+ * `field` otherwise; both are accepted. Rendered on the Vue-native portal layer.
  */
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import {
-  ClockCircleOutlined, EyeOutlined, RollbackOutlined, SwapOutlined, UserOutlined,
+  ClockCircleOutlined, CloseOutlined, EyeOutlined, RollbackOutlined, SwapOutlined, UserOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { getAuditLogDiff } from '@/api/auditLogs'
 import type { AuditDiffChange } from '@/api/auditLogs'
 import { parseServerTime } from '@/utils/serverTime'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
 import {
   canRollback, cellJson, changeField, changeTone, getTargetLink, getTargetName,
   operationMeta, targetMeta,
@@ -63,6 +65,18 @@ const rollbackable = computed(() => (diff.value
   ? canRollback(diff.value.operationType, diff.value.oldValue)
   : false))
 
+function badgeTone(tone: string): 'ok' | 'warn' | 'err' | 'info' | 'idle' {
+  switch (tone) {
+    case 'success': return 'ok'
+    case 'warning': return 'warn'
+    case 'error': return 'err'
+    case 'info':
+    case 'cyan':
+    case 'violet': return 'info'
+    default: return 'idle'
+  }
+}
+
 const changeColumns = computed<ColumnsType<AuditDiffChange>>(() => [
   { title: t('audit.type'), dataIndex: 'type', key: 'type', width: 92 },
   { title: t('audit.field'), key: 'field', width: 160 },
@@ -90,70 +104,47 @@ function confirmRollback() {
     :open="open"
     placement="right"
     :width="760"
-    root-class-name="audit-drawer"
+    :closable="false"
+    root-class-name="vn-portal vn-drawer"
     destroy-on-close
     @close="emit('close')"
   >
-    <template #title>
-      <span class="audit-drawer-title">
-        <span class="lg-icon-tile" aria-hidden="true"><SwapOutlined /></span>
-        {{ t('audit.diff_title') }}
-      </span>
-    </template>
-    <template #extra>
-      <a-popconfirm
-        v-if="rollbackable"
-        :title="t('audit.rollback_confirm')"
-        :ok-text="t('common.confirm')"
-        :cancel-text="t('common.cancel')"
-        :get-popup-container="getPopupContainer"
-        @confirm="confirmRollback"
-      >
-        <a-button danger size="small">
-          <template #icon><RollbackOutlined /></template>
-          {{ t('audit.rollback') }}
-        </a-button>
-      </a-popconfirm>
-    </template>
+    <div class="vn-detail">
+      <div class="vn-detail-head">
+        <div class="vn-detail-head-left">
+          <span class="vn-detail-glyph" aria-hidden="true"><SwapOutlined /></span>
+          <div style="min-width: 0">
+            <h4 class="vn-detail-title">{{ t('audit.diff_title') }}</h4>
+            <div class="vn-detail-idrow">
+              <span class="vn-mono vn-detail-id">{{ displayName }}</span>
+            </div>
+          </div>
+        </div>
+        <VnIconButton :icon="CloseOutlined" :label="t('common.close')" @click="emit('close')" />
+      </div>
 
-    <div v-if="loading" class="audit-drawer-loading">
-      <a-spin />
-    </div>
+      <div class="vn-detail-scroll">
+        <div v-if="loading" class="audit-drawer-loading">
+          <a-spin />
+        </div>
 
-    <a-alert
-      v-else-if="loadError"
-      type="error"
-      show-icon
-      class="audit-alert"
-      :message="t('audit.diff_failed')"
-      :description="loadError.message"
-    />
+        <a-alert
+          v-else-if="loadError"
+          type="error"
+          show-icon
+          class="audit-alert"
+          :message="t('audit.diff_failed')"
+          :description="loadError.message"
+        />
 
-    <div v-else-if="diff" class="audit-diff-body">
-      <a-descriptions bordered size="small" :column="2" class="audit-descriptions">
-        <a-descriptions-item :label="t('audit.operation_type')">
-          <span :class="['audit-pill', `is-${opMeta.tone}`]">
-            <component :is="opMeta.icon" />
-            {{ opLabel }}
-          </span>
-        </a-descriptions-item>
-        <a-descriptions-item :label="t('audit.target_type')">
-          <span :class="['audit-pill', `is-${targetInfo.tone}`]">
-            <component :is="targetInfo.icon" />
-            {{ targetLabel }}
-          </span>
-        </a-descriptions-item>
-        <a-descriptions-item :label="t('audit.target')">
-          <span class="audit-diff-target">
-            <a-tooltip :title="`ID: ${diff.targetId}`" :get-popup-container="getPopupContainer">
-              <a-typography-text
-                :copyable="{ text: displayName, tooltips: false }"
-                class="audit-target-name"
-              >
-                {{ displayName }}
-              </a-typography-text>
-            </a-tooltip>
-            <a-tooltip v-if="targetLink" :title="t('audit.view_target_detail')" :get-popup-container="getPopupContainer">
+        <template v-else-if="diff">
+          <div class="vn-detail-pills">
+            <VnBadge :tone="badgeTone(opMeta.tone)">{{ opLabel }}</VnBadge>
+            <span class="vn-chip">
+              <component :is="targetInfo.icon" />
+              {{ targetLabel }}
+            </span>
+            <a-tooltip v-if="targetLink" :title="t('audit.view_target_detail')" overlay-class-name="vn-tooltip">
               <a-button
                 type="link"
                 size="small"
@@ -165,83 +156,109 @@ function confirmRollback() {
                 <template #icon><EyeOutlined /></template>
               </a-button>
             </a-tooltip>
-          </span>
-        </a-descriptions-item>
-        <a-descriptions-item :label="t('audit.operator')">
-          <span class="audit-operator"><UserOutlined /> {{ diff.operator }}</span>
-        </a-descriptions-item>
-        <a-descriptions-item :label="t('audit.created_at')" :span="2">
-          <span class="audit-time"><ClockCircleOutlined /> {{ createdText }}</span>
-        </a-descriptions-item>
-      </a-descriptions>
+          </div>
 
-      <a-alert
-        v-if="diff.parseError"
-        type="warning"
-        show-icon
-        class="audit-alert"
-        :message="diff.parseError"
-      />
+          <section class="vn-detail-section">
+            <div class="vn-detail-section-head">{{ t('audit.target') }}</div>
+            <div class="vn-kv">
+              <div class="vn-kv-item">
+                <span class="vn-kv-label">{{ t('audit.operator') }}</span>
+                <span class="vn-kv-value audit-operator"><UserOutlined /> {{ diff.operator }}</span>
+              </div>
+              <div class="vn-kv-item">
+                <span class="vn-kv-label">{{ t('audit.created_at') }}</span>
+                <span class="vn-kv-value audit-time"><ClockCircleOutlined /> {{ createdText }}</span>
+              </div>
+              <div class="vn-kv-item vn-kv-wide">
+                <span class="vn-kv-label">{{ t('audit.target') }}</span>
+                <span class="vn-kv-value">{{ displayName }} <span class="vn-mono audit-muted">({{ diff.targetId }})</span></span>
+              </div>
+            </div>
+          </section>
 
-      <section v-if="diff.changes?.length" class="audit-subpanel">
-        <div class="audit-subpanel-title">
-          <SwapOutlined />
-          {{ t('audit.change_details') }}
-        </div>
-        <a-table
-          :columns="changeColumns"
-          :data-source="diff.changes"
-          :pagination="false"
-          :row-class-name="changeRowClass"
-          :row-key="changeKey"
-          size="small"
-          class="audit-diff-table"
+          <a-alert
+            v-if="diff.parseError"
+            type="warning"
+            show-icon
+            class="audit-alert"
+            :message="diff.parseError"
+          />
+
+          <section v-if="diff.changes?.length" class="vn-detail-section">
+            <div class="vn-detail-section-head">
+              <SwapOutlined />
+              <span>{{ t('audit.change_details') }}</span>
+              <span class="vn-count">{{ diff.changes.length }}</span>
+            </div>
+            <a-table
+              :columns="changeColumns"
+              :data-source="diff.changes"
+              :pagination="false"
+              :row-class-name="changeRowClass"
+              :row-key="changeKey"
+              size="small"
+              class="audit-diff-table"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'type'">
+                  <VnBadge :tone="badgeTone(changeTone(record.type))">{{ record.type }}</VnBadge>
+                </template>
+                <template v-else-if="column.key === 'field'">
+                  <code class="audit-field vn-mono">{{ changeField(record) }}</code>
+                </template>
+                <template v-else-if="column.key === 'oldValue'">
+                  <span :class="cellJson(record.oldValue) ? 'audit-value-old' : 'audit-muted'">
+                    {{ cellJson(record.oldValue) || '-' }}
+                  </span>
+                </template>
+                <template v-else-if="column.key === 'newValue'">
+                  <span :class="cellJson(record.newValue) ? 'audit-value-new' : 'audit-muted'">
+                    {{ cellJson(record.newValue) || '-' }}
+                  </span>
+                </template>
+              </template>
+            </a-table>
+          </section>
+
+          <section class="vn-detail-section">
+            <div class="vn-detail-section-head"><SwapOutlined />{{ t('audit.value_comparison') }}</div>
+            <div class="audit-diff-grid">
+              <div class="audit-diff-col is-old">
+                <div class="audit-diff-col-head">
+                  <VnBadge tone="err">{{ t('audit.old_value') }}</VnBadge>
+                </div>
+                <div class="audit-diff-col-body">
+                  <AuditJsonValue :value="diff.oldValue" />
+                </div>
+              </div>
+              <div class="audit-diff-col is-new">
+                <div class="audit-diff-col-head">
+                  <VnBadge tone="ok">{{ t('audit.new_value') }}</VnBadge>
+                </div>
+                <div class="audit-diff-col-body">
+                  <AuditJsonValue :value="diff.newValue" />
+                </div>
+              </div>
+            </div>
+          </section>
+        </template>
+      </div>
+
+      <div v-if="rollbackable" class="vn-detail-actions">
+        <a-popconfirm
+          :title="t('audit.rollback_confirm')"
+          :ok-text="t('common.confirm')"
+          :cancel-text="t('common.cancel')"
+          :get-popup-container="getPopupContainer"
+          overlay-class-name="vn-portal"
+          @confirm="confirmRollback"
         >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'type'">
-              <span :class="['audit-pill', `is-${changeTone(record.type)}`]">{{ record.type }}</span>
-            </template>
-            <template v-else-if="column.key === 'field'">
-              <code class="audit-field">{{ changeField(record) }}</code>
-            </template>
-            <template v-else-if="column.key === 'oldValue'">
-              <span :class="cellJson(record.oldValue) ? 'audit-value-old' : 'audit-muted'">
-                {{ cellJson(record.oldValue) || '-' }}
-              </span>
-            </template>
-            <template v-else-if="column.key === 'newValue'">
-              <span :class="cellJson(record.newValue) ? 'audit-value-new' : 'audit-muted'">
-                {{ cellJson(record.newValue) || '-' }}
-              </span>
-            </template>
-          </template>
-        </a-table>
-      </section>
-
-      <section class="audit-subpanel">
-        <div class="audit-subpanel-title">
-          <SwapOutlined />
-          {{ t('audit.value_comparison') }}
-        </div>
-        <div class="audit-diff-grid">
-          <div class="audit-diff-col is-old">
-            <div class="audit-diff-col-head">
-              <span class="audit-pill is-error">{{ t('audit.old_value') }}</span>
-            </div>
-            <div class="audit-diff-col-body">
-              <AuditJsonValue :value="diff.oldValue" />
-            </div>
-          </div>
-          <div class="audit-diff-col is-new">
-            <div class="audit-diff-col-head">
-              <span class="audit-pill is-success">{{ t('audit.new_value') }}</span>
-            </div>
-            <div class="audit-diff-col-body">
-              <AuditJsonValue :value="diff.newValue" />
-            </div>
-          </div>
-        </div>
-      </section>
+          <a-button danger>
+            <template #icon><RollbackOutlined /></template>
+            {{ t('audit.rollback') }}
+          </a-button>
+        </a-popconfirm>
+      </div>
     </div>
   </a-drawer>
 </template>

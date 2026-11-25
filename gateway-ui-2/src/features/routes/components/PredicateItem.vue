@@ -37,6 +37,7 @@ function handleTypeChange(value: string) {
       :value="predicate.name"
       :placeholder="t('routes.predicate_type')"
       class="predicate-type-select"
+      popup-class-name="vn-portal"
       @change="handleTypeChange"
     >
       <a-select-option value="Path">Path</a-select-option>
@@ -51,6 +52,7 @@ function handleTypeChange(value: string) {
       mode="multiple"
       :placeholder="t('routes.select_methods')"
       class="predicate-value-control"
+      popup-class-name="vn-portal"
       :options="METHOD_OPTIONS"
     />
     <a-input
@@ -61,7 +63,7 @@ function handleTypeChange(value: string) {
     />
 
     <a-tooltip :title="t('common.delete')">
-      <a-button type="text" danger class="action-btn" :aria-label="t('common.delete')" @click="emit('remove', index)">
+      <a-button type="text" danger class="action-btn vn-iconbtn" :aria-label="t('common.delete')" @click="emit('remove', index)">
         <template #icon><DeleteOutlined /></template>
       </a-button>
     </a-tooltip>

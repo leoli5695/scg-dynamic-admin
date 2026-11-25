@@ -138,5 +138,10 @@
   "instance.image_section": "Image",
   "instance.page_subtitle": "Create, start/stop and scale gateway instances",
   "instance.no_clusters_available": "No clusters available — import a Kubernetes cluster first",
-  "instance.go_import_cluster": "Import a cluster"
+  "instance.go_import_cluster": "Import a cluster",
+  "instance.view_grid": "Cards",
+  "instance.view_table": "Table",
+  "instance.view_mode": "View mode",
+  "instance.results": "{{count}} results",
+  "instance.stats_scope": "Instance status statistics"
 }

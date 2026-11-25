@@ -490,6 +490,14 @@
   margin-left: 2px;
 }
 
+/* Row-action groups inside an antd table cell fill the cell and hug the right
+   edge, so every row action stays inline and right-aligned (no overflow menu).
+   Margin spacing above keeps injected tooltip siblings from shifting icons. */
+.vn-scope .ant-table-tbody > tr > td .vn-iconbtn-group {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ==================== State panel (empty / error / loading) ================= */
 .vn-scope .vn-state {
   display: flex;
@@ -1086,4 +1094,414 @@
 .vn-collapse-leave-to {
   opacity: 0;
   transform: translateY(-3px);
+}
+
+/* ==================== Additive antd chrome (vn rollout batch C) ============
+   Matte skin for the antd components the catalog/log/diagnostic pages use but
+   the services baseline does not (native tables there). Every rule is scoped to
+   `.vn-scope` / `.vn-portal` and mirrors the login-theme selector plus one class
+   so it wins on specificity without touching the shared sheets. Services uses
+   native `.vn-table` and native segmented, so none of this changes its look. */
+
+/* ---------- Table ---------- */
+.vn-scope .ant-table.ant-table {
+  background: transparent;
+  color: var(--vn-ink);
+  font-size: 12.5px;
+}
+
+.vn-scope .ant-table.ant-table .ant-table-container {
+  border-radius: var(--vn-r-control);
+}
+
+.vn-scope .ant-table-thead > tr > th {
+  background: var(--vn-surface-sunken) !important;
+  border-bottom: 1px solid var(--vn-line) !important;
+  color: var(--vn-ink-3) !important;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 9px 14px;
+}
+
+.vn-scope .ant-table-thead > tr > th::before {
+  display: none !important;
+}
+
+.vn-scope .ant-table-tbody > tr > td {
+  border-bottom: 1px solid var(--vn-line-soft) !important;
+  padding: 9px 14px;
+  vertical-align: middle;
+}
+
+.vn-scope .ant-table-tbody > tr:last-child > td {
+  border-bottom: 0 !important;
+}
+
+.vn-scope .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: var(--vn-surface-raised) !important;
+}
+
+.vn-scope .ant-table-tbody > tr.ant-table-placeholder:hover > td {
+  background: transparent !important;
+}
+
+.vn-scope .ant-table-tbody > tr.ant-table-row-selected > td {
+  background: var(--vn-brand-soft) !important;
+}
+
+.vn-scope .ant-table-expanded-row > td {
+  background: var(--vn-surface-sunken) !important;
+}
+
+/* Fixed columns must stay opaque so scrolled content does not bleed through. */
+.vn-scope .ant-table-cell-fix-left,
+.vn-scope .ant-table-cell-fix-right {
+  background: var(--vn-surface) !important;
+}
+
+.vn-scope .ant-table-thead > tr > th.ant-table-cell-fix-left,
+.vn-scope .ant-table-thead > tr > th.ant-table-cell-fix-right {
+  background: var(--vn-surface-sunken) !important;
+}
+
+.vn-scope .ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-left,
+.vn-scope .ant-table-tbody > tr.ant-table-row:hover > td.ant-table-cell-fix-right {
+  background: var(--vn-surface-raised) !important;
+}
+
+.vn-scope .ant-table-cell .ant-table-column-sorter {
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .ant-table-cell .ant-table-column-sorter-up.active,
+.vn-scope .ant-table-cell .ant-table-column-sorter-down.active {
+  color: var(--vn-brand);
+}
+
+.vn-scope .ant-table-column-sort {
+  background: var(--vn-surface-sunken) !important;
+}
+
+.vn-scope .ant-table-row-expand-icon {
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-chip);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-table-row-expand-icon:hover {
+  border-color: var(--vn-brand-line);
+  color: var(--vn-brand);
+}
+
+.vn-scope .ant-table-placeholder .ant-table-cell {
+  background: transparent !important;
+  border-bottom: 0 !important;
+}
+
+/* ---------- Pagination ---------- */
+.vn-scope .ant-pagination.ant-pagination {
+  color: var(--vn-ink-2);
+  font-size: 12px;
+}
+
+.vn-scope .ant-pagination .ant-pagination-item {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-chip);
+}
+
+.vn-scope .ant-pagination .ant-pagination-item a {
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-pagination .ant-pagination-item:hover {
+  border-color: var(--vn-brand-line);
+}
+
+.vn-scope .ant-pagination .ant-pagination-item:hover a {
+  color: var(--vn-brand);
+}
+
+.vn-scope .ant-pagination .ant-pagination-item-active {
+  background: var(--vn-brand-soft);
+  border-color: var(--vn-brand-line);
+}
+
+.vn-scope .ant-pagination .ant-pagination-item-active a {
+  color: var(--vn-brand);
+}
+
+.vn-scope .ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+.vn-scope .ant-pagination .ant-pagination-next .ant-pagination-item-link {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-chip);
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-pagination .ant-pagination-disabled .ant-pagination-item-link {
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .ant-pagination .ant-pagination-options .ant-select-selector {
+  background: var(--vn-surface-sunken) !important;
+  border-color: var(--vn-line) !important;
+}
+
+.vn-scope .ant-pagination .ant-pagination-total-text {
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .ant-pagination .ant-pagination-jump-prev .ant-pagination-item-link-icon,
+.vn-scope .ant-pagination .ant-pagination-jump-next .ant-pagination-item-link-icon {
+  color: var(--vn-brand);
+}
+
+/* ---------- Tabs ---------- */
+.vn-scope .ant-tabs.ant-tabs {
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-tabs-tab .ant-tabs-tab-btn {
+  color: var(--vn-ink-2);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.vn-scope .ant-tabs-tab:hover .ant-tabs-tab-btn {
+  color: var(--vn-ink);
+}
+
+.vn-scope .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--vn-brand) !important;
+  text-shadow: none;
+}
+
+.vn-scope .ant-tabs-ink-bar {
+  height: 2px !important;
+  background: var(--vn-brand) !important;
+}
+
+.vn-scope .ant-tabs-top > .ant-tabs-nav::before,
+.vn-scope .ant-tabs-bottom > .ant-tabs-nav::before {
+  border-bottom: 1px solid var(--vn-line-soft) !important;
+}
+
+.vn-scope .ant-tabs-nav .ant-tabs-nav-more {
+  color: var(--vn-ink-2);
+}
+
+/* ---------- Descriptions ---------- */
+.vn-scope .ant-descriptions.ant-descriptions {
+  color: var(--vn-ink);
+}
+
+.vn-scope .ant-descriptions .ant-descriptions-item-label {
+  color: var(--vn-ink-3);
+  font-size: 11px;
+}
+
+.vn-scope .ant-descriptions .ant-descriptions-item-content {
+  color: var(--vn-ink-2);
+  font-size: 12px;
+}
+
+.vn-scope .ant-descriptions-bordered .ant-descriptions-item-label {
+  background: var(--vn-surface-sunken) !important;
+}
+
+.vn-scope .ant-descriptions-bordered .ant-descriptions-row {
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+
+.vn-scope .ant-descriptions-bordered .ant-descriptions-item-label,
+.vn-scope .ant-descriptions-bordered .ant-descriptions-item-content {
+  border-inline-end: 1px solid var(--vn-line-soft) !important;
+}
+
+.vn-scope .ant-descriptions-bordered .ant-descriptions-view {
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+}
+
+/* ---------- Collapse ---------- */
+.vn-scope .ant-collapse.ant-collapse {
+  background: transparent;
+  border: 0;
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-collapse > .ant-collapse-item {
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+
+.vn-scope .ant-collapse > .ant-collapse-item > .ant-collapse-header {
+  color: var(--vn-ink-2);
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.vn-scope .ant-collapse > .ant-collapse-item > .ant-collapse-header .ant-collapse-arrow {
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .ant-collapse-content {
+  background: transparent;
+  border-top: 1px solid var(--vn-line-soft);
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-collapse-content > .ant-collapse-content-box {
+  padding: 10px;
+}
+
+/* ---------- Switch ---------- */
+.vn-scope .ant-switch.ant-switch {
+  background: var(--vn-line-strong);
+}
+
+.vn-scope .ant-switch.ant-switch-checked {
+  background: var(--vn-brand);
+}
+
+.vn-scope .ant-switch.ant-switch-checked:focus {
+  box-shadow: 0 0 0 3px var(--vn-brand-soft);
+}
+
+/* ---------- Radio button group ---------- */
+.vn-scope .ant-radio-button-wrapper {
+  background: var(--vn-surface-sunken);
+  border-color: var(--vn-line);
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .ant-radio-button-wrapper:hover {
+  color: var(--vn-brand);
+}
+
+.vn-scope .ant-radio-button-wrapper-checked {
+  background: var(--vn-brand-soft) !important;
+  border-color: var(--vn-brand-line) !important;
+  color: var(--vn-brand) !important;
+}
+
+.vn-scope .ant-radio-button-wrapper-checked::before {
+  background: var(--vn-brand-line) !important;
+}
+
+/* ---------- Progress (score ring) ---------- */
+.vn-scope .ant-progress.ant-progress {
+  color: var(--vn-ink);
+}
+
+.vn-scope .ant-progress-text {
+  color: var(--vn-ink);
+}
+
+/* ---------- Empty ---------- */
+.vn-scope .ant-empty.ant-empty {
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .ant-empty-description {
+  color: var(--vn-ink-3);
+}
+
+/* ---------- Divider ---------- */
+.vn-scope .ant-divider.ant-divider {
+  border-color: var(--vn-line-soft);
+  color: var(--vn-ink-3);
+}
+
+/* ---------- Typography copy affordance ---------- */
+.vn-scope .ant-typography-copy,
+.vn-portal .ant-typography-copy {
+  color: var(--vn-ink-3);
+}
+
+/* ---------- HTTP method chip (matte tint keyed by verb) ---------- */
+.vn-scope .vn-method,
+.vn-portal .vn-method {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  padding: 2px 8px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.6;
+}
+
+.vn-scope .vn-method.is-get,
+.vn-portal .vn-method.is-get {
+  border-color: rgba(66, 211, 146, 0.26);
+  background: rgba(66, 211, 146, 0.10);
+  color: var(--vn-ok);
+}
+
+.vn-scope .vn-method.is-post,
+.vn-portal .vn-method.is-post {
+  border-color: rgba(91, 156, 248, 0.26);
+  background: rgba(91, 156, 248, 0.10);
+  color: var(--vn-info);
+}
+
+.vn-scope .vn-method.is-put,
+.vn-portal .vn-method.is-put {
+  border-color: rgba(240, 180, 41, 0.26);
+  background: rgba(240, 180, 41, 0.10);
+  color: var(--vn-warn);
+}
+
+.vn-scope .vn-method.is-delete,
+.vn-portal .vn-method.is-delete {
+  border-color: rgba(242, 85, 90, 0.28);
+  background: rgba(242, 85, 90, 0.10);
+  color: var(--vn-err);
+}
+
+.vn-scope .vn-method.is-patch,
+.vn-portal .vn-method.is-patch {
+  border-color: rgba(127, 157, 255, 0.28);
+  background: rgba(127, 157, 255, 0.10);
+  color: #7f9dff;
+}
+
+.vn-scope .ant-typography-copy:hover,
+.vn-portal .ant-typography-copy:hover {
+  color: var(--vn-brand);
+}
+
+.vn-scope .ant-typography-copy-success,
+.vn-portal .ant-typography-copy-success {
+  color: var(--vn-ok);
+}
+
+/* ---------- Popconfirm (teleported) ---------- */
+.vn-portal.ant-popover .ant-popover-inner {
+  background: var(--vn-surface-raised);
+}
+
+.vn-portal .ant-popconfirm .ant-popover-message-title {
+  color: var(--vn-ink);
+}
+
+.vn-portal .ant-popconfirm .ant-popover-message {
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .ant-popconfirm .ant-popover-description {
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .ant-popover-arrow::before {
+  background: var(--vn-surface-raised);
 }

@@ -34,25 +34,25 @@ const { t } = useI18n()
 const hours = ref(24)
 const activeTab = ref('score')
 
-/** Login-skin series inks (mirror the shared semantic / periwinkle tokens). */
-const SCORE_GREEN = '#22c55e'
-const WARN_AMBER = '#eab308'
-const ERROR_RED = '#ef4444'
-const QPS_BLUE = '#6998ef'
-const HEAP_VIOLET = '#a492ea'
-const AXIS_TEXT = '#95a3bc'
-const AXIS_LINE = 'rgba(145, 169, 222, 0.18)'
-const AXIS_GRID = 'rgba(145, 169, 222, 0.08)'
+/** Vue-native series inks (mirror the shared vn semantic tokens). */
+const SCORE_GREEN = '#42d392'
+const WARN_AMBER = '#f0b429'
+const ERROR_RED = '#f2555a'
+const QPS_BLUE = '#5b9cf8'
+const HEAP_VIOLET = '#7f9dff'
+const AXIS_TEXT = '#9aa7bd'
+const AXIS_LINE = 'rgba(53, 66, 94, 0.6)'
+const AXIS_GRID = 'rgba(37, 48, 72, 0.5)'
 /** Stable identity: vue-echarts re-inits (and disposes) when initOptions identity changes. */
 const CHART_INIT_OPTIONS = { renderer: 'svg' as const }
 
 const chartTooltip = {
-  backgroundColor: '#17233c',
-  borderColor: 'rgba(145, 169, 222, 0.23)',
+  backgroundColor: '#1a2233',
+  borderColor: '#253048',
   borderWidth: 1,
   padding: [8, 12] as [number, number],
-  textStyle: { color: '#edf2ff', fontSize: 12 },
-  extraCssText: 'border-radius:10px;box-shadow:0 12px 28px rgba(4,7,15,0.46);',
+  textStyle: { color: '#e6ebf5', fontSize: 12 },
+  extraCssText: 'border-radius:8px;box-shadow:0 18px 44px -20px rgba(0,0,0,0.7);',
 }
 
 const hoursOptions = computed(() => [
@@ -109,7 +109,7 @@ const scoreTrendOption = computed<EChartsOption | null>(() => {
     title: {
       text: t('diagnostic.score_trend'),
       left: 'center',
-      textStyle: { color: '#edf2ff', fontSize: 13, fontWeight: 600 },
+      textStyle: { color: '#e6ebf5', fontSize: 13, fontWeight: 600 },
     },
     tooltip: {
       trigger: 'axis',
@@ -120,7 +120,7 @@ const scoreTrendOption = computed<EChartsOption | null>(() => {
         const item = list[0]
         if (!item) return ''
         const date = parseServerTime(item.value[0]).toLocaleString()
-        return `<div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#edf2ff">${date}</div>`
+        return `<div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#e6ebf5">${date}</div>`
           + `<div style="font-size:13px;color:${SCORE_GREEN}">${t('diagnostic.score_label')}: ${item.value[1]}</div>`
       },
     },
@@ -175,7 +175,7 @@ const gatewayMetricsOption = computed<EChartsOption>(() => {
         const list = (Array.isArray(raw) ? raw : [raw]) as Array<{ value: [number, number]; seriesName: string; color: string }>
         if (!list.length) return ''
         const date = parseServerTime(list[0].value[0]).toLocaleString()
-        const head = `<div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#edf2ff">${date}</div>`
+        const head = `<div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#e6ebf5">${date}</div>`
         return head + list.map((item) =>
           `<div style="font-size:12px;color:${item.color}">${item.seriesName}: ${item.value[1]}</div>`).join('')
       },
@@ -234,69 +234,71 @@ function onHoursChange(value: unknown): void {
 </script>
 
 <template>
-  <a-card v-if="scoreTrendOption" :bordered="false" class="diagnostic-history-card">
-    <template #title>
+  <section v-if="scoreTrendOption" class="vn-panel diagnostic-history-card">
+    <header class="vn-panel-head">
       <span class="diagnostic-card-heading">
-        <span class="icon-tile icon-tile--sm"><LineChartOutlined /></span>
-        <span class="lg-section-title">{{ t('diagnostic.history_trend') }}</span>
-        <a-select
-          class="diagnostic-hours-select"
-          :value="hours"
-          :options="hoursOptions"
-          @change="onHoursChange"
-        />
+        <LineChartOutlined class="diagnostic-card-glyph" />
+        <span class="diagnostic-card-title">{{ t('diagnostic.history_trend') }}</span>
       </span>
-    </template>
+      <a-select
+        class="diagnostic-hours-select"
+        :value="hours"
+        :options="hoursOptions"
+        @change="onHoursChange"
+      />
+    </header>
 
-    <a-tabs v-model:active-key="activeTab" class="diagnostic-tabs" :animated="false">
-      <a-tab-pane key="score" :tab="t('diagnostic.score_trend')">
-        <v-chart class="diagnostic-chart" :option="scoreTrendOption" :init-options="CHART_INIT_OPTIONS" autoresize />
-      </a-tab-pane>
-      <a-tab-pane key="metrics" :tab="t('diagnostic.gateway_metrics')">
-        <v-chart
-          v-if="showGatewayChart"
-          class="diagnostic-chart"
-          :option="gatewayMetricsOption"
-          :init-options="CHART_INIT_OPTIONS"
-          autoresize
-        />
-        <div v-else class="diagnostic-metrics-empty">
-          <a-alert type="info" show-icon :message="t('diagnostic.no_gateway_metrics_title')">
-            <template #description>
-              <p class="diagnostic-empty-desc">{{ t('diagnostic.no_gateway_metrics_desc') }}</p>
-              <p class="diagnostic-empty-hint">{{ t('diagnostic.prometheus_hint') }}</p>
-            </template>
-          </a-alert>
-        </div>
-      </a-tab-pane>
-    </a-tabs>
+    <div class="vn-panel-body">
+      <a-tabs v-model:active-key="activeTab" class="diagnostic-tabs" :animated="false">
+        <a-tab-pane key="score" :tab="t('diagnostic.score_trend')">
+          <v-chart class="diagnostic-chart" :option="scoreTrendOption" :init-options="CHART_INIT_OPTIONS" autoresize />
+        </a-tab-pane>
+        <a-tab-pane key="metrics" :tab="t('diagnostic.gateway_metrics')">
+          <v-chart
+            v-if="showGatewayChart"
+            class="diagnostic-chart"
+            :option="gatewayMetricsOption"
+            :init-options="CHART_INIT_OPTIONS"
+            autoresize
+          />
+          <div v-else class="diagnostic-metrics-empty">
+            <a-alert type="info" show-icon :message="t('diagnostic.no_gateway_metrics_title')">
+              <template #description>
+                <p class="diagnostic-empty-desc">{{ t('diagnostic.no_gateway_metrics_desc') }}</p>
+                <p class="diagnostic-empty-hint">{{ t('diagnostic.prometheus_hint') }}</p>
+              </template>
+            </a-alert>
+          </div>
+        </a-tab-pane>
+      </a-tabs>
 
-    <template v-if="comparison && comparison.previousScore !== undefined">
-      <div class="diagnostic-divider" />
-      <div class="diagnostic-compare">
-        <div class="diagnostic-stat">
-          <span class="diagnostic-stat-label">{{ t('diagnostic.previous_score') }}</span>
-          <span class="diagnostic-stat-value" :style="{ color: getScoreColor(comparison.previousScore) }">
-            {{ comparison.previousScore }}
-            <em>{{ previousScoreSuffix }}</em>
-          </span>
+      <template v-if="comparison && comparison.previousScore !== undefined">
+        <div class="diagnostic-divider" />
+        <div class="diagnostic-compare">
+          <div class="diagnostic-stat">
+            <span class="vn-kv-label">{{ t('diagnostic.previous_score') }}</span>
+            <span class="diagnostic-stat-value" :style="{ color: getScoreColor(comparison.previousScore) }">
+              {{ comparison.previousScore }}
+              <em>{{ previousScoreSuffix }}</em>
+            </span>
+          </div>
+          <div class="diagnostic-stat">
+            <span class="vn-kv-label">{{ t('diagnostic.score_change') }}</span>
+            <span
+              class="diagnostic-stat-value"
+              :style="{ color: scoreChange > 0 ? 'var(--vn-ok)' : scoreChange < 0 ? 'var(--vn-err)' : 'var(--vn-ink-3)' }"
+            >
+              {{ scoreChange > 0 ? '+' : '' }}{{ scoreChange }}
+            </span>
+          </div>
+          <a-alert
+            class="diagnostic-compare-alert"
+            :type="comparisonAlertType"
+            show-icon
+            :message="t('diagnostic.health_stable')"
+          />
         </div>
-        <div class="diagnostic-stat">
-          <span class="diagnostic-stat-label">{{ t('diagnostic.score_change') }}</span>
-          <span
-            class="diagnostic-stat-value"
-            :style="{ color: scoreChange > 0 ? 'var(--success-color)' : scoreChange < 0 ? 'var(--error-color)' : 'var(--text-muted)' }"
-          >
-            {{ scoreChange > 0 ? '+' : '' }}{{ scoreChange }}
-          </span>
-        </div>
-        <a-alert
-          class="diagnostic-compare-alert"
-          :type="comparisonAlertType"
-          show-icon
-          :message="t('diagnostic.health_stable')"
-        />
-      </div>
-    </template>
-  </a-card>
+      </template>
+    </div>
+  </section>
 </template>

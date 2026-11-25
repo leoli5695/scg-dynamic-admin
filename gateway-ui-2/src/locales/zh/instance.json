@@ -138,5 +138,10 @@
   "instance.image_section": "镜像配置",
   "instance.page_subtitle": "管理网关实例的创建、启停与扩缩容",
   "instance.no_clusters_available": "暂无可用集群，先导入一个 Kubernetes 集群",
-  "instance.go_import_cluster": "去导入集群"
+  "instance.go_import_cluster": "去导入集群",
+  "instance.view_grid": "卡片",
+  "instance.view_table": "表格",
+  "instance.view_mode": "视图模式",
+  "instance.results": "{{count}} 个结果",
+  "instance.stats_scope": "实例状态统计"
 }

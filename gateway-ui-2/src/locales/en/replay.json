@@ -9,6 +9,7 @@
   "replay.trace_time": "Time",
   "replay.method": "Method",
   "replay.path": "Path",
+  "replay.search_path": "Search path...",
   "replay.status": "Status",
   "replay.latency": "Latency",
   "replay.type": "Type",

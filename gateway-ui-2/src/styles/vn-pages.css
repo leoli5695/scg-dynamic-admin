@@ -1,0 +1,675 @@
+/**
+ * Shared page-composition layer for the Vue-native rollout (batch B pages).
+ *
+ * Additive and isolated: every composition class uses the `vnp-` prefix so it
+ * never collides with the services page's `vn-` composition rules, and the antd
+ * matte extensions are scoped to `.vnp-scope` / `.vnp-portal` (markers only the
+ * batch-B pages carry) so no other page's appearance changes. Surfaces, ink,
+ * radii, badges, chips, toolbar, stat rail, segmented, state and icon buttons
+ * come from styles/vue-native.css; this file only adds layout + the antd chrome
+ * that the global vn layer does not cover (tables, tabs, progress, pagination,
+ * switch, nested select dropdowns, skeletons, popconfirm).
+ */
+
+/* ==================== Loading skeleton ==================== */
+.vn-scope .vnp-skel-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+.vn-scope .vn-skel-line { height: 10px; }
+.vn-scope .vn-skel-block { height: 54px; }
+
+/* ==================== Catalog grid ==================== */
+.vn-scope .vnp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+@media (min-width: 1500px) {
+  .vn-scope .vnp-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 1100px) {
+  .vn-scope .vnp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .vn-scope .vnp-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ==================== Tile ==================== */
+.vn-scope .vnp-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 14px 12px 16px;
+  transition: border-color var(--vn-fast) var(--vn-ease), background var(--vn-fast) var(--vn-ease);
+}
+
+.vn-scope .vnp-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--vnp-rail, var(--vn-line-strong));
+}
+
+.vn-scope .vnp-rail-ok { --vnp-rail: var(--vn-ok); }
+.vn-scope .vnp-rail-warn { --vnp-rail: var(--vn-warn); }
+.vn-scope .vnp-rail-err { --vnp-rail: var(--vn-err); }
+.vn-scope .vnp-rail-info { --vnp-rail: var(--vn-info); }
+.vn-scope .vnp-rail-idle { --vnp-rail: var(--vn-line-strong); }
+
+.vn-scope .vnp-tile:hover {
+  border-color: var(--vn-line-strong);
+  background: var(--vn-surface-raised);
+}
+
+.vn-scope .vnp-tile-head,
+.vn-scope .vnp-tile-identity,
+.vn-scope .vnp-tile-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.vn-scope .vnp-tile-head { justify-content: flex-start; }
+.vn-scope .vnp-tile-head > .vn-iconbtn-group { margin-left: auto; }
+.vn-scope .vnp-tile-meta { flex-wrap: wrap; }
+
+.vn-scope .vnp-tile-glyph {
+  flex: none;
+  font-size: var(--vn-glyph-lg);
+}
+
+.vn-scope .vnp-name {
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--vn-ink);
+  font: inherit;
+  font-weight: 620;
+  text-align: left;
+  cursor: pointer;
+}
+.vn-scope .vnp-name:hover { text-decoration: underline; }
+.vn-scope .vnp-name:focus-visible { outline: 2px solid var(--vn-ok); outline-offset: -2px; }
+
+.vn-scope .vnp-tile-sub {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--vn-ink-2);
+}
+
+.vn-scope .vnp-tile-warning {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--vn-err);
+}
+
+/* Fixed fact band so tiles in a row align regardless of content length. */
+.vn-scope .vnp-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+}
+.vn-scope .vnp-fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vn-scope .vnp-fact-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+.vn-scope .vnp-fact-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-scope .vnp-tile-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+.vn-scope .vnp-tile-foot > .vn-iconbtn-group { margin-left: auto; }
+
+.vn-scope .vnp-pagination {
+  display: flex;
+  justify-content: end;
+  margin-top: 12px;
+}
+
+/* ==================== Native table ==================== */
+.vn-scope .vnp-tablewrap { overflow-x: auto; }
+
+.vn-scope .vnp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.vn-scope .vnp-table thead th {
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+  background: var(--vn-surface-sunken);
+  border-bottom: 1px solid var(--vn-line);
+  white-space: nowrap;
+}
+.vn-scope .vnp-table-actions-head { text-align: right; }
+.vn-scope .vnp-table tbody td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--vn-line-soft);
+  vertical-align: middle;
+  color: var(--vn-ink);
+}
+.vn-scope .vnp-table tbody tr:last-child td { border-bottom: 0; }
+.vn-scope .vnp-table tbody td:last-child { text-align: right; }
+.vn-scope .vnp-row { transition: background var(--vn-fast) var(--vn-ease); }
+.vn-scope .vnp-row:hover { background: var(--vn-surface-raised); }
+.vn-scope .vnp-row-dim { color: var(--vn-ink-2); }
+.vn-scope .vnp-row-id { color: var(--vn-ink-3); font-size: 11px; }
+.vn-scope .vnp-cell-muted { color: var(--vn-ink-2); }
+.vn-scope .vnp-strong { color: var(--vn-ink); font-weight: 600; }
+
+/* ==================== Section / panel head helpers ==================== */
+.vn-scope .vnp-panel-head,
+.vn-portal .vnp-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--vn-ink);
+}
+.vn-scope .vnp-panel-head .anticon,
+.vn-portal .vnp-panel-head .anticon { color: var(--vn-brand); font-size: var(--vn-glyph); }
+.vn-scope .vnp-panel-head .vnp-count,
+.vn-portal .vnp-panel-head .vnp-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--vn-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.vn-scope .vnp-hint,
+.vn-portal .vnp-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--vn-ink-3);
+}
+
+/* ==================== Detail drawer ==================== */
+.vn-portal.vnp-drawer.ant-drawer .ant-drawer-content-wrapper { box-shadow: var(--vn-shadow-pop); }
+
+.vn-portal .vnp-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.vn-portal .vnp-detail-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+.vn-portal .vnp-detail-head > .vn-iconbtn-group,
+.vn-portal .vnp-detail-head > .action-btn { margin-left: auto; }
+.vn-portal .vnp-detail-head-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-right: 10px;
+  min-width: 0;
+}
+.vn-portal .vnp-detail-glyph {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-brand);
+  font-size: var(--vn-glyph-lg);
+}
+.vn-portal .vnp-detail-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  color: var(--vn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vn-portal .vnp-detail-idrow { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.vn-portal .vnp-detail-id {
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vn-portal .vnp-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vn-portal .vnp-detail-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vn-portal .vnp-detail-desc { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--vn-ink-2); }
+.vn-portal .vnp-detail-actions {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+.vn-portal .vnp-detail-actions > .ant-btn-primary { flex: 1; }
+
+.vn-scope .vnp-section,
+.vn-portal .vnp-section {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 12px;
+}
+.vn-scope .vnp-section-head,
+.vn-portal .vnp-section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-2);
+}
+.vn-scope .vnp-section-head .anticon,
+.vn-portal .vnp-section-head .anticon { font-size: var(--vn-glyph-sm); color: var(--vn-brand); }
+.vn-scope .vnp-section-head .vnp-count,
+.vn-portal .vnp-section-head .vnp-count {
+  margin-left: auto;
+  color: var(--vn-ink-3);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.vn-scope .vnp-kv,
+.vn-portal .vnp-kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.vn-scope .vnp-kv-item,
+.vn-portal .vnp-kv-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vn-scope .vnp-kv-wide,
+.vn-portal .vnp-kv-wide { grid-column: 1 / -1; }
+.vn-scope .vnp-kv-label,
+.vn-portal .vnp-kv-label {
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+.vn-scope .vnp-kv-value,
+.vn-portal .vnp-kv-value { font-size: 12.5px; color: var(--vn-ink); overflow-wrap: anywhere; }
+.vn-scope .vnp-kv-value .vn-iconbtn,
+.vn-portal .vnp-kv-value .vn-iconbtn { vertical-align: middle; }
+
+.vn-scope .vnp-list,
+.vn-portal .vnp-list { display: flex; flex-direction: column; gap: 6px; }
+.vn-scope .vnp-list-card,
+.vn-portal .vnp-list-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+.vn-scope .vnp-list-meta,
+.vn-portal .vnp-list-meta { display: flex; align-items: center; gap: 8px; flex: none; font-size: 11.5px; color: var(--vn-ink-3); }
+.vn-scope .vnp-empty,
+.vn-portal .vnp-empty { font-size: 12px; color: var(--vn-ink-3); }
+
+.vn-scope .vnp-note,
+.vn-portal .vnp-note {
+  margin: 10px 0 0;
+  padding: 7px 9px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--vn-ink-2);
+}
+
+/* ==================== Modal / form ==================== */
+.vn-portal.vnp-modal .ant-modal { max-width: calc(100vw - 32px); padding-bottom: 0; }
+.vn-portal.vnp-modal .ant-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 86vh;
+}
+.vn-portal.vnp-modal .ant-modal .ant-modal-body { flex: 1; min-height: 0; display: flex; }
+
+.vn-portal .vnp-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+.vn-portal .vnp-modal-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vn-portal .vnp-modal-head { display: flex; align-items: center; gap: 10px; }
+.vn-portal .vnp-modal-head-glyph {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-brand-line);
+  background: var(--vn-brand-soft);
+  color: var(--vn-brand);
+  font-size: var(--vn-glyph);
+}
+.vn-portal .vnp-modal-title { font-size: 14.5px; font-weight: 640; letter-spacing: -0.01em; color: var(--vn-ink); }
+.vn-portal .vnp-modal-subtitle { font-size: 11.5px; color: var(--vn-ink-3); margin-top: 1px; }
+
+.vn-portal .vnp-form-section {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 12px;
+}
+.vn-portal .vnp-form-section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.vn-portal .vnp-form-section-head .anticon { font-size: var(--vn-glyph-sm); color: var(--vn-brand); }
+.vn-portal .vnp-form-section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-2);
+}
+.vn-portal .vnp-form-section-action { margin-left: auto; }
+.vn-portal .vnp-form-section .ant-form-item { margin-bottom: 10px; }
+.vn-portal .vnp-form-section > .ant-form-item:last-child { margin-bottom: 0; }
+.vn-portal .vnp-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.vn-portal .vnp-form-grid .ant-form-item { margin-bottom: 0; }
+.vn-portal .ant-form-item .ant-form-item-label { padding-bottom: 3px; }
+
+.vn-portal .vnp-modal-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 11px 18px;
+  border-top: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+.vn-portal .vnp-readonly {
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: var(--vn-r-control);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* Code / log blocks (pod yaml, logs, trace payloads) */
+.vn-portal .vnp-code {
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  background: var(--vn-surface-sunken);
+  overflow: hidden;
+}
+.vn-portal .vnp-code-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+.vn-portal .vnp-code-head .vnp-form-section-title { margin-right: auto; }
+.vn-portal .vnp-code-pre {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 420px;
+  overflow: auto;
+  font-family: var(--vn-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--vn-ink-2);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ==================== antd matte extensions (batch-B markers only) ========== */
+/* Tables */
+.vnp-scope .ant-table-wrapper .ant-table,
+.vnp-portal .ant-table-wrapper .ant-table {
+  background: transparent;
+  color: var(--vn-ink);
+  font-size: 12.5px;
+}
+.vnp-scope .ant-table-wrapper .ant-table-container,
+.vnp-portal .ant-table-wrapper .ant-table-container { border-radius: var(--vn-r-control); }
+.vnp-scope .ant-table-wrapper .ant-table-thead > tr > th,
+.vnp-portal .ant-table-wrapper .ant-table-thead > tr > th {
+  background: var(--vn-surface-sunken) !important;
+  color: var(--vn-ink-3) !important;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--vn-line) !important;
+  padding: 9px 12px;
+}
+.vnp-scope .ant-table-wrapper .ant-table-thead > tr > th::before,
+.vnp-portal .ant-table-wrapper .ant-table-thead > tr > th::before { display: none; }
+.vnp-scope .ant-table-wrapper .ant-table-tbody > tr > td,
+.vnp-portal .ant-table-wrapper .ant-table-tbody > tr > td {
+  border-bottom: 1px solid var(--vn-line-soft);
+  padding: 9px 12px;
+  color: var(--vn-ink);
+  background: transparent;
+}
+.vnp-scope .ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td,
+.vnp-portal .ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: var(--vn-surface-raised);
+}
+.vnp-scope .ant-table-wrapper .ant-table-tbody > tr.ant-table-placeholder > td,
+.vnp-portal .ant-table-wrapper .ant-table-tbody > tr.ant-table-placeholder > td {
+  background: transparent;
+  border-bottom: 0;
+}
+.vnp-scope .ant-table-wrapper .ant-table-cell-fix-right,
+.vnp-portal .ant-table-wrapper .ant-table-cell-fix-right,
+.vnp-scope .ant-table-wrapper .ant-table-cell-fix-left,
+.vnp-portal .ant-table-wrapper .ant-table-cell-fix-left { background: var(--vn-surface); }
+.vnp-scope .ant-table-wrapper .ant-table-empty .ant-table-expanded-row-fixed,
+.vnp-portal .ant-table-wrapper .ant-table-empty .ant-table-expanded-row-fixed { color: var(--vn-ink-3); }
+
+/* Tabs */
+.vnp-scope .ant-tabs.ant-tabs,
+.vnp-portal .ant-tabs.ant-tabs { color: var(--vn-ink); }
+.vnp-scope .ant-tabs .ant-tabs-nav::before,
+.vnp-portal .ant-tabs .ant-tabs-nav::before { border-bottom: 1px solid var(--vn-line-soft); }
+.vnp-scope .ant-tabs .ant-tabs-tab,
+.vnp-portal .ant-tabs .ant-tabs-tab {
+  color: var(--vn-ink-2);
+  font-size: 12.5px;
+  font-weight: 550;
+  padding: 8px 4px;
+}
+.vnp-scope .ant-tabs .ant-tabs-tab:hover,
+.vnp-portal .ant-tabs .ant-tabs-tab:hover { color: var(--vn-ink); }
+.vnp-scope .ant-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn,
+.vnp-portal .ant-tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--vn-brand); }
+.vnp-scope .ant-tabs .ant-tabs-ink-bar,
+.vnp-portal .ant-tabs .ant-tabs-ink-bar { background: var(--vn-brand); }
+.vnp-scope .ant-tabs .ant-tabs-content,
+.vnp-portal .ant-tabs .ant-tabs-content { color: var(--vn-ink); }
+
+/* Progress */
+.vnp-scope .ant-progress .ant-progress-text,
+.vnp-portal .ant-progress .ant-progress-text { color: var(--vn-ink-2); font-size: 11px; }
+.vnp-scope .ant-progress .ant-progress-inner,
+.vnp-portal .ant-progress .ant-progress-inner { background: var(--vn-line-soft); }
+.vnp-scope .ant-progress-status-success .ant-progress-bg,
+.vnp-portal .ant-progress-status-success .ant-progress-bg { background: var(--vn-ok); }
+.vnp-scope .ant-progress-status-active .ant-progress-bg,
+.vnp-portal .ant-progress-status-active .ant-progress-bg { background: var(--vn-brand); }
+.vnp-scope .ant-progress-status-exception .ant-progress-bg,
+.vnp-portal .ant-progress-status-exception .ant-progress-bg { background: var(--vn-err); }
+
+/* Pagination */
+.vnp-scope .ant-pagination .ant-pagination-item,
+.vnp-portal .ant-pagination .ant-pagination-item {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-chip);
+}
+.vnp-scope .ant-pagination .ant-pagination-item a,
+.vnp-portal .ant-pagination .ant-pagination-item a { color: var(--vn-ink-2); }
+.vnp-scope .ant-pagination .ant-pagination-item-active,
+.vnp-portal .ant-pagination .ant-pagination-item-active {
+  background: var(--vn-brand-soft);
+  border-color: var(--vn-brand-line);
+}
+.vnp-scope .ant-pagination .ant-pagination-item-active a,
+.vnp-portal .ant-pagination .ant-pagination-item-active a { color: var(--vn-brand); }
+.vnp-scope .ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+.vnp-scope .ant-pagination .ant-pagination-next .ant-pagination-item-link,
+.vnp-portal .ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+.vnp-portal .ant-pagination .ant-pagination-next .ant-pagination-item-link {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-chip);
+  color: var(--vn-ink-2);
+}
+.vnp-scope .ant-pagination .ant-pagination-disabled .ant-pagination-item-link,
+.vnp-portal .ant-pagination .ant-pagination-disabled .ant-pagination-item-link { color: var(--vn-ink-3); }
+.vnp-scope .ant-pagination .ant-pagination-options-quick-jumper input,
+.vnp-portal .ant-pagination .ant-pagination-options-quick-jumper input { color: var(--vn-ink); }
+
+/* Switch */
+.vnp-scope .ant-switch.ant-switch,
+.vnp-portal .ant-switch.ant-switch { background: var(--vn-line-strong); }
+.vnp-scope .ant-switch.ant-switch-checked,
+.vnp-portal .ant-switch.ant-switch-checked { background: var(--vn-brand); }
+.vnp-scope .ant-switch .ant-switch-inner,
+.vnp-portal .ant-switch .ant-switch-inner { color: var(--vn-ink); font-size: 11px; }
+
+/* Nested select dropdowns / popconfirm / dropdown menus rendered inside a portal.
+   The login skin sets these backgrounds with !important, so the matte override
+   must also be !important (higher specificity then wins). */
+.vnp-portal .ant-select-dropdown,
+.vnp-scope .ant-select-dropdown {
+  background: var(--vn-surface-raised) !important;
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-control);
+  box-shadow: var(--vn-shadow-pop) !important;
+}
+.vnp-portal .ant-select-dropdown .ant-select-item,
+.vnp-scope .ant-select-dropdown .ant-select-item { color: var(--vn-ink-2); border-radius: var(--vn-r-chip); }
+.vnp-portal .ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled),
+.vnp-scope .ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  background: var(--vn-brand-soft) !important;
+  color: var(--vn-brand);
+  font-weight: 600;
+}
+.vnp-portal .ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-disabled),
+.vnp-scope .ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: var(--vn-surface-hover) !important;
+}
+.vnp-portal.ant-popover .ant-popover-inner,
+.vnp-scope.ant-popover .ant-popover-inner {
+  background: var(--vn-surface-raised) !important;
+  border: 1px solid var(--vn-line);
+  border-radius: var(--vn-r-control);
+  box-shadow: var(--vn-shadow-pop) !important;
+}
+.vnp-portal.ant-popover .ant-popover-title,
+.vnp-scope.ant-popover .ant-popover-title { color: var(--vn-ink); border-bottom: 1px solid var(--vn-line-soft); }
+.vnp-portal.ant-popover .ant-popover-inner-content,
+.vnp-scope.ant-popover .ant-popover-inner-content { color: var(--vn-ink-2); }
+.vnp-portal.ant-popover .ant-popover-arrow::before,
+.vnp-scope.ant-popover .ant-popover-arrow::before { background: var(--vn-surface-raised); }
+
+/* Skeleton */
+.vnp-scope .ant-skeleton .ant-skeleton-content .ant-skeleton-title,
+.vnp-scope .ant-skeleton .ant-skeleton-content .ant-skeleton-paragraph > li,
+.vnp-portal .ant-skeleton .ant-skeleton-content .ant-skeleton-title,
+.vnp-portal .ant-skeleton .ant-skeleton-content .ant-skeleton-paragraph > li {
+  background: linear-gradient(90deg, var(--vn-surface-raised) 25%, var(--vn-surface-hover) 37%, var(--vn-surface-raised) 63%);
+  background-size: 400% 100%;
+}
+
+/* Empty */
+.vnp-scope .ant-empty-description,
+.vnp-portal .ant-empty-description { color: var(--vn-ink-3); }
+
+/* Radio / checkbox accents */
+.vnp-scope .ant-radio-checked .ant-radio-inner,
+.vnp-portal .ant-radio-checked .ant-radio-inner { border-color: var(--vn-brand); background: var(--vn-brand); }
+.vnp-scope .ant-checkbox-checked .ant-checkbox-inner,
+.vnp-portal .ant-checkbox-checked .ant-checkbox-inner { border-color: var(--vn-brand); background: var(--vn-brand); }
+
+/* Space-compact groups keep the matte input chrome */
+.vnp-scope .ant-space-compact .ant-input,
+.vnp-portal .ant-space-compact .ant-input { border-radius: var(--vn-r-control); }

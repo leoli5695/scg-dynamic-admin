@@ -2,16 +2,16 @@
 /**
  * Instances list page — Vue port of InstancesListPage.tsx.
  * Data flow via typed API + useRequest composable; actions refresh the list.
- * Presentation aligned to the login skin (2026-11-20): panel cards with status
- * capsule, resource summary and heartbeat, chip filters + search.
+ * Rendered on the Vue-native design layer: toolbar + metric rail + search +
+ * a grid/table catalog. API calls and payloads are unchanged.
  */
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  AppstoreOutlined, ArrowRightOutlined, ClusterOutlined, CloudServerOutlined, DeleteOutlined,
-  ExclamationCircleOutlined, InboxOutlined, PauseCircleOutlined, PlayCircleOutlined, PlusOutlined,
-  ReloadOutlined, SearchOutlined,
+  AppstoreOutlined, CloudServerOutlined, ClusterOutlined, CopyOutlined, DeleteOutlined,
+  ExclamationCircleOutlined, EyeOutlined, InboxOutlined, OrderedListOutlined, PauseCircleOutlined,
+  PlayCircleOutlined, PlusOutlined, ReloadOutlined, SearchOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import {
@@ -22,25 +22,28 @@ import { INSTANCE_STATUS, type GatewayInstance } from '@/types/instance'
 import { getStatusText, getSpecText } from '@/utils/instance'
 import { parseServerTime } from '@/utils/serverTime'
 import { ApiError } from '@/api/http'
-import { message } from '@/utils/feedback'
-import InlineStatChips from '@/components/InlineStatChips.vue'
+import { message, modal } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnState from '@/components/vn/VnState.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
+import '@/styles/vue-native.css'
+import '@/styles/vue-native-shared.css'
 import './instances.css'
+import './instances-vue-native.css'
 
-const PAGE_SIZE = 12
+// Named so the shell's KeepAlive can cache it.
+defineOptions({ name: 'InstancesListPage' })
+
+const PAGE_SIZE = 24
 /** Matches the backend heartbeat cycle; a healthy instance never flickers stale. */
 const HEARTBEAT_FRESH_MS = 45_000
 
-type StatusTone = 'success' | 'warning' | 'error' | 'info' | 'neutral'
+type VnTone = 'ok' | 'warn' | 'err' | 'info' | 'idle'
 type HeartbeatTone = 'ok' | 'warn' | 'bad' | 'idle'
-
-interface ChipItem {
-  key: string
-  value: number
-  label: string
-  tone?: 'green' | 'red' | 'blue' | 'amber'
-  active?: boolean
-  onClick?: () => void
-}
 
 const router = useRouter()
 const { t } = useI18n()
@@ -52,10 +55,22 @@ const list = computed<GatewayInstance[]>(() => instances.data.value ?? [])
 const clusterCount = computed(() => clusters.data.value?.length ?? 0)
 const loading = computed(() => instances.loading.value || clusters.loading.value)
 
+const viewPreferenceKey = 'gateway.instances.view'
+function readViewPreference(): 'grid' | 'table' | undefined {
+  try {
+    const value = localStorage.getItem(viewPreferenceKey)
+    return value === 'grid' || value === 'table' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const viewPreference = ref(readViewPreference())
 const search = ref('')
 const activeStatus = ref<number | null>(null)
 const page = ref(1)
 const now = ref(Date.now())
+const searchInput = useTemplateRef<{ focus: () => void }>('searchInput')
 
 let nowTimer: ReturnType<typeof setInterval> | undefined
 function startClock() {
@@ -99,52 +114,47 @@ const stats = computed(() => ({
   stopped: list.value.filter((i) => i.statusCode === INSTANCE_STATUS.STOPPED).length,
 }))
 
-const chipItems = computed<ChipItem[]>(() => [
+const statItems = computed<VnStatItem[]>(() => [
   {
     key: 'all',
     value: stats.value.total,
     label: t('common.all'),
     icon: AppstoreOutlined,
     active: activeStatus.value === null,
-    onClick: () => { activeStatus.value = null; page.value = 1 },
   },
   {
     key: 'running',
     value: stats.value.running,
     label: t('instance.status_running'),
-    tone: 'green',
     icon: PlayCircleOutlined,
+    accent: 'var(--vn-ok)',
     active: activeStatus.value === INSTANCE_STATUS.RUNNING,
-    onClick: () => {
-      activeStatus.value = activeStatus.value === INSTANCE_STATUS.RUNNING ? null : INSTANCE_STATUS.RUNNING
-      page.value = 1
-    },
   },
   {
     key: 'error',
     value: stats.value.error,
     label: t('instance.status_error'),
-    tone: 'red',
     icon: ExclamationCircleOutlined,
+    accent: 'var(--vn-err)',
     active: activeStatus.value === INSTANCE_STATUS.ERROR,
-    onClick: () => {
-      activeStatus.value = activeStatus.value === INSTANCE_STATUS.ERROR ? null : INSTANCE_STATUS.ERROR
-      page.value = 1
-    },
   },
   {
     key: 'stopped',
     value: stats.value.stopped,
     label: t('instance.status_stopped'),
-    tone: 'amber',
     icon: PauseCircleOutlined,
+    accent: 'var(--vn-warn)',
     active: activeStatus.value === INSTANCE_STATUS.STOPPED,
-    onClick: () => {
-      activeStatus.value = activeStatus.value === INSTANCE_STATUS.STOPPED ? null : INSTANCE_STATUS.STOPPED
-      page.value = 1
-    },
   },
 ])
+
+function selectStat(key: string) {
+  if (key === 'all') activeStatus.value = null
+  else if (key === 'running') activeStatus.value = activeStatus.value === INSTANCE_STATUS.RUNNING ? null : INSTANCE_STATUS.RUNNING
+  else if (key === 'error') activeStatus.value = activeStatus.value === INSTANCE_STATUS.ERROR ? null : INSTANCE_STATUS.ERROR
+  else if (key === 'stopped') activeStatus.value = activeStatus.value === INSTANCE_STATUS.STOPPED ? null : INSTANCE_STATUS.STOPPED
+  page.value = 1
+}
 
 const filteredList = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -156,29 +166,49 @@ const filteredList = computed(() => {
   })
 })
 
-const pagedList = computed(() =>
-  filteredList.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
+const isFiltered = computed(() => search.value.trim() !== '' || activeStatus.value !== null)
 
-watch(filteredList, () => {
-  const maxPage = Math.max(1, Math.ceil(filteredList.value.length / PAGE_SIZE))
-  if (page.value > maxPage) page.value = maxPage
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredList.value.length / PAGE_SIZE)))
+const pagedList = computed(() =>
+  filteredList.value.slice((Math.min(page.value, pageCount.value) - 1) * PAGE_SIZE, Math.min(page.value, pageCount.value) * PAGE_SIZE))
+
+watch([search, activeStatus], () => { page.value = 1 })
+watch(pageCount, (count) => { page.value = Math.min(page.value, count) })
+
+const view = computed({
+  get: () => viewPreference.value ?? (stats.value.total > PAGE_SIZE ? 'table' : 'grid'),
+  set: (value: 'grid' | 'table') => {
+    viewPreference.value = value
+    try { localStorage.setItem(viewPreferenceKey, value) } catch { /* storage is optional */ }
+  },
 })
+
+const viewOptions = computed<VnSegmentOption<'grid' | 'table'>[]>(() => [
+  { key: 'grid', label: t('instance.view_grid'), icon: AppstoreOutlined },
+  { key: 'table', label: t('instance.view_table'), icon: OrderedListOutlined },
+])
 
 function resetFilters() {
   search.value = ''
   activeStatus.value = null
   page.value = 1
+  searchInput.value?.focus()
 }
 
-function statusTone(statusCode?: number): StatusTone {
+function statusTone(statusCode?: number): VnTone {
   switch (statusCode) {
-    case INSTANCE_STATUS.RUNNING: return 'success'
-    case INSTANCE_STATUS.ERROR: return 'error'
-    case INSTANCE_STATUS.STOPPED: return 'warning'
+    case INSTANCE_STATUS.RUNNING: return 'ok'
+    case INSTANCE_STATUS.ERROR: return 'err'
+    case INSTANCE_STATUS.STOPPED: return 'warn'
     case INSTANCE_STATUS.STARTING:
     case INSTANCE_STATUS.STOPPING: return 'info'
-    default: return 'neutral'
+    default: return 'idle'
   }
+}
+
+function railTone(statusCode?: number): string {
+  const tone = statusTone(statusCode)
+  return tone === 'info' ? 'idle' : tone
 }
 
 function statusText(instance: GatewayInstance): string {
@@ -250,202 +280,325 @@ async function runAction(action: () => Promise<unknown>, successKey?: string, fa
     message.error(msg)
   }
 }
+
+function handleDelete(instance: GatewayInstance) {
+  modal.confirm({
+    title: t('common.confirm'),
+    content: t('instance.delete_confirm'),
+    okText: t('common.confirm'),
+    okType: 'primary',
+    zIndex: 1200,
+    okButtonProps: { danger: true },
+    cancelText: t('common.cancel'),
+    wrapClassName: 'vn-portal',
+    onOk: () => runAction(() => deleteInstance(instance.id), 'instance.delete_success', 'instance.delete_failed'),
+  })
+}
+
+async function copyId(instance: GatewayInstance) {
+  const ok = await copyText(instance.instanceId)
+  if (ok) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
+}
+
+function openConsole(instance: GatewayInstance) {
+  router.push(`/instances/${instance.instanceId}`)
+}
 </script>
 
 <template>
-  <div class="instances-page">
-    <div class="instances-page-header">
-      <div class="instances-page-heading">
-        <h1 class="instances-page-title">
-          <span class="page-header-glyph" aria-hidden="true"><CloudServerOutlined /></span>
-          {{ t('menu.instances') }}
-        </h1>
-        <p class="instances-page-subtitle">{{ t('instance.page_subtitle') }}</p>
-      </div>
-      <div class="instances-page-actions">
-        <a-tooltip :title="t('common.refresh')">
-          <a-button :loading="instances.loading.value" @click="instances.run()">
-            <template #icon><ReloadOutlined /></template>
-          </a-button>
-        </a-tooltip>
+  <div class="instances-page vn-instances vn-scope">
+    <VnToolbar
+      :title="t('menu.instances')"
+      :lede="t('instance.page_subtitle')"
+    >
+      <template #actions>
+        <VnSegmented v-model="view" :options="viewOptions" :label="t('instance.view_mode')" />
+        <VnIconButton
+          :icon="ReloadOutlined"
+          :label="t('common.refresh')"
+          :disabled="instances.loading.value"
+          @click="instances.run()"
+        />
         <a-button
           type="primary"
-          size="large"
+          class="create-btn"
           :disabled="clusterCount === 0"
           @click="router.push('/instances/create')"
         >
-          <template #icon><PlusOutlined /></template>
-          {{ t('instance.create_instance') }}
+          <template #icon><PlusOutlined /></template>{{ t('instance.create_instance') }}
         </a-button>
-      </div>
-    </div>
+      </template>
+    </VnToolbar>
 
-    <div v-if="list.length > 0" class="instances-toolbar">
-      <InlineStatChips :items="chipItems" />
+    <!-- Status metrics and search share one tool row. -->
+    <div class="vn-metarow">
+      <VnStatRail
+        :items="statItems"
+        :label="t('instance.stats_scope')"
+        @select="selectStat"
+      />
       <a-input
+        ref="searchInput"
         v-model:value="search"
-        class="instances-search"
-        allow-clear
+        :aria-label="t('instance.search_placeholder')"
         :placeholder="t('instance.search_placeholder')"
-        @input="page = 1"
+        allow-clear
+        class="vn-search"
       >
         <template #prefix><SearchOutlined /></template>
       </a-input>
+      <span class="vn-filterbar-spacer" />
+      <span class="vn-result-count" role="status">{{ t('instance.results', { count: filteredList.length }) }}</span>
+      <a-button v-if="isFiltered" type="text" size="small" @click="resetFilters">
+        {{ t('common.reset') }}
+      </a-button>
     </div>
 
-    <a-spin :spinning="loading && list.length === 0">
-      <a-row :gutter="[16, 16]" class="instances-grid">
-        <a-col
-          v-for="instance in pagedList"
-          :key="instance.id"
-          :xs="24"
-          :sm="12"
-          :lg="8"
-          :xl="8"
-          class="instances-col"
-        >
-          <article class="instance-card" @click="router.push(`/instances/${instance.instanceId}`)">
-            <header class="instance-card-header">
-              <div class="instance-card-icon"><CloudServerOutlined /></div>
-              <div class="instance-card-info">
-                <div class="instance-card-name">{{ instance.instanceName }}</div>
-                <div class="instance-card-meta">
-                  <span>
-                    <ClusterOutlined />{{ instance.clusterName }}
-                  </span>
-                  <span>
-                    <InboxOutlined />{{ instance.namespace }}
-                  </span>
-                  <a-tooltip :title="instance.instanceId">
-                    <span class="instance-id">{{ instance.instanceId }}</span>
-                  </a-tooltip>
-                </div>
-              </div>
-              <div class="instance-card-status">
-                <span :class="['status-badge', `status-badge-${statusTone(instance.statusCode)}`]">
-                  <i :class="['status-dot', `status-dot-${statusTone(instance.statusCode)}`]" />
-                  {{ statusText(instance) }}
-                </span>
-              </div>
-            </header>
+    <!-- Error -->
+    <VnState
+      v-if="instances.error.value && list.length === 0"
+      :icon="ExclamationCircleOutlined"
+      tone="err"
+      :title="t('common.fetch_error')"
+      :hint="instances.error.value.message"
+    >
+      <template #actions>
+        <a-button type="primary" @click="instances.run()">
+          <template #icon><ReloadOutlined /></template>{{ t('common.refresh') }}
+        </a-button>
+      </template>
+    </VnState>
 
-            <div class="instance-card-metrics">
-              <div class="instance-metric">
-                <span class="instance-metric-label">CPU</span>
-                <span class="instance-metric-value">
-                  {{ cpuPercent(instance) === null ? '—' : `${Math.round(cpuPercent(instance)!)}%` }}
-                </span>
-                <span :class="['instance-meter', (cpuPercent(instance) ?? 0) >= 80 ? 'is-warn' : '']">
-                  <i :style="{ width: `${cpuPercent(instance) ?? 0}%` }" />
-                </span>
-              </div>
-              <div class="instance-metric">
-                <span class="instance-metric-label">MEM</span>
-                <span class="instance-metric-value">{{ memoryText(instance) }}</span>
-                <span :class="['instance-meter', (memPercent(instance) ?? 0) >= 80 ? 'is-warn' : '']">
-                  <i :style="{ width: `${memPercent(instance) ?? 0}%` }" />
-                </span>
-              </div>
-              <div class="instance-metric">
-                <span class="instance-metric-label">RPS</span>
-                <span class="instance-metric-value">{{ rpsText(instance) }}</span>
-                <span class="instance-metric-sub">{{ getSpecText(instance, t) }}</span>
-              </div>
-            </div>
-
-            <div class="instance-heartbeat">
-              <i :class="['instance-heartbeat-dot', `is-${heartbeatView(instance).tone}`]" />
-              <span class="instance-heartbeat-label">{{ t('instance.last_heartbeat') }}</span>
-              <span :class="['instance-heartbeat-value', heartbeatView(instance).tone === 'warn' || heartbeatView(instance).tone === 'bad' ? `is-${heartbeatView(instance).tone}` : '']">
-                {{ heartbeatView(instance).text }}
-              </span>
-              <span class="instance-facts">{{ t('instance.replicas') }} {{ instance.replicas }}</span>
-            </div>
-
-            <div v-if="instance.statusMessage" class="instance-status-message">
-              <a-tooltip :title="instance.statusMessage" placement="topLeft">
-                <span class="instance-status-text">{{ instance.statusMessage }}</span>
-              </a-tooltip>
-            </div>
-
-            <div class="instance-card-actions" @click.stop>
-              <a-button type="link" class="instance-open-link" @click="router.push(`/instances/${instance.instanceId}`)">
-                {{ t('instance.open_console') }}<ArrowRightOutlined />
-              </a-button>
-              <a-tooltip v-if="instance.statusCode === INSTANCE_STATUS.RUNNING" :title="t('instance.stop')">
-                <a-button
-                  class="instance-action-btn"
-                  type="text"
-                  @click="runAction(() => stopInstance(instance.id), 'instance.stop_success', 'instance.stop_failed')"
-                >
-                  <template #icon><PauseCircleOutlined /></template>
-                </a-button>
-              </a-tooltip>
-              <a-tooltip
-                v-if="instance.statusCode === INSTANCE_STATUS.STOPPED || instance.statusCode === INSTANCE_STATUS.ERROR"
-                :title="t('instance.start')"
-              >
-                <a-button
-                  class="instance-action-btn instance-action-btn-start"
-                  type="text"
-                  @click="runAction(() => startInstance(instance.id), 'instance.start_success', 'instance.start_failed')"
-                >
-                  <template #icon><PlayCircleOutlined /></template>
-                </a-button>
-              </a-tooltip>
-              <a-tooltip :title="t('common.refresh')">
-                <a-button
-                  class="instance-action-btn"
-                  type="text"
-                  @click="runAction(() => refreshInstanceStatus(instance.id), undefined, 'common.refresh_failed')"
-                >
-                  <template #icon><ReloadOutlined /></template>
-                </a-button>
-              </a-tooltip>
-              <a-popconfirm
-                :title="t('instance.delete_confirm')"
-                :ok-text="t('common.confirm')"
-                :cancel-text="t('common.cancel')"
-                @confirm="runAction(() => deleteInstance(instance.id), 'instance.delete_success', 'instance.delete_failed')"
-              >
-                <a-tooltip :title="t('common.delete')">
-                  <a-button class="instance-action-btn instance-action-btn-danger" type="text" danger>
-                    <template #icon><DeleteOutlined /></template>
-                  </a-button>
-                </a-tooltip>
-              </a-popconfirm>
-            </div>
-          </article>
-        </a-col>
-      </a-row>
-
-      <div v-if="filteredList.length > PAGE_SIZE" class="instances-pagination">
-        <a-pagination
-          v-model:current="page"
-          :page-size="PAGE_SIZE"
-          :total="filteredList.length"
-          :show-size-changer="false"
-        />
+    <!-- Initial load -->
+    <div v-else-if="loading && list.length === 0" class="vn-grid">
+      <div v-for="n in 8" :key="n" class="vn-panel vn-skel-tile">
+        <div class="vn-skel vn-skel-line" style="width: 58%" />
+        <div class="vn-skel vn-skel-line" style="width: 38%" />
+        <div class="vn-skel vn-skel-block" />
       </div>
+    </div>
 
-      <div v-if="list.length > 0 && filteredList.length === 0" class="instances-empty">
-        <div class="instances-empty-icon"><SearchOutlined /></div>
-        <p class="instances-empty-title">{{ t('instance.no_matches') }}</p>
-        <a-button @click="resetFilters">{{ t('instance.reset_search') }}</a-button>
-      </div>
-
-      <div v-if="list.length === 0 && !loading && clusterCount > 0" class="instances-empty">
-        <div class="instances-empty-icon"><CloudServerOutlined /></div>
-        <p class="instances-empty-title">{{ t('instance.no_instances') }}</p>
-      </div>
-
-      <div v-if="list.length === 0 && !loading && clusterCount === 0" class="instances-empty">
-        <div class="instances-empty-icon"><ClusterOutlined /></div>
-        <p class="instances-empty-title">{{ t('instance.no_clusters_available') }}</p>
+    <!-- No clusters -->
+    <VnState
+      v-else-if="list.length === 0 && clusterCount === 0"
+      :icon="ClusterOutlined"
+      :title="t('instance.no_clusters_available')"
+    >
+      <template #actions>
         <a-button type="primary" @click="router.push('/kubernetes')">
           {{ t('instance.go_import_cluster') }}
         </a-button>
+      </template>
+    </VnState>
+
+    <!-- Empty -->
+    <VnState
+      v-else-if="list.length === 0"
+      :icon="CloudServerOutlined"
+      :title="t('instance.no_instances')"
+    >
+      <template #actions>
+        <a-button type="primary" @click="router.push('/instances/create')">
+          <template #icon><PlusOutlined /></template>{{ t('instance.create_instance') }}
+        </a-button>
+      </template>
+    </VnState>
+
+    <!-- Filtered-empty -->
+    <VnState
+      v-else-if="filteredList.length === 0"
+      :icon="SearchOutlined"
+      :title="t('instance.no_matches')"
+    >
+      <template #actions>
+        <a-button @click="resetFilters">{{ t('instance.reset_search') }}</a-button>
+      </template>
+    </VnState>
+
+    <!-- Catalog -->
+    <template v-else>
+      <div v-if="view === 'grid'" class="vn-grid">
+        <article
+          v-for="instance in pagedList"
+          :key="instance.id"
+          :class="['vn-panel', 'vn-tile', 'vn-rail-' + railTone(instance.statusCode)]"
+        >
+          <div class="vn-tile-head">
+            <div class="vn-tile-identity">
+              <span :class="['vn-tile-glyph', 'vn-ink-' + railTone(instance.statusCode)]" aria-hidden="true">
+                <CloudServerOutlined />
+              </span>
+              <button type="button" class="vn-tile-name" :title="instance.instanceName" @click="openConsole(instance)">
+                {{ instance.instanceName }}
+              </button>
+            </div>
+            <div class="vn-iconbtn-group">
+              <VnIconButton
+                v-if="instance.statusCode === INSTANCE_STATUS.RUNNING"
+                :icon="PauseCircleOutlined"
+                :label="t('instance.stop')"
+                @click="runAction(() => stopInstance(instance.id), 'instance.stop_success', 'instance.stop_failed')"
+              />
+              <VnIconButton
+                v-if="instance.statusCode === INSTANCE_STATUS.STOPPED || instance.statusCode === INSTANCE_STATUS.ERROR"
+                :icon="PlayCircleOutlined"
+                :label="t('instance.start')"
+                @click="runAction(() => startInstance(instance.id), 'instance.start_success', 'instance.start_failed')"
+              />
+              <VnIconButton
+                :icon="ReloadOutlined"
+                :label="t('common.refresh')"
+                @click="runAction(() => refreshInstanceStatus(instance.id), undefined, 'common.refresh_failed')"
+              />
+              <VnIconButton :icon="DeleteOutlined" :label="t('common.delete')" danger @click="handleDelete(instance)" />
+            </div>
+          </div>
+
+          <div class="vn-tile-meta">
+            <VnBadge :tone="statusTone(instance.statusCode)">{{ statusText(instance) }}</VnBadge>
+            <span class="vn-chip"><ClusterOutlined />{{ instance.clusterName }}</span>
+            <span class="vn-chip"><InboxOutlined />{{ instance.namespace }}</span>
+          </div>
+
+          <div class="vn-instance-idrow">
+            <a-tooltip :title="instance.instanceId" overlay-class-name="vn-tooltip">
+              <span class="vn-mono vn-instance-id">{{ instance.instanceId }}</span>
+            </a-tooltip>
+            <VnIconButton :icon="CopyOutlined" :label="t('common.copy_id')" inline @click="copyId(instance)" />
+          </div>
+
+          <div class="vn-metrics">
+            <div class="vn-metric">
+              <div class="vn-metric-top">
+                <span class="vn-metric-label">CPU</span>
+                <span class="vn-metric-value">{{ cpuPercent(instance) === null ? '—' : `${Math.round(cpuPercent(instance)!)}%` }}</span>
+              </div>
+              <span :class="['vn-meter', (cpuPercent(instance) ?? 0) >= 80 ? 'is-warn' : '']">
+                <i :style="{ width: `${cpuPercent(instance) ?? 0}%` }" />
+              </span>
+            </div>
+            <div class="vn-metric">
+              <div class="vn-metric-top">
+                <span class="vn-metric-label">MEM</span>
+                <span class="vn-metric-value">{{ memoryText(instance) }}</span>
+              </div>
+              <span :class="['vn-meter', (memPercent(instance) ?? 0) >= 80 ? 'is-warn' : '']">
+                <i :style="{ width: `${memPercent(instance) ?? 0}%` }" />
+              </span>
+            </div>
+            <div class="vn-metric">
+              <div class="vn-metric-top">
+                <span class="vn-metric-label">RPS</span>
+                <span class="vn-metric-value">{{ rpsText(instance) }}</span>
+              </div>
+              <span class="vn-metric-sub">{{ getSpecText(instance, t) }}</span>
+            </div>
+          </div>
+
+          <div class="vn-heartbeat">
+            <i :class="['vn-heartbeat-dot', `is-${heartbeatView(instance).tone}`]" aria-hidden="true" />
+            <span>{{ t('instance.last_heartbeat') }}</span>
+            <span :class="['vn-heartbeat-value', heartbeatView(instance).tone === 'warn' || heartbeatView(instance).tone === 'bad' ? `is-${heartbeatView(instance).tone}` : '']">
+              {{ heartbeatView(instance).text }}
+            </span>
+            <span class="vn-heartbeat-facts">{{ t('instance.replicas') }} {{ instance.replicas }}</span>
+          </div>
+
+          <p v-if="instance.statusMessage" class="vn-tile-warning" :title="instance.statusMessage">
+            <ExclamationCircleOutlined /><span class="vn-tile-warning-text">{{ instance.statusMessage }}</span>
+          </p>
+        </article>
       </div>
-    </a-spin>
+
+      <div v-else class="vn-panel vn-panel-flush vn-tablewrap">
+        <table class="vn-table">
+          <thead>
+            <tr>
+              <th>{{ t('instance.instance_name') }}</th>
+              <th>{{ t('common.status') }}</th>
+              <th>{{ t('instance.cluster') }}</th>
+              <th>{{ t('instance.namespace') }}</th>
+              <th>CPU</th>
+              <th>MEM</th>
+              <th>RPS</th>
+              <th>{{ t('instance.last_heartbeat') }}</th>
+              <th class="vn-table-actions-head">{{ t('common.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="instance in pagedList" :key="instance.id" class="vn-row">
+              <td>
+                <div class="vn-row-identity">
+                  <span class="vn-row-glyph" aria-hidden="true"><CloudServerOutlined /></span>
+                  <div class="vn-row-names">
+                    <button type="button" class="vn-tile-name" :title="instance.instanceName" @click="openConsole(instance)">
+                      {{ instance.instanceName }}
+                    </button>
+                    <span class="vn-mono vn-row-id">{{ instance.instanceId }}</span>
+                  </div>
+                </div>
+              </td>
+              <td><VnBadge :tone="statusTone(instance.statusCode)">{{ statusText(instance) }}</VnBadge></td>
+              <td class="vn-row-dim">{{ instance.clusterName }}</td>
+              <td class="vn-row-dim">{{ instance.namespace }}</td>
+              <td class="vn-cell-metric">
+                {{ cpuPercent(instance) === null ? '—' : `${Math.round(cpuPercent(instance)!)}%` }}
+                <span :class="['vn-meter', (cpuPercent(instance) ?? 0) >= 80 ? 'is-warn' : '']">
+                  <i :style="{ width: `${cpuPercent(instance) ?? 0}%` }" />
+                </span>
+              </td>
+              <td class="vn-cell-metric">{{ memoryText(instance) }}</td>
+              <td class="vn-cell-metric">{{ rpsText(instance) }}</td>
+              <td>
+                <span class="vn-dotlabel">
+                  <i :class="['vn-heartbeat-dot', `is-${heartbeatView(instance).tone}`]" aria-hidden="true" />
+                  <span :class="['vn-heartbeat-value', heartbeatView(instance).tone === 'warn' || heartbeatView(instance).tone === 'bad' ? `is-${heartbeatView(instance).tone}` : '']">
+                    {{ heartbeatView(instance).text }}
+                  </span>
+                </span>
+              </td>
+              <td>
+                <div class="vn-iconbtn-group">
+                  <VnIconButton
+                    :icon="EyeOutlined"
+                    :label="t('instance.open_console')"
+                    @click="openConsole(instance)"
+                  />
+                  <VnIconButton
+                    v-if="instance.statusCode === INSTANCE_STATUS.RUNNING"
+                    :icon="PauseCircleOutlined"
+                    :label="t('instance.stop')"
+                    @click="runAction(() => stopInstance(instance.id), 'instance.stop_success', 'instance.stop_failed')"
+                  />
+                  <VnIconButton
+                    v-if="instance.statusCode === INSTANCE_STATUS.STOPPED || instance.statusCode === INSTANCE_STATUS.ERROR"
+                    :icon="PlayCircleOutlined"
+                    :label="t('instance.start')"
+                    @click="runAction(() => startInstance(instance.id), 'instance.start_success', 'instance.start_failed')"
+                  />
+                  <VnIconButton
+                    :icon="ReloadOutlined"
+                    :label="t('common.refresh')"
+                    @click="runAction(() => refreshInstanceStatus(instance.id), undefined, 'common.refresh_failed')"
+                  />
+                  <VnIconButton :icon="CopyOutlined" :label="t('common.copy_id')" inline @click="copyId(instance)" />
+                  <VnIconButton :icon="DeleteOutlined" :label="t('common.delete')" danger @click="handleDelete(instance)" />
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <a-pagination
+        v-if="pageCount > 1"
+        v-model:current="page"
+        :page-size="PAGE_SIZE"
+        :total="filteredList.length"
+        :show-size-changer="false"
+        class="vn-pagination"
+      />
+    </template>
   </div>
 </template>

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /**
  * Live gateway metrics shown next to the email settings for threshold tuning.
- * Vue port of gateway-ui/src/features/alert/components/CurrentMetricsCard.tsx;
- * adds the average response time the threshold API already returns.
+ * Vue-native matte panel with a compact fixed metric grid.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -46,30 +45,30 @@ const tiles = computed<MetricTile[]>(() => {
 </script>
 
 <template>
-  <section class="lg-panel alert-panel alert-metrics-panel">
-    <header class="alert-panel-head">
-      <span class="alert-panel-title"><AlertOutlined /> {{ t('alert.current_metrics') }}</span>
+  <section class="vn-panel">
+    <header class="vn-panel-head">
+      <span class="vnp-panel-head"><AlertOutlined />{{ t('alert.current_metrics') }}</span>
     </header>
-    <div class="alert-panel-body">
-      <div v-if="!metrics && loading" class="alert-metrics-loading">
+    <div class="vn-panel-body">
+      <div v-if="!metrics && loading" class="vn-alert-metrics-loading">
         <a-spin />
       </div>
-      <div v-else-if="!metrics && error" class="alert-inline-state">
-        <span class="alert-inline-icon is-error"><ExclamationCircleOutlined /></span>
-        <p class="alert-inline-title">{{ t('alert.metrics_unavailable') }}</p>
-        <p class="alert-inline-hint" :title="error">{{ error }}</p>
+      <div v-else-if="!metrics && error" class="vn-alert-inline-state">
+        <span class="vn-alert-inline-icon vn-ink-err"><ExclamationCircleOutlined /></span>
+        <p class="vn-alert-inline-title">{{ t('alert.metrics_unavailable') }}</p>
+        <p class="vnp-hint" :title="error">{{ error }}</p>
         <a-button size="small" @click="emit('retry')">
           <template #icon><ReloadOutlined /></template>{{ t('common.refresh') }}
         </a-button>
       </div>
-      <div v-else class="alert-metrics-grid">
+      <div v-else class="vn-alert-metrics-grid">
         <div
           v-for="tile in tiles"
           :key="tile.key"
-          :class="['alert-metric', { 'alert-metric-wide': tile.wide }]"
+          :class="['vn-alert-metric', { 'vn-alert-metric-wide': tile.wide }]"
         >
-          <span class="lg-section-title">{{ tile.label }}</span>
-          <span class="alert-metric-value">{{ tile.value }}</span>
+          <span class="vn-alert-metric-label">{{ tile.label }}</span>
+          <span class="vn-alert-metric-value">{{ tile.value }}</span>
         </div>
       </div>
     </div>

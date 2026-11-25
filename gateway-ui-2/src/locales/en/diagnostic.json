@@ -8,6 +8,7 @@
   "diagnostic.run_failed": "Failed to run diagnostic",
   "diagnostic.no_data": "No data",
   "diagnostic.warnings": "Warnings",
+  "diagnostic.status_critical": "Critical",
   "diagnostic.errors": "Errors",
   "diagnostic.score": "Health Score",
   "diagnostic.status": "Status",

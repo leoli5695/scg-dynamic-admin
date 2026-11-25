@@ -2,15 +2,16 @@
 /**
  * Strategies page — fields aligned with StrategyController + model/StrategyDefinition.java;
  * type metadata from StrategyTypeController (/api/strategy-types/enabled).
- * Ported from the React feature: category tabs, status chips, type/scope filters,
- * two-step create flow (pick type → configure) and create/edit/delete/toggle actions.
+ * Rendered on the Vue-native design layer: toolbar + metric rail + native
+ * segmented filters + a grid/table catalog. API calls and payloads are unchanged.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, useTemplateRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  CheckCircleOutlined, ControlOutlined, ExclamationCircleOutlined, PauseCircleOutlined,
-  PlusOutlined, ReloadOutlined, RobotOutlined,
+  AppstoreOutlined, CheckCircleOutlined, ControlOutlined, ExclamationCircleOutlined,
+  OrderedListOutlined, PauseCircleOutlined, PlusOutlined, ReloadOutlined,
+  RobotOutlined, SearchOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { ApiError } from '@/api/http'
@@ -21,30 +22,54 @@ import {
 import { listRoutes } from '@/api/routes'
 import type { StrategyDefinition, StrategyTypeInfo } from '@/types/strategy'
 import { message } from '@/utils/feedback'
-import InlineStatChips from '@/components/InlineStatChips.vue'
-import StrategyCard from './components/StrategyCard.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnState from '@/components/vn/VnState.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
+import StrategyCard, { summarizeConfig } from './components/StrategyCard.vue'
+import StrategyTable from './components/StrategyTable.vue'
 import StrategyTypeSelectModal from './components/StrategyTypeSelectModal.vue'
 import StrategyFormModal from './components/StrategyFormModal.vue'
 import DeleteStrategyModal from './components/DeleteStrategyModal.vue'
 import { findGlobalStrategy } from './utils'
-import './strategies.css'
+import '@/styles/vue-native.css'
+import '@/styles/vue-native-shared.css'
+import './strategies-vue-native.css'
 
-type CategoryTab = 'ALL' | 'NORMAL' | 'AI'
+// Named so the shell's KeepAlive can cache it.
+defineOptions({ name: 'StrategiesPage' })
 
 const route_ = useRoute()
 const { t, locale } = useI18n()
 
 const instanceId = computed(() => route_.params.instanceId as string | undefined)
 
+type StatusFilter = 'all' | 'enabled' | 'disabled'
+type ScopeFilter = 'all' | 'GLOBAL' | 'ROUTE'
+
+const viewPreferenceKey = 'gateway.strategies.view'
+function readViewPreference(): 'grid' | 'table' | undefined {
+  try {
+    const value = localStorage.getItem(viewPreferenceKey)
+    return value === 'grid' || value === 'table' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const viewPreference = ref(readViewPreference())
 const filterType = ref('all')
-const filterScope = ref('all')
-const statusFilter = ref('all')
-const categoryTab = ref<CategoryTab>('ALL')
+const filterScope = ref<ScopeFilter>('all')
+const statusFilter = ref<StatusFilter>('all')
+const category = ref<'NORMAL' | 'AI'>('NORMAL')
+const searchTerm = ref('')
 const typeSelectOpen = ref(false)
 const creatingType = ref<StrategyTypeInfo | null>(null)
 const editingStrategy = ref<StrategyDefinition | null>(null)
 const deleteTarget = ref<StrategyDefinition | null>(null)
 const deleting = ref(false)
+const searchInput = useTemplateRef<{ focus: () => void }>('searchInput')
 
 const errorMessage = (error: unknown, fallbackKey: string): string =>
   (error instanceof ApiError && error.message ? error.message : t(fallbackKey))
@@ -100,39 +125,48 @@ const typeLabel = (info?: StrategyTypeInfo, rawCode?: string): string => {
   return locale.value === 'en' ? info.typeNameEn : info.typeName
 }
 
-const filteredStrategies = computed(() => strategies.value.filter((strategy) => {
-  const matchesType = filterType.value === 'all' || strategy.strategyType === filterType.value
-  const matchesScope = filterScope.value === 'all' || strategy.scope === filterScope.value
-  const matchesStatus = statusFilter.value === 'all'
-    || (statusFilter.value === 'enabled' && strategy.enabled)
-    || (statusFilter.value === 'disabled' && !strategy.enabled)
-  const matchesCategory = categoryTab.value === 'ALL'
-    || (categoryTab.value === 'AI' ? isAiStrategy(strategy) : !isAiStrategy(strategy))
-  return matchesType && matchesScope && matchesStatus && matchesCategory
-}))
+const typeLabelOf = (s: StrategyDefinition): string => typeLabel(getStrategyType(s.strategyType), s.strategyType)
+
+const tr = (key: string, options?: Record<string, unknown>): string =>
+  (options ? t(key, options) : t(key))
+const summaryOf = (s: StrategyDefinition) => summarizeConfig(s, tr)
 
 const categoryCounts = computed(() => {
   const ai = strategies.value.filter(isAiStrategy).length
-  return { all: strategies.value.length, ai, normal: strategies.value.length - ai }
+  return { normal: strategies.value.length - ai, ai }
 })
 
-const strategyStats = computed(() => ({
-  total: strategies.value.length,
-  enabled: strategies.value.filter((strategy) => strategy.enabled).length,
-}))
+const inCategory = computed(() => strategies.value.filter((s) => (category.value === 'AI' ? isAiStrategy(s) : !isAiStrategy(s))))
+
+const statusCounts = computed(() => {
+  const enabled = inCategory.value.filter((s) => s.enabled).length
+  return { total: inCategory.value.length, enabled, disabled: inCategory.value.length - enabled }
+})
+
+const matchesStatus = (s: StrategyDefinition) => statusFilter.value === 'all'
+  || (statusFilter.value === 'enabled' && s.enabled)
+  || (statusFilter.value === 'disabled' && !s.enabled)
+
+const filteredStrategies = computed(() => {
+  const term = searchTerm.value.trim().toLowerCase()
+  return inCategory.value.filter((strategy) => {
+    if (filterType.value !== 'all' && strategy.strategyType !== filterType.value) return false
+    if (filterScope.value !== 'all' && strategy.scope !== filterScope.value) return false
+    if (!matchesStatus(strategy)) return false
+    if (term
+      && !strategy.strategyName.toLowerCase().includes(term)
+      && !typeLabelOf(strategy).toLowerCase().includes(term)) return false
+    return true
+  })
+})
 
 /**
  * Chip counts exclude the dimension they represent, so every chip previews
  * what clicking it would leave on screen.
  */
-const strategiesInCategory = computed(() => strategies.value.filter((strategy) => {
-  const matchesCategory = categoryTab.value === 'ALL'
-    || (categoryTab.value === 'AI' ? isAiStrategy(strategy) : !isAiStrategy(strategy))
+const strategiesInCategory = computed(() => inCategory.value.filter((strategy) => {
   const matchesScope = filterScope.value === 'all' || strategy.scope === filterScope.value
-  const matchesStatus = statusFilter.value === 'all'
-    || (statusFilter.value === 'enabled' && strategy.enabled)
-    || (statusFilter.value === 'disabled' && !strategy.enabled)
-  return matchesCategory && matchesScope && matchesStatus
+  return matchesScope && matchesStatus(strategy)
 }))
 
 const typeChips = computed(() => {
@@ -149,15 +183,15 @@ const typeChips = computed(() => {
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
 })
 
+const typeSelectOptions = computed(() => [
+  { value: 'all', label: t('common.all_types') },
+  ...typeChips.value.map((chip) => ({ value: chip.value, label: `${chip.label} (${chip.count})` })),
+])
+
 const scopeChips = computed(() => {
-  const pool = strategies.value.filter((strategy) => {
-    const matchesCategory = categoryTab.value === 'ALL'
-      || (categoryTab.value === 'AI' ? isAiStrategy(strategy) : !isAiStrategy(strategy))
+  const pool = inCategory.value.filter((strategy) => {
     const matchesType = filterType.value === 'all' || strategy.strategyType === filterType.value
-    const matchesStatus = statusFilter.value === 'all'
-      || (statusFilter.value === 'enabled' && strategy.enabled)
-      || (statusFilter.value === 'disabled' && !strategy.enabled)
-    return matchesCategory && matchesType && matchesStatus
+    return matchesType && matchesStatus(strategy)
   })
   const globalCount = pool.filter((strategy) => strategy.scope === 'GLOBAL').length
   return [
@@ -167,44 +201,94 @@ const scopeChips = computed(() => {
   ]
 })
 
-const filtersActive = computed(() =>
-  filterType.value !== 'all' || filterScope.value !== 'all' || statusFilter.value !== 'all')
+const scopeOptions = computed<VnSegmentOption<ScopeFilter>[]>(() =>
+  scopeChips.value.map((chip) => ({ key: chip.value as ScopeFilter, label: chip.label, count: chip.count })))
+
+const isFiltered = computed(() =>
+  filterType.value !== 'all' || filterScope.value !== 'all' || statusFilter.value !== 'all' || searchTerm.value.trim() !== '')
+
+// A category switch must not keep filters scoped to the other set.
+watch(category, () => {
+  statusFilter.value = 'all'
+  filterType.value = 'all'
+  filterScope.value = 'all'
+})
+
+const pageSize = 24
+const view = computed({
+  get: () => viewPreference.value ?? (statusCounts.value.total > pageSize ? 'table' : 'grid'),
+  set: (value: 'grid' | 'table') => {
+    viewPreference.value = value
+    try { localStorage.setItem(viewPreferenceKey, value) } catch { /* storage is optional */ }
+  },
+})
+const page = ref(1)
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredStrategies.value.length / pageSize)))
+const visibleStrategies = computed(() => {
+  const start = (Math.min(page.value, pageCount.value) - 1) * pageSize
+  return filteredStrategies.value.slice(start, start + pageSize)
+})
+
+watch([searchTerm, statusFilter, filterType, filterScope, category], () => { page.value = 1 })
+watch(pageCount, (count) => { page.value = Math.min(page.value, count) })
+watch(instanceId, () => {
+  creatingType.value = null
+  editingStrategy.value = null
+  deleteTarget.value = null
+  typeSelectOpen.value = false
+  page.value = 1
+}, { flush: 'sync' })
 
 function resetFilters() {
   filterType.value = 'all'
   filterScope.value = 'all'
   statusFilter.value = 'all'
+  searchTerm.value = ''
+  searchInput.value?.focus()
 }
 
-const statsItems = computed(() => [
-  {
-    key: 'all',
-    value: strategyStats.value.total,
-    label: t('strategy.stats_total'),
-    icon: ControlOutlined,
-    tone: undefined as undefined | 'green' | 'red',
-    active: statusFilter.value === 'all',
-    onClick: () => { statusFilter.value = 'all' },
-  },
-  {
-    key: 'enabled',
-    value: strategyStats.value.enabled,
-    label: t('strategy.stats_enabled'),
-    tone: 'green' as const,
-    icon: CheckCircleOutlined,
-    active: statusFilter.value === 'enabled',
-    onClick: () => { statusFilter.value = 'enabled' },
-  },
-  {
-    key: 'disabled',
-    value: strategyStats.value.total - strategyStats.value.enabled,
-    label: t('strategy.stats_disabled'),
-    tone: 'red' as const,
-    icon: PauseCircleOutlined,
-    active: statusFilter.value === 'disabled',
-    onClick: () => { statusFilter.value = 'disabled' },
-  },
+function selectStat(key: string) {
+  statusFilter.value = key as StatusFilter
+}
+
+const viewOptions = computed<VnSegmentOption<'grid' | 'table'>[]>(() => [
+  { key: 'grid', label: t('strategy.view_grid'), icon: AppstoreOutlined },
+  { key: 'table', label: t('strategy.view_table'), icon: OrderedListOutlined },
 ])
+
+const categoryOptions = computed<VnSegmentOption<'NORMAL' | 'AI'>[]>(() => [
+  { key: 'NORMAL', label: t('strategy.tab_normal'), count: categoryCounts.value.normal, icon: ControlOutlined },
+  { key: 'AI', label: t('strategy.tab_ai'), count: categoryCounts.value.ai, icon: RobotOutlined },
+])
+
+const statItems = computed<VnStatItem[]>(() => {
+  const c = statusCounts.value
+  return [
+    {
+      key: 'all',
+      value: c.total,
+      label: t('strategy.stats_total'),
+      icon: ControlOutlined,
+      active: statusFilter.value === 'all',
+    },
+    {
+      key: 'enabled',
+      value: c.enabled,
+      label: t('strategy.stats_enabled'),
+      icon: CheckCircleOutlined,
+      accent: 'var(--vn-ok)',
+      active: statusFilter.value === 'enabled',
+    },
+    {
+      key: 'disabled',
+      value: c.disabled,
+      label: t('strategy.stats_disabled'),
+      icon: PauseCircleOutlined,
+      accent: 'var(--vn-idle)',
+      active: statusFilter.value === 'disabled',
+    },
+  ]
+})
 
 const editingTypeInfo = computed<StrategyTypeInfo | null>(() => {
   if (!editingStrategy.value) return null
@@ -300,167 +384,159 @@ function backToTypeSelect() {
 </script>
 
 <template>
-  <div class="strategies-page">
-    <div class="page-header-modern">
-      <div class="page-header-left">
-        <h3 class="page-title-main has-glyph ant-typography">
-          <span class="page-header-glyph" aria-hidden="true"><ControlOutlined /></span>
-          {{ t('strategy.title') }}
-        </h3>
-        <span class="page-subtitle">{{ t('strategy.description') }}</span>
-      </div>
-      <div class="page-header-right">
-        <InlineStatChips :items="statsItems" />
-        <a-button type="primary" class="strategy-create-btn" @click="typeSelectOpen = true">
-          <template #icon><PlusOutlined /></template>
-          {{ t('strategy.create') }}
-        </a-button>
-      </div>
-    </div>
-
-    <!-- Category tabs: normal vs AI strategies -->
-    <a-tabs v-model:activeKey="categoryTab" class="strategy-category-tabs">
-      <a-tab-pane key="ALL" :tab="`${t('strategy.tab_all')} (${categoryCounts.all})`" />
-      <a-tab-pane key="NORMAL">
-        <template #tab><ControlOutlined /> {{ t('strategy.tab_normal') }} ({{ categoryCounts.normal }})</template>
-      </a-tab-pane>
-      <a-tab-pane key="AI">
-        <template #tab><RobotOutlined /> {{ t('strategy.tab_ai') }} ({{ categoryCounts.ai }})</template>
-      </a-tab-pane>
-    </a-tabs>
-
-    <!-- Type / scope filters as chips (counts preview the click result) -->
-    <div class="strategy-filter-bar">
-      <div class="strategy-filter-group" role="group" :aria-label="t('strategy.type')">
-        <span class="strategy-filter-label">{{ t('strategy.type') }}</span>
-        <button
-          type="button"
-          class="strategy-chip"
-          :class="{ 'is-active': filterType === 'all' }"
-          @click="filterType = 'all'"
-        >
-          {{ t('common.all_types') }}
-        </button>
-        <button
-          v-for="chip in typeChips"
-          :key="chip.value"
-          type="button"
-          class="strategy-chip"
-          :class="{ 'is-active': filterType === chip.value }"
-          @click="filterType = chip.value"
-        >
-          {{ chip.label }}
-          <span class="strategy-chip-count">{{ chip.count }}</span>
-        </button>
-      </div>
-      <div class="strategy-filter-group" role="group" :aria-label="t('strategy.scope')">
-        <span class="strategy-filter-label">{{ t('strategy.scope') }}</span>
-        <button
-          v-for="chip in scopeChips"
-          :key="chip.value"
-          type="button"
-          class="strategy-chip"
-          :class="{ 'is-active': filterScope === chip.value }"
-          @click="filterScope = chip.value"
-        >
-          {{ chip.label }}
-          <span class="strategy-chip-count">{{ chip.count }}</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Error state (no cached data to fall back on) -->
-    <a-card
-      v-if="strategiesError && strategies.length === 0"
-      :bordered="false"
-      class="strategy-state-card"
+  <div class="strategies-page vn-strategies vn-scope">
+    <VnToolbar
+      :title="t('strategy.title')"
+      :lede="t('strategy.description')"
     >
-      <div class="strategy-state">
-        <span class="strategy-state-icon is-error"><ExclamationCircleOutlined /></span>
-        <p class="strategy-state-title">{{ t('common.fetch_error') }}</p>
-        <p class="strategy-state-hint">{{ strategiesError.message }}</p>
-        <div class="strategy-state-actions">
-          <a-button type="primary" @click="runStrategies">
-            <template #icon><ReloadOutlined /></template>
-            {{ t('common.refresh') }}
-          </a-button>
-        </div>
-      </div>
-    </a-card>
+      <template #actions>
+        <VnSegmented v-model="view" :options="viewOptions" :label="t('strategy.view_mode')" />
+        <VnIconButton
+          :icon="ReloadOutlined"
+          :label="t('common.refresh')"
+          :disabled="strategiesLoading"
+          @click="runStrategies()"
+        />
+        <a-button type="primary" class="create-btn" @click="typeSelectOpen = true">
+          <template #icon><PlusOutlined /></template>{{ t('strategy.create') }}
+        </a-button>
+      </template>
+    </VnToolbar>
 
-    <!-- Loading skeleton -->
-    <div v-else-if="strategiesLoading && strategies.length === 0" class="strategies-grid">
-      <a-card v-for="n in 8" :key="n" :bordered="false" class="strategy-skeleton-card">
-        <a-skeleton active :title="{ width: '60%' }" :paragraph="{ rows: 3 }" />
-      </a-card>
+    <!-- Category, metrics, scope/type filters and search share one tool row. -->
+    <div class="vn-metarow">
+      <VnSegmented v-model="category" :options="categoryOptions" :label="t('strategy.category')" />
+      <VnStatRail
+        :items="statItems"
+        :label="t('strategy.stats_scope', { category: t(category === 'AI' ? 'strategy.tab_ai' : 'strategy.tab_normal') })"
+        @select="selectStat"
+      />
+      <VnSegmented v-model="filterScope" :options="scopeOptions" :label="t('strategy.scope')" />
+      <a-select
+        v-model:value="filterType"
+        :options="typeSelectOptions"
+        :aria-label="t('strategy.type')"
+        class="vn-type-select"
+        popup-class-name="vn-portal"
+      />
+      <a-input
+        ref="searchInput"
+        v-model:value="searchTerm"
+        :aria-label="t('strategy.search_placeholder')"
+        :placeholder="t('strategy.search_placeholder')"
+        allow-clear
+        class="vn-search"
+      >
+        <template #prefix><SearchOutlined /></template>
+      </a-input>
+      <span class="vn-filterbar-spacer" />
+      <span class="vn-result-count" role="status">{{ t('strategy.results', { count: filteredStrategies.length }) }}</span>
+      <a-button v-if="isFiltered" type="text" size="small" @click="resetFilters">
+        {{ t('common.reset') }}
+      </a-button>
     </div>
 
-    <!-- Empty / filtered-empty states -->
-    <a-card v-else-if="filteredStrategies.length === 0" :bordered="false" class="strategy-state-card">
-      <div class="strategy-state">
-        <span class="strategy-state-icon"><ControlOutlined /></span>
-        <template v-if="strategies.length === 0">
-          <p class="strategy-state-title">{{ t('strategy.empty') }}</p>
-          <p class="strategy-state-hint">{{ t('strategy.empty_hint') }}</p>
-          <div class="strategy-state-actions">
-            <a-button type="primary" @click="typeSelectOpen = true">
-              <template #icon><PlusOutlined /></template>
-              {{ t('strategy.create_first') }}
-            </a-button>
-          </div>
-        </template>
-        <template v-else>
-          <p class="strategy-state-title">{{ t('strategy.picker_empty') }}</p>
-          <div class="strategy-state-actions">
-            <a-button :disabled="!filtersActive" @click="resetFilters">
-              {{ t('strategy.picker_reset') }}
-            </a-button>
-          </div>
-        </template>
-      </div>
-    </a-card>
+    <!-- Error -->
+    <VnState
+      v-if="strategiesError && strategies.length === 0"
+      :icon="ExclamationCircleOutlined"
+      tone="err"
+      :title="t('common.fetch_error')"
+      :hint="strategiesError.message"
+    >
+      <template #actions>
+        <a-button type="primary" @click="runStrategies()">
+          <template #icon><ReloadOutlined /></template>{{ t('common.refresh') }}
+        </a-button>
+      </template>
+    </VnState>
 
-    <div v-else class="strategies-grid">
-      <StrategyCard
-        v-for="strategy in filteredStrategies"
-        :key="strategy.strategyId"
-        :strategy="strategy"
-        :type-info="getStrategyType(strategy.strategyType)"
-        :type-label="typeLabel(getStrategyType(strategy.strategyType), strategy.strategyType)"
+    <!-- Initial load -->
+    <div v-else-if="strategiesLoading && strategies.length === 0" class="vn-grid">
+      <div v-for="n in 8" :key="n" class="vn-panel vn-skel-tile">
+        <div class="vn-skel vn-skel-line" style="width: 58%" />
+        <div class="vn-skel vn-skel-line" style="width: 38%" />
+        <div class="vn-skel vn-skel-block" />
+      </div>
+    </div>
+
+    <!-- Empty / filtered-empty -->
+    <VnState
+      v-else-if="filteredStrategies.length === 0"
+      :icon="strategies.length > 0 ? SearchOutlined : ControlOutlined"
+      :title="strategies.length === 0 ? t('strategy.empty') : t('strategy.picker_empty')"
+      :hint="strategies.length === 0 ? t('strategy.empty_hint') : undefined"
+    >
+      <template #actions>
+        <a-button v-if="strategies.length === 0" type="primary" @click="typeSelectOpen = true">
+          <template #icon><PlusOutlined /></template>{{ t('strategy.create_first') }}
+        </a-button>
+        <a-button v-else @click="resetFilters">{{ t('strategy.picker_reset') }}</a-button>
+      </template>
+    </VnState>
+
+    <!-- Catalog -->
+    <template v-else>
+      <div v-if="view === 'grid'" class="vn-grid">
+        <StrategyCard
+          v-for="strategy in visibleStrategies"
+          :key="strategy.strategyId"
+          :strategy="strategy"
+          :type-info="getStrategyType(strategy.strategyType)"
+          :type-label="typeLabelOf(strategy)"
+          @edit="editingStrategy = $event"
+          @toggle="handleToggle"
+          @delete="requestDelete"
+        />
+      </div>
+      <StrategyTable
+        v-else
+        :rows="visibleStrategies"
+        :type-info-of="(s) => getStrategyType(s.strategyType)"
+        :type-label-of="typeLabelOf"
+        :summary-of="summaryOf"
         @edit="editingStrategy = $event"
         @toggle="handleToggle"
         @delete="requestDelete"
       />
-    </div>
+      <a-pagination
+        v-if="pageCount > 1"
+        v-model:current="page"
+        :page-size="pageSize"
+        :total="filteredStrategies.length"
+        :show-size-changer="false"
+        class="vn-pagination"
+      />
+    </template>
 
     <!-- Type selection modal (step 1 of create flow) -->
     <StrategyTypeSelectModal
       :open="typeSelectOpen"
       :strategy-types="strategyTypes"
-      :initial-tab="categoryTab === 'AI' ? 'ai' : 'general'"
+      :initial-tab="category === 'AI' ? 'ai' : 'general'"
       :loading="typesLoading"
       @select="handleSelectType"
       @cancel="typeSelectOpen = false"
     />
 
-    <!-- Create modal (step 2 of create flow) -->
+    <!-- Create modal (step 2 of create flow), kept mounted and driven by :open -->
     <StrategyFormModal
-      v-if="creatingType"
+      :open="!!creatingType"
       mode="create"
-      :type-info="creatingType"
+      :type-info="creatingType ?? fallbackTypeInfo('RATE_LIMITER')"
       :routes="routes"
-      :existing-global="findGlobalStrategy(strategies, creatingType.typeCode)"
+      :existing-global="creatingType ? findGlobalStrategy(strategies, creatingType.typeCode) : undefined"
       :on-submit="handleCreateSubmit"
       @cancel="creatingType = null"
       @back-to-type-select="backToTypeSelect"
     />
 
-    <!-- Edit modal -->
+    <!-- Edit modal, kept mounted and driven by :open -->
     <StrategyFormModal
-      v-if="editingStrategy && editingTypeInfo"
+      :open="!!editingStrategy"
       mode="edit"
-      :type-info="editingTypeInfo"
-      :strategy="editingStrategy"
+      :type-info="editingTypeInfo ?? fallbackTypeInfo('RATE_LIMITER')"
+      :strategy="editingStrategy ?? undefined"
       :routes="routes"
       :on-submit="handleEditSubmit"
       @cancel="editingStrategy = null"

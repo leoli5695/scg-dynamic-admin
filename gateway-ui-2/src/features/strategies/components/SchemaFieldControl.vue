@@ -58,6 +58,7 @@ const unit = computed(() => fieldUnit(props.field))
     v-else-if="field.type === 'select'"
     :value="modelValue"
     :options="options"
+    popup-class-name="vn-portal"
     @update:value="emit('update:modelValue', $event)"
   />
 

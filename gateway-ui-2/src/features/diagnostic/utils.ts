@@ -30,11 +30,11 @@ export function getStatusIcon(status: string): Component {
   }
 }
 
-/** Health score → progress colour (shared semantic tokens). */
+/** Health score → progress colour (shared Vue-native semantic tokens). */
 export function getScoreColor(score: number): string {
-  if (score >= 80) return 'var(--success-color)'
-  if (score >= 50) return 'var(--warning-color)'
-  return 'var(--error-color)'
+  if (score >= 80) return 'var(--vn-ok)'
+  if (score >= 50) return 'var(--vn-warn)'
+  return 'var(--vn-err)'
 }
 
 /** Health score → antd progress status. */

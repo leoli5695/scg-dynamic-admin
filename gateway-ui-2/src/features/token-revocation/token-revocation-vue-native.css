@@ -1,0 +1,333 @@
+/**
+ * Token revocation page composition on the Vue-native layer.
+ * Layout only — surfaces, ink, radii and control chrome come from
+ * styles/vue-native.css. Nothing leaks outside `.vn-scope` / `.vn-portal`.
+ */
+
+.vn-revocation {
+  padding: 0;
+  min-height: 100%;
+}
+
+.vn-revocation .vn-rev-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 860px;
+}
+
+/* Scope / switch-off notes read as matte alerts. */
+.vn-revocation .vn-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+}
+
+.vn-revocation .vn-note-glyph {
+  flex: none;
+  margin-top: 1px;
+  color: var(--vn-info);
+  font-size: var(--vn-glyph);
+}
+
+.vn-revocation .vn-note-warning {
+  border-color: rgba(240, 180, 41, 0.3);
+  background: rgba(240, 180, 41, 0.08);
+}
+
+.vn-revocation .vn-note-warning .vn-note-glyph {
+  color: var(--vn-warn);
+}
+
+.vn-revocation .vn-note-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vn-revocation .vn-note-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vn-ink);
+}
+
+.vn-revocation .vn-note-desc {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--vn-ink-2);
+}
+
+/* Panel heads: glyph + title + right control, auto margin against injected
+   popup siblings (never space-between). */
+.vn-revocation .vn-rev-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.vn-revocation .vn-rev-glyph {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-brand);
+  font-size: var(--vn-glyph);
+}
+
+.vn-revocation .vn-rev-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vn-revocation .vn-rev-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vn-revocation .vn-rev-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 640;
+  color: var(--vn-ink);
+}
+
+.vn-revocation .vn-rev-desc {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--vn-ink-3);
+}
+
+.vn-revocation .vn-rev-control {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+.vn-revocation .vn-inline-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 7px 9px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid rgba(242, 85, 90, 0.3);
+  background: rgba(242, 85, 90, 0.08);
+  font-size: 11.5px;
+  color: #ff8a8d;
+}
+
+.vn-revocation .vn-inline-error-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.vn-revocation .vn-inline-retry.ant-btn {
+  margin-left: auto;
+  flex: none;
+  color: var(--vn-ink-2);
+}
+
+/* Form */
+.vn-revocation .vn-mode-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.vn-revocation .vn-field-label {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--vn-ink-2);
+}
+
+.vn-revocation .vn-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 12px;
+  align-items: start;
+}
+
+.vn-revocation .vn-form-grid .ant-form-item {
+  margin-bottom: 0;
+}
+
+.vn-revocation .vn-field-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--vn-ink-3);
+}
+
+.vn-revocation .vn-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Result */
+.vn-revocation .vn-result-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.vn-revocation .vn-result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vn-revocation .vn-result-section + .vn-result-section {
+  margin-top: 10px;
+}
+
+.vn-revocation .vn-section-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-revocation .vn-id-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.vn-revocation .vn-id-line {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 6px 9px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+}
+
+.vn-revocation .vn-id-code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--vn-mono);
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+.vn-revocation .vn-id-line > .copy-btn {
+  margin-left: auto;
+}
+
+.vn-revocation .vn-result-value {
+  font-size: 12.5px;
+  color: var(--vn-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.vn-revocation .vn-result-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border-radius: var(--vn-r-control);
+  border: 1px solid rgba(242, 85, 90, 0.3);
+  background: rgba(242, 85, 90, 0.08);
+}
+
+.vn-revocation .vn-result-error-glyph {
+  flex: none;
+  margin-top: 1px;
+  color: var(--vn-err);
+  font-size: var(--vn-glyph);
+}
+
+.vn-revocation .vn-result-error-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vn-revocation .vn-result-error-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ff8a8d;
+}
+
+.vn-revocation .vn-result-error-text {
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.vn-revocation .vn-result-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  font-size: 12px;
+  color: var(--vn-ink-3);
+}
+
+.vn-revocation .vn-empty-icon {
+  font-size: var(--vn-glyph-lg);
+}
+
+/* ==================== Confirmation modal ==================== */
+.vn-portal .tr-confirm-modal.ant-modal .ant-modal-body {
+  padding: 14px 18px 16px;
+}
+
+.vn-portal .tr-confirm-modal.ant-modal .ant-modal-footer {
+  margin: 0;
+  padding: 11px 18px;
+  border-top: 1px solid var(--vn-line-soft);
+}
+
+.vn-portal .vn-confirm-desc {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .vn-confirm-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.vn-portal .vn-confirm-target {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+  font-family: var(--vn-mono);
+  font-size: 11px;
+  color: var(--vn-ink-2);
+  overflow-wrap: anywhere;
+}

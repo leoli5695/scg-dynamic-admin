@@ -9,6 +9,7 @@
   "replay.trace_time": "时间",
   "replay.method": "方法",
   "replay.path": "路径",
+  "replay.search_path": "搜索路径...",
   "replay.status": "状态",
   "replay.latency": "耗时",
   "replay.type": "类型",

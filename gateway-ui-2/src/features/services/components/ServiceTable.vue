@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import {
-  CloudServerOutlined, EditOutlined, RobotOutlined,
+  CloudServerOutlined, CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined, RobotOutlined,
 } from '@/components/icons'
 import type { ServiceDefinition } from '@/types/service'
+import { copyText } from '@/utils/clipboard'
+import { message } from '@/utils/feedback'
 import VnBadge from '@/components/vn/VnBadge.vue'
 import VnIconButton from '@/components/vn/VnIconButton.vue'
-import ServiceActionsMenu from './ServiceActionsMenu.vue'
 import { getCatalogStatus, getLoadBalancerLabelKey } from '../utils'
 
 defineProps<{ rows: ServiceDefinition[]; isAi: boolean }>()
@@ -20,6 +21,12 @@ const { t } = useI18n()
 
 const healthyOf = (s: ServiceDefinition) =>
   (s.instances || []).filter((i) => i.enabled !== false && i.healthy !== false).length
+
+async function copyServiceId(service: ServiceDefinition) {
+  const id = service.serviceId || service.name
+  if (await copyText(id)) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
+}
 </script>
 
 <template>
@@ -69,9 +76,11 @@ const healthyOf = (s: ServiceDefinition) =>
             </span>
           </td>
           <td>
-            <div class="vn-iconbtn-group">
+            <div class="vn-iconbtn-group vn-row-actions">
+              <VnIconButton :icon="EyeOutlined" :label="t('common.detail')" @click="emit('detail', service)" />
               <VnIconButton :icon="EditOutlined" :label="t('common.edit')" @click="emit('edit', service)" />
-              <ServiceActionsMenu :service-id="service.serviceId" @delete="emit('delete', service)" />
+              <VnIconButton :icon="CopyOutlined" :label="t('common.copy_id')" inline @click="copyServiceId(service)" />
+              <VnIconButton :icon="DeleteOutlined" :label="t('common.delete')" danger @click="emit('delete', service)" />
             </div>
           </td>
         </tr>

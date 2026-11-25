@@ -2,19 +2,22 @@
 /**
  * Traffic topology tab — Vue port of gateway-ui/src/features/topology/index.tsx.
  * Clients → gateway → routes → services graph with focus mode, search, smart
- * aggregation, node deep links and 30s auto refresh.
- * Visual language follows the login skin (2026-11-20): transparent canvas,
- * login panels, capsule badges, periwinkle→violet→cyan chart palette.
+ * aggregation, node deep links and 30s auto refresh. Rendered on the Vue-native
+ * design layer; the graph itself and API calls are unchanged.
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
-  ApartmentOutlined, ControlOutlined, EyeOutlined, ReloadOutlined, SearchOutlined,
+  ApartmentOutlined, ControlOutlined, EyeOutlined, FundOutlined, ReloadOutlined, SearchOutlined,
 } from '@/components/icons'
 import { usePolling } from '@/composables/useRequest'
 import { getTopology } from '@/api/topology'
 import type { TopologyGraph, TopologyNode } from '@/api/topology'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import { useInstanceDetail } from '../instance-detail/context'
 import {
   getTopologyChartHeight, getTopologyDisplayGraph, isSameTopologyContent,
@@ -24,7 +27,11 @@ import { TOPOLOGY_COLORS } from './palette'
 import TopologyChart from './components/TopologyChart.vue'
 import TopologyRanking from './components/TopologyRanking.vue'
 import NodeContextMenu from './components/NodeContextMenu.vue'
+import '@/styles/vue-native.css'
+import '@/features/services/services-vue-native.css'
 import './topology.css'
+
+defineOptions({ name: 'TopologyPage' })
 
 const { t } = useI18n()
 const router = useRouter()
@@ -87,13 +94,28 @@ const metrics = computed(() => graph.value?.metrics)
 const isEmpty = computed(() => Boolean(graph.value) && (graph.value?.nodes?.length || 0) === 0)
 const initialLoading = computed(() => topologyRequest.loading.value && !graph.value)
 
-const timeRangeOptions = computed(() => [
-  { value: 15, label: t('topology.last_15m') },
-  { value: 30, label: t('topology.last_30m') },
-  { value: 60, label: t('topology.last_1h') },
-  { value: 180, label: t('topology.last_3h') },
-  { value: 360, label: t('topology.last_6h') },
+const rangeOptions = computed<VnSegmentOption<string>[]>(() => [
+  { key: '15', label: t('topology.last_15m') },
+  { key: '30', label: t('topology.last_30m') },
+  { key: '60', label: t('topology.last_1h') },
+  { key: '180', label: t('topology.last_3h') },
+  { key: '360', label: t('topology.last_6h') },
 ])
+
+const rangeSeg = computed<string>({
+  get: () => String(timeRange.value),
+  set: (value) => { timeRange.value = Number(value) || 60 },
+})
+
+const statItems = computed<VnStatItem[]>(() => {
+  const m = metrics.value
+  return [
+    { key: 'requests', value: m?.totalRequests ?? 0, label: t('topology.total_requests'), icon: FundOutlined },
+    { key: 'rps', value: Number((m?.requestsPerSecond ?? 0).toFixed(1)), label: t('topology.rps') },
+    { key: 'latency', value: Number((m?.avgLatency ?? 0).toFixed(1)), label: t('topology.avg_latency') },
+    { key: 'error', value: Number((m?.errorRate ?? 0).toFixed(1)), label: t('topology.error_rate'), accent: (m?.errorRate ?? 0) > 5 ? 'var(--vn-err)' : 'var(--vn-ok)' },
+  ]
+})
 
 const legendItems = computed(() => [
   { key: 'gateway', shape: 'circle', color: TOPOLOGY_COLORS.blue, label: t('topology.node_gateway') },
@@ -103,10 +125,6 @@ const legendItems = computed(() => [
   { key: 'service-static', shape: 'rect', color: TOPOLOGY_COLORS.mint, label: t('topology.node_service_static') },
   { key: 'client', shape: 'circle', color: TOPOLOGY_COLORS.amber, label: t('topology.node_client') },
 ])
-
-function onRangeChange(value: unknown): void {
-  timeRange.value = Number(value) || 60
-}
 
 function onNodeClick(nodeId: string): void {
   selectedNodeId.value = selectedNodeId.value === nodeId ? null : nodeId
@@ -129,17 +147,9 @@ function onNavigate(payload: { kind: 'route' | 'service'; id: string; newTab: bo
 </script>
 
 <template>
-  <div class="topology-page">
-    <header class="topology-page-header">
-      <div class="topology-page-heading">
-        <span class="lg-eyebrow">{{ t('topology.eyebrow') }}</span>
-        <h1 class="topology-page-title">
-          <span class="lg-icon-tile" aria-hidden="true"><ApartmentOutlined /></span>
-          {{ t('topology.title') }}
-        </h1>
-        <p class="topology-page-subtitle">{{ t('topology.subtitle') }}</p>
-      </div>
-      <div class="topology-page-actions">
+  <div class="topology-page vn-scope">
+    <VnToolbar :title="t('topology.title')" :lede="t('topology.subtitle')">
+      <template #actions>
         <a-button
           :type="autoRefresh ? 'primary' : 'default'"
           @click="autoRefresh = !autoRefresh"
@@ -147,60 +157,32 @@ function onNavigate(payload: { kind: 'route' | 'service'; id: string; newTab: bo
           <template #icon><ReloadOutlined /></template>
           {{ autoRefresh ? t('topology.auto_refresh_on') : t('topology.auto_refresh_off') }}
         </a-button>
-        <a-button :loading="topologyRequest.loading.value" @click="topologyRequest.run()">
-          <template #icon><ReloadOutlined /></template>
-          {{ t('common.refresh') }}
-        </a-button>
-      </div>
-    </header>
+        <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" :disabled="topologyRequest.loading.value" @click="topologyRequest.run()" />
+      </template>
+    </VnToolbar>
 
-    <section class="lg-panel topology-toolbar">
+    <div class="vn-metarow">
+      <VnSegmented v-model="rangeSeg" :options="rangeOptions" :label="t('topology.title')" />
+      <VnStatRail :items="statItems" :label="t('topology.traffic_flow')" />
       <a-input
         v-model:value="searchKeyword"
-        class="topology-search"
+        class="vn-search"
         :placeholder="t('topology.search_placeholder')"
         allow-clear
       >
         <template #prefix><SearchOutlined /></template>
       </a-input>
-      <div class="topology-toolbar-controls">
-        <a-select
-          class="topology-range-select"
-          :value="timeRange"
-          :options="timeRangeOptions"
-          :aria-label="t('topology.title')"
-          @change="onRangeChange"
-        />
-        <a-tooltip :title="t('topology.show_disabled_routes_tooltip')">
-          <span class="topology-toggle">
-            <a-switch v-model:checked="showDisabledRoutes" size="small" />
-            <span>{{ t('topology.show_disabled_routes') }}</span>
-          </span>
-        </a-tooltip>
-        <a-tooltip :title="t('topology.active_only_tooltip')">
-          <span class="topology-toggle">
-            <a-switch v-model:checked="showOnlyActiveRoutes" size="small" />
-            <span>{{ t('topology.active_only') }}</span>
-          </span>
-        </a-tooltip>
-        <a-tooltip :title="t('topology.smart_aggregate_tooltip')">
-          <span class="topology-toggle is-emphasized">
-            <ControlOutlined />
-            <a-switch v-model:checked="smartAggregate" size="small" />
-            <span>{{ t('topology.smart_aggregate') }}</span>
-          </span>
-        </a-tooltip>
-        <a-button
-          v-if="selectedNodeId"
-          type="primary"
-          size="small"
-          @click="selectedNodeId = null"
-        >
-          <template #icon><EyeOutlined /></template>
-          {{ t('topology.exit_focus') }}
-        </a-button>
-      </div>
-    </section>
+      <span class="vn-filterbar-spacer" />
+      <a-button
+        v-if="selectedNodeId"
+        type="primary"
+        size="small"
+        @click="selectedNodeId = null"
+      >
+        <template #icon><EyeOutlined /></template>
+        {{ t('topology.exit_focus') }}
+      </a-button>
+    </div>
 
     <a-alert
       v-if="topologyRequest.error.value"
@@ -213,39 +195,24 @@ function onNavigate(payload: { kind: 'route' | 'service'; id: string; newTab: bo
       @close="topologyRequest.error.value = undefined"
     />
 
-    <section v-if="metrics" class="topology-kpi-grid" :aria-label="t('topology.traffic_flow')">
-      <div class="lg-panel topology-kpi">
-        <span class="lg-section-title">{{ t('topology.total_requests') }}</span>
-        <strong>{{ metrics.totalRequests.toLocaleString() }}</strong>
-        <small>{{ metrics.uniqueClients }} {{ t('topology.clients') }}</small>
-      </div>
-      <div class="lg-panel topology-kpi">
-        <span class="lg-section-title">{{ t('topology.rps') }}</span>
-        <strong>{{ metrics.requestsPerSecond.toFixed(2) }}</strong>
-        <small>{{ metrics.uniqueRoutes }} {{ t('topology.routes_with_traffic') }}</small>
-      </div>
-      <div class="lg-panel topology-kpi">
-        <span class="lg-section-title">{{ t('topology.avg_latency') }}</span>
-        <strong>{{ metrics.avgLatency.toFixed(2) }}<em>ms</em></strong>
-        <small>{{ metrics.enabledRoutes ?? 0 }}/{{ metrics.configuredRoutes ?? 0 }} {{ t('topology.enabled') }}</small>
-      </div>
-      <div class="lg-panel topology-kpi">
-        <span class="lg-section-title">{{ t('topology.error_rate') }}</span>
-        <strong :class="{ 'is-error': metrics.errorRate > 5 }">
-          {{ metrics.errorRate.toFixed(2) }}<em>%</em>
-        </strong>
-        <small>{{ metrics.totalErrors.toLocaleString() }} {{ t('topology.tooltip_errors') }}</small>
-      </div>
-    </section>
-
-    <section class="lg-panel topology-canvas">
+    <section class="vn-panel topology-canvas">
       <div class="topology-canvas-header">
-        <div>
-          <span class="lg-eyebrow">{{ t('topology.request_map') }}</span>
-          <h2>{{ t('topology.traffic_flow') }}</h2>
-        </div>
+        <span class="topology-canvas-title"><ApartmentOutlined /> {{ t('topology.traffic_flow') }}</span>
         <div class="topology-canvas-status">
-          <span v-if="aggregateActive" class="lg-chip topology-aggregate-badge">
+          <span class="topology-toggle">
+            <a-switch v-model:checked="showDisabledRoutes" size="small" />
+            <span>{{ t('topology.show_disabled_routes') }}</span>
+          </span>
+          <span class="topology-toggle">
+            <a-switch v-model:checked="showOnlyActiveRoutes" size="small" />
+            <span>{{ t('topology.active_only') }}</span>
+          </span>
+          <span class="topology-toggle is-emphasized">
+            <ControlOutlined />
+            <a-switch v-model:checked="smartAggregate" size="small" />
+            <span>{{ t('topology.smart_aggregate') }}</span>
+          </span>
+          <span v-if="aggregateActive" class="vn-chip topology-aggregate-badge">
             {{ t('topology.aggregate_badge') }}
           </span>
           <span class="topology-live"><i />{{ t('topology.live') }}</span>
@@ -290,7 +257,7 @@ function onNavigate(payload: { kind: 'route' | 'service'; id: string; newTab: bo
       </div>
 
       <div class="topology-legend">
-        <span class="lg-section-title">{{ t('topology.legend') }}</span>
+        <span class="topology-legend-title">{{ t('topology.legend') }}</span>
         <span v-for="item in legendItems" :key="item.key" class="topology-legend-item">
           <i :class="[`legend-${item.shape}`, { 'is-disabled': item.disabled }]" :style="{ background: item.color }" />
           {{ item.label }}

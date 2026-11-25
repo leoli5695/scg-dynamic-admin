@@ -269,7 +269,7 @@ function retry() {
     :open="isOpen"
     :width="620"
     :title="drawerTitle"
-    :body-style="{ padding: '20px 24px 28px' }"
+    root-class-name="vn-portal vnp-portal token-drawer"
     @close="emit('close')"
   >
     <div class="token-reconcile">

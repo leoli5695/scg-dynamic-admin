@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * Cluster detail drawer: overview (metadata + nodes), deployments and pods.
- * Namespace is passed explicitly on every reload; failures keep the previous
- * data (connection problems surface on the cluster status instead).
+ * Cluster detail drawer on the Vue-native layer: overview (metadata + nodes),
+ * deployments and pods. Namespace is passed explicitly on every reload;
+ * failures keep the previous data (connection problems surface on the status).
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -20,8 +20,10 @@ import type {
 import { formatServerTime } from '@/utils/serverTime'
 import { message, modal } from '@/utils/feedback'
 import { copyText } from '@/utils/clipboard'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
 import {
-  clusterStatusTextKey, clusterStatusTone, nodeStatusTone, phaseTone,
+  clusterStatusTextKey, clusterStatusTone, nodeStatusTone, phaseTone, vnTone,
 } from '../utils'
 import DeployGatewayModal from './DeployGatewayModal.vue'
 import ScaleDeploymentModal from './ScaleDeploymentModal.vue'
@@ -44,7 +46,7 @@ const deployOpen = ref(false)
 const selectedPod = ref<KubernetesPodInfo | null>(null)
 const scalingDeployment = ref<KubernetesDeploymentInfo | null>(null)
 
-const tone = computed(() => clusterStatusTone(props.cluster.connectionStatus))
+const tone = computed(() => vnTone(clusterStatusTone(props.cluster.connectionStatus)))
 const statusText = computed(() => t(clusterStatusTextKey(props.cluster.connectionStatus)))
 const versionText = computed(
   () => (props.cluster.clusterVersion ? `v${props.cluster.clusterVersion}` : t('k8s.version_unknown')),
@@ -69,7 +71,7 @@ const deploymentColumns = computed(() => [
   { title: t('k8s.deployment_name'), dataIndex: 'name', key: 'name' },
   { title: t('k8s.namespace'), dataIndex: 'namespace', key: 'namespace', width: 130 },
   { title: t('k8s.replicas'), dataIndex: 'replicas', key: 'replicas', width: 150 },
-  { title: t('common.actions'), key: 'actions', width: 90 },
+  { title: t('common.actions'), key: 'actions', width: 90, align: 'right' },
 ])
 
 const podColumns = computed(() => [
@@ -78,7 +80,7 @@ const podColumns = computed(() => [
   { title: t('k8s.phase'), dataIndex: 'phase', key: 'phase', width: 96 },
   { title: t('k8s.pod_ip'), dataIndex: 'podIP', key: 'podIP', width: 130 },
   { title: t('k8s.containers'), dataIndex: 'containers', key: 'containers' },
-  { title: t('common.actions'), key: 'actions', width: 70 },
+  { title: t('common.actions'), key: 'actions', width: 70, align: 'right' },
 ])
 
 async function loadResources(namespace: string) {
@@ -135,6 +137,7 @@ function handleDeleteDeployment(deployment: KubernetesDeploymentInfo) {
     okType: 'primary',
     okButtonProps: { danger: true },
     cancelText: t('common.cancel'),
+    wrapClassName: 'vn-portal',
     onOk: async () => {
       try {
         await deleteDeployment(props.cluster.id, deployment.namespace, deployment.name)
@@ -165,270 +168,197 @@ async function copyServerUrl() {
     :closable="false"
     :mask-closable="true"
     :destroy-on-close="true"
-    root-class-name="k8s-drawer"
+    root-class-name="vn-portal vnp-portal vnp-drawer"
     @close="emit('close')"
   >
-    <div class="k8s-drawer-content">
-      <header class="k8s-drawer-head">
-        <div class="k8s-drawer-title-wrap">
-          <span class="k8s-drawer-glyph" aria-hidden="true"><ClusterOutlined /></span>
-          <div class="k8s-drawer-title-main">
-            <div class="k8s-drawer-name-row">
-              <h4 class="k8s-drawer-name">{{ cluster.clusterName }}</h4>
-              <span :class="['k8s-pill', 'status-badge', `status-badge-${tone}`]">
-                <i :class="['status-dot', `status-dot-${tone}`]" />
-                {{ statusText }}
-              </span>
-            </div>
-            <div class="k8s-drawer-sub">
-              <span>{{ versionText }}</span>
-              <span class="k8s-dot-sep">·</span>
-              <span class="k8s-drawer-server" :title="cluster.serverUrl">{{ cluster.serverUrl || '—' }}</span>
+    <div class="vnp-detail">
+      <header class="vnp-detail-head">
+        <div class="vnp-detail-head-left">
+          <span class="vnp-detail-glyph" aria-hidden="true"><ClusterOutlined /></span>
+          <div style="min-width: 0">
+            <h4 class="vnp-detail-title">{{ cluster.clusterName }}</h4>
+            <div class="vnp-detail-idrow">
+              <VnBadge :tone="tone">{{ statusText }}</VnBadge>
+              <span class="vn-mono vnp-detail-id" :title="cluster.serverUrl">{{ versionText }} · {{ cluster.serverUrl || '—' }}</span>
             </div>
           </div>
         </div>
-        <div class="k8s-drawer-actions">
+        <div class="vn-iconbtn-group">
           <a-button
             size="small"
-            class="k8s-deploy-btn"
             :disabled="cluster.connectionStatus !== 'CONNECTED'"
             @click="deployOpen = true"
           >
-            <template #icon><PlayCircleOutlined /></template>
-            {{ t('k8s.deploy_gateway') }}
+            <template #icon><PlayCircleOutlined /></template>{{ t('k8s.deploy_gateway') }}
           </a-button>
-          <a-tooltip :title="t('common.refresh')">
-            <a-button
-              type="text"
-              class="k8s-icon-btn"
-              :loading="resourcesLoading"
-              :aria-label="t('common.refresh')"
-              @click="loadResources(selectedNamespace)"
-            >
-              <template #icon><ReloadOutlined /></template>
-            </a-button>
-          </a-tooltip>
-          <a-button
-            type="text"
-            class="k8s-icon-btn"
-            :aria-label="t('common.close')"
-            @click="emit('close')"
-          >
-            <template #icon><CloseOutlined /></template>
-          </a-button>
+          <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" :disabled="resourcesLoading" @click="loadResources(selectedNamespace)" />
+          <VnIconButton :icon="CloseOutlined" :label="t('common.close')" @click="emit('close')" />
         </div>
       </header>
 
-      <a-tabs v-model:activeKey="activeTab" class="k8s-drawer-tabs">
-        <a-tab-pane key="overview" :tab="t('k8s.overview')">
-          <section class="k8s-subpanel">
-            <div class="k8s-subpanel-head">
-              <span class="k8s-section-title">{{ t('k8s.cluster_info') }}</span>
-            </div>
-            <div class="k8s-kv-panel">
-              <div class="k8s-kv-item k8s-kv-wide">
-                <span class="k8s-kv-label">{{ t('k8s.server_url') }}</span>
-                <span class="k8s-kv-value k8s-mono">
-                  {{ cluster.serverUrl || '—' }}
-                  <a-tooltip v-if="cluster.serverUrl" :title="t('common.copy')">
-                    <a-button type="text" size="small" class="k8s-copy-btn" @click="copyServerUrl">
-                      <template #icon><CopyOutlined /></template>
-                    </a-button>
-                  </a-tooltip>
-                </span>
+      <div class="vnp-detail-scroll">
+        <a-tabs v-model:activeKey="activeTab">
+          <a-tab-pane key="overview" :tab="t('k8s.overview')">
+            <section class="vnp-section">
+              <div class="vnp-section-head">{{ t('k8s.cluster_info') }}</div>
+              <div class="vnp-kv">
+                <div class="vnp-kv-item vnp-kv-wide">
+                  <span class="vnp-kv-label">{{ t('k8s.server_url') }}</span>
+                  <span class="vnp-kv-value vn-mono">
+                    {{ cluster.serverUrl || '—' }}
+                    <VnIconButton v-if="cluster.serverUrl" :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyServerUrl" />
+                  </span>
+                </div>
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">{{ t('k8s.context') }}</span>
+                  <span class="vnp-kv-value">{{ cluster.contextName || '—' }}</span>
+                </div>
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">{{ t('k8s.cluster_version') }}</span>
+                  <span class="vnp-kv-value">{{ versionText }}</span>
+                </div>
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">{{ t('k8s.last_checked') }}</span>
+                  <span class="vnp-kv-value">{{ lastCheckedText }}</span>
+                </div>
+                <div class="vnp-kv-item">
+                  <span class="vnp-kv-label">{{ t('k8s.status') }}</span>
+                  <span class="vnp-kv-value"><VnBadge :tone="tone">{{ statusText }}</VnBadge></span>
+                </div>
               </div>
-              <div class="k8s-kv-item">
-                <span class="k8s-kv-label">{{ t('k8s.context') }}</span>
-                <span class="k8s-kv-value">{{ cluster.contextName || '—' }}</span>
-              </div>
-              <div class="k8s-kv-item">
-                <span class="k8s-kv-label">{{ t('k8s.cluster_version') }}</span>
-                <span class="k8s-kv-value">{{ versionText }}</span>
-              </div>
-              <div class="k8s-kv-item">
-                <span class="k8s-kv-label">{{ t('k8s.last_checked') }}</span>
-                <span class="k8s-kv-value">{{ lastCheckedText }}</span>
-              </div>
-              <div class="k8s-kv-item">
-                <span class="k8s-kv-label">{{ t('k8s.status') }}</span>
-                <span class="k8s-kv-value">{{ statusText }}</span>
-              </div>
-            </div>
-          </section>
+            </section>
 
-          <section class="k8s-subpanel">
-            <div class="k8s-subpanel-head">
-              <span class="k8s-section-title">{{ t('k8s.nodes') }}</span>
-              <span class="k8s-count-pill">{{ nodes.length }}</span>
+            <section class="vnp-section" style="margin-top: 12px">
+              <div class="vnp-section-head"><span>{{ t('k8s.nodes') }}</span><span class="vnp-count">{{ nodes.length }}</span></div>
+              <a-table
+                :columns="nodeColumns"
+                :data-source="nodes"
+                :loading="resourcesLoading"
+                :pagination="false"
+                row-key="name"
+                size="small"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key === 'name'">
+                    <span class="vnp-strong">{{ record.name }}</span>
+                  </template>
+                  <template v-else-if="column.key === 'status'">
+                    <VnBadge :tone="vnTone(nodeStatusTone(record.status))">{{ record.status || '—' }}</VnBadge>
+                  </template>
+                  <template v-else-if="column.key === 'kubeletVersion'">
+                    <span class="vn-mono vnp-cell-muted">{{ record.kubeletVersion || '—' }}</span>
+                  </template>
+                  <template v-else-if="column.key === 'osImage'">
+                    <span class="vnp-cell-muted">{{ record.osImage || '—' }}</span>
+                  </template>
+                </template>
+              </a-table>
+            </section>
+          </a-tab-pane>
+
+          <a-tab-pane key="deployments" :tab="t('k8s.deployments')">
+            <div class="vn-k8s-pane-toolbar">
+              <a-select
+                :value="selectedNamespace"
+                :options="namespaceOptions"
+                class="vn-k8s-namespace-select"
+                :aria-label="t('k8s.namespace')"
+                @change="handleNamespaceChange"
+              />
+              <span class="vn-result-count">{{ deployments.length }}</span>
             </div>
             <a-table
-              :columns="nodeColumns"
-              :data-source="nodes"
+              :columns="deploymentColumns"
+              :data-source="deployments"
               :loading="resourcesLoading"
-              :pagination="false"
-              row-key="name"
+              :pagination="{ pageSize: 10 }"
+              :row-key="(record: KubernetesDeploymentInfo) => `${record.namespace}/${record.name}`"
               size="small"
-              class="k8s-table"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'name'">
-                  <span class="k8s-strong">{{ record.name }}</span>
+                  <span class="vnp-strong vn-mono">{{ record.name }}</span>
                 </template>
-                <template v-else-if="column.key === 'status'">
-                  <span :class="['k8s-pill', 'status-badge', `status-badge-${nodeStatusTone(record.status)}`]">
-                    {{ record.status || '—' }}
-                  </span>
+                <template v-else-if="column.key === 'namespace'">
+                  <span class="vnp-cell-muted vn-mono">{{ record.namespace }}</span>
                 </template>
-                <template v-else-if="column.key === 'kubeletVersion'">
-                  <code class="k8s-mono k8s-cell-muted">{{ record.kubeletVersion || '—' }}</code>
+                <template v-else-if="column.key === 'replicas'">
+                  <div class="vn-k8s-replica-cell">
+                    <a-progress
+                      :percent="replicaPercent(record)"
+                      :status="replicaStatus(record)"
+                      :show-info="false"
+                      size="small"
+                    />
+                    <span class="vn-mono vnp-cell-muted">{{ record.readyReplicas || 0 }}/{{ record.replicas }}</span>
+                  </div>
                 </template>
-                <template v-else-if="column.key === 'osImage'">
-                  <span class="k8s-cell-muted">{{ record.osImage || '—' }}</span>
+                <template v-else-if="column.key === 'actions'">
+                  <div class="vn-iconbtn-group">
+                    <VnIconButton :icon="ExpandOutlined" :label="t('k8s.scale')" @click="scalingDeployment = record" />
+                    <VnIconButton :icon="DeleteOutlined" :label="t('common.delete')" danger @click="handleDeleteDeployment(record)" />
+                  </div>
                 </template>
               </template>
             </a-table>
-          </section>
-        </a-tab-pane>
+          </a-tab-pane>
 
-        <a-tab-pane key="deployments" :tab="t('k8s.deployments')">
-          <div class="k8s-pane-toolbar">
-            <a-select
-              :value="selectedNamespace"
-              :options="namespaceOptions"
-              class="k8s-namespace-select"
-              :aria-label="t('k8s.namespace')"
-              @change="handleNamespaceChange"
-            />
-            <span class="k8s-count-pill">{{ deployments.length }}</span>
-          </div>
-          <a-table
-            :columns="deploymentColumns"
-            :data-source="deployments"
-            :loading="resourcesLoading"
-            :pagination="{ pageSize: 10 }"
-            :row-key="(record: KubernetesDeploymentInfo) => `${record.namespace}/${record.name}`"
-            size="small"
-            class="k8s-table"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'name'">
-                <span class="k8s-strong k8s-mono">{{ record.name }}</span>
-              </template>
-              <template v-else-if="column.key === 'namespace'">
-                <span class="k8s-cell-muted k8s-mono">{{ record.namespace }}</span>
-              </template>
-              <template v-else-if="column.key === 'replicas'">
-                <div class="k8s-replica-cell">
-                  <a-progress
-                    :percent="replicaPercent(record)"
-                    :status="replicaStatus(record)"
-                    :show-info="false"
-                    size="small"
-                    class="k8s-replica-bar"
-                  />
-                  <span class="k8s-mono k8s-cell-muted">{{ record.readyReplicas || 0 }}/{{ record.replicas }}</span>
-                </div>
-              </template>
-              <template v-else-if="column.key === 'actions'">
-                <div class="k8s-row-actions">
-                  <a-tooltip :title="t('k8s.scale')">
-                    <a-button
-                      type="text"
-                      size="small"
-                      class="k8s-icon-btn"
-                      :aria-label="t('k8s.scale')"
-                      @click="scalingDeployment = record"
+          <a-tab-pane key="pods" :tab="t('k8s.pods')">
+            <div class="vn-k8s-pane-toolbar">
+              <a-select
+                :value="selectedNamespace"
+                :options="namespaceOptions"
+                class="vn-k8s-namespace-select"
+                :aria-label="t('k8s.namespace')"
+                @change="handleNamespaceChange"
+              />
+              <span class="vn-result-count">{{ pods.length }}</span>
+            </div>
+            <a-table
+              :columns="podColumns"
+              :data-source="pods"
+              :loading="resourcesLoading"
+              :pagination="{ pageSize: 10 }"
+              :row-key="(record: KubernetesPodInfo) => `${record.namespace}/${record.name}`"
+              size="small"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'name'">
+                  <button type="button" class="vnp-name" :title="record.name" @click="selectedPod = record">{{ record.name }}</button>
+                </template>
+                <template v-else-if="column.key === 'namespace'">
+                  <span class="vnp-cell-muted vn-mono">{{ record.namespace }}</span>
+                </template>
+                <template v-else-if="column.key === 'phase'">
+                  <VnBadge :tone="vnTone(phaseTone(record.phase))">{{ record.phase || '—' }}</VnBadge>
+                </template>
+                <template v-else-if="column.key === 'podIP'">
+                  <span class="vn-mono vnp-cell-muted">{{ record.podIP || '—' }}</span>
+                </template>
+                <template v-else-if="column.key === 'containers'">
+                  <div v-if="record.containers && record.containers.length" class="vn-k8s-container-tags">
+                    <span
+                      v-for="container in record.containers"
+                      :key="container.name"
+                      :class="['vn-chip', container.ready ? 'vn-ink-ok' : 'vn-ink-err']"
                     >
-                      <template #icon><ExpandOutlined /></template>
-                    </a-button>
-                  </a-tooltip>
-                  <a-tooltip :title="t('common.delete')">
-                    <a-button
-                      type="text"
-                      size="small"
-                      class="k8s-icon-btn is-danger"
-                      :aria-label="t('common.delete')"
-                      @click="handleDeleteDeployment(record)"
-                    >
-                      <template #icon><DeleteOutlined /></template>
-                    </a-button>
-                  </a-tooltip>
-                </div>
+                      {{ container.name }} ({{ container.restartCount }})
+                    </span>
+                  </div>
+                  <span v-else class="vnp-cell-muted">—</span>
+                </template>
+                <template v-else-if="column.key === 'actions'">
+                  <VnIconButton :icon="EyeOutlined" :label="t('common.detail')" @click="selectedPod = record" />
+                </template>
               </template>
-            </template>
-          </a-table>
-        </a-tab-pane>
-
-        <a-tab-pane key="pods" :tab="t('k8s.pods')">
-          <div class="k8s-pane-toolbar">
-            <a-select
-              :value="selectedNamespace"
-              :options="namespaceOptions"
-              class="k8s-namespace-select"
-              :aria-label="t('k8s.namespace')"
-              @change="handleNamespaceChange"
-            />
-            <span class="k8s-count-pill">{{ pods.length }}</span>
-          </div>
-          <a-table
-            :columns="podColumns"
-            :data-source="pods"
-            :loading="resourcesLoading"
-            :pagination="{ pageSize: 10 }"
-            :row-key="(record: KubernetesPodInfo) => `${record.namespace}/${record.name}`"
-            size="small"
-            class="k8s-table"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'name'">
-                <button type="button" class="k8s-pod-link" :title="record.name" @click="selectedPod = record">
-                  {{ record.name }}
-                </button>
-              </template>
-              <template v-else-if="column.key === 'namespace'">
-                <span class="k8s-cell-muted k8s-mono">{{ record.namespace }}</span>
-              </template>
-              <template v-else-if="column.key === 'phase'">
-                <span :class="['k8s-pill', 'status-badge', `status-badge-${phaseTone(record.phase)}`]">
-                  {{ record.phase || '—' }}
-                </span>
-              </template>
-              <template v-else-if="column.key === 'podIP'">
-                <span class="k8s-mono k8s-cell-muted">{{ record.podIP || '—' }}</span>
-              </template>
-              <template v-else-if="column.key === 'containers'">
-                <div v-if="record.containers && record.containers.length" class="k8s-container-tags">
-                  <a-tag
-                    v-for="container in record.containers"
-                    :key="container.name"
-                    :class="['k8s-container-tag', 'status-badge', container.ready ? 'status-badge-success' : 'status-badge-error']"
-                  >
-                    {{ container.name }} ({{ container.restartCount }})
-                  </a-tag>
-                </div>
-                <span v-else class="k8s-cell-muted">—</span>
-              </template>
-              <template v-else-if="column.key === 'actions'">
-                <a-tooltip :title="t('common.detail')">
-                  <a-button
-                    type="text"
-                    size="small"
-                    class="k8s-icon-btn"
-                    :aria-label="t('common.detail')"
-                    @click="selectedPod = record"
-                  >
-                    <template #icon><EyeOutlined /></template>
-                  </a-button>
-                </a-tooltip>
-              </template>
-            </template>
-          </a-table>
-        </a-tab-pane>
-      </a-tabs>
+            </a-table>
+          </a-tab-pane>
+        </a-tabs>
+      </div>
     </div>
 
     <DeployGatewayModal
-      v-if="deployOpen"
+      :open="deployOpen"
       :cluster-id="cluster.id"
       :namespaces="namespaces"
       @close="deployOpen = false"
@@ -436,7 +366,7 @@ async function copyServerUrl() {
     />
 
     <ScaleDeploymentModal
-      v-if="scalingDeployment"
+      :open="!!scalingDeployment"
       :cluster-id="cluster.id"
       :deployment="scalingDeployment"
       @close="scalingDeployment = null"
@@ -444,7 +374,7 @@ async function copyServerUrl() {
     />
 
     <PodDetailModal
-      v-if="selectedPod"
+      :open="!!selectedPod"
       :cluster-id="cluster.id"
       :pod="selectedPod"
       @close="selectedPod = null"

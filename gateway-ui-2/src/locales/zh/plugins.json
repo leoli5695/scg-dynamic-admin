@@ -228,5 +228,7 @@
   "plugin_bindings.config_summary": "配置摘要",
   "plugin_bindings.updated": "更新时间",
   "plugin_bindings.config_json_placeholder": "请输入 JSON 配置",
-  "plugin_bindings.load_partial_failed": "{{count}} 个路由的插件绑定加载失败，以下列表可能不完整。"
+  "plugin_bindings.load_partial_failed": "{{count}} 个路由的插件绑定加载失败，以下列表可能不完整。",
+  "plugin_bindings.results": "{{count}} 个结果",
+  "plugin_bindings.search_placeholder": "搜索插件/路由名称"
 }

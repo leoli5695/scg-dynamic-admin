@@ -187,7 +187,7 @@ async function handleCreateCredential() {
               :value="values[field.name]"
               :options="(field.options ?? []).map((opt) => ({ value: opt.value, label: opt.label || opt.value }))"
               @update:value="values[field.name] = $event"
-            />
+             popup-class-name="vn-portal"/>
             <a-input
               v-else
               :value="values[field.name]"
@@ -230,7 +230,7 @@ async function handleCreateCredential() {
               :placeholder="t('strategy.ai.provider')"
               :options="providers"
               @update:value="row.provider = $event"
-            />
+             popup-class-name="vn-portal"/>
           </a-form-item>
         </a-col>
         <a-col :span="12">
@@ -243,7 +243,7 @@ async function handleCreateCredential() {
               :options="credentialOptions"
               :not-found-content="t('strategy.ai.no_credentials')"
               @update:value="row.credentialRef = $event"
-            />
+             popup-class-name="vn-portal"/>
           </a-form-item>
         </a-col>
         <a-col :span="3">
@@ -283,7 +283,7 @@ async function handleCreateCredential() {
               :placeholder="t('strategy.ai.provider')"
               :options="providers"
               @update:value="row.provider = $event"
-            />
+             popup-class-name="vn-portal"/>
           </a-form-item>
         </a-col>
         <a-col :span="6">
@@ -292,7 +292,7 @@ async function handleCreateCredential() {
               :value="row.strategy"
               :options="strategyOptions"
               @update:value="row.strategy = $event"
-            />
+             popup-class-name="vn-portal"/>
           </a-form-item>
         </a-col>
         <a-col :span="9">
@@ -306,7 +306,7 @@ async function handleCreateCredential() {
               :options="credentialOptions"
               :not-found-content="t('strategy.ai.no_credentials')"
               @update:value="row.credentialRefs = $event"
-            />
+             popup-class-name="vn-portal"/>
           </a-form-item>
         </a-col>
         <a-col :span="3">
@@ -355,7 +355,7 @@ async function handleCreateCredential() {
               :placeholder="t('strategy.ai.route_to')"
               :options="providers"
               @update:value="row.provider = $event"
-            />
+             popup-class-name="vn-portal"/>
           </a-form-item>
         </a-col>
         <a-col :span="3">
@@ -378,6 +378,7 @@ async function handleCreateCredential() {
       :ok-text="t('common.create')"
       :cancel-text="t('common.cancel')"
       :destroy-on-close="true"
+      wrap-class-name="vn-portal"
       class="strategy-credential-modal"
       @ok="handleCreateCredential"
       @cancel="closeCredentialModal"
@@ -387,7 +388,7 @@ async function handleCreateCredential() {
           <a-input v-model:value="credForm.name" :placeholder="t('strategy.ai.cred_name_placeholder')" />
         </a-form-item>
         <a-form-item :name="'provider'" :label="t('strategy.ai.provider')" :rules="[{ required: true }]">
-          <a-select v-model:value="credForm.provider" :options="providers" :placeholder="t('strategy.ai.provider')" />
+          <a-select v-model:value="credForm.provider" :options="providers" :placeholder="t('strategy.ai.provider')"  popup-class-name="vn-portal"/>
         </a-form-item>
         <a-form-item
           :name="'apiKey'"

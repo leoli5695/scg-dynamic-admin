@@ -1,0 +1,241 @@
+/**
+ * Instances pages composition on the Vue-native layer.
+ * Layout only — surfaces, ink, radii and control chrome come from
+ * styles/vue-native.css; shared catalog/portal patterns from
+ * styles/vue-native-shared.css. Nothing leaks outside `.vn-scope` / `.vn-portal`.
+ * instances.css stays loaded for the instance-detail status tag it still owns.
+ */
+
+.vn-instances {
+  padding: 0;
+  min-height: 100%;
+}
+
+/* ==================== Instance tile ==================== */
+.vn-instances .vn-tile-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  height: 24px;
+  flex: none;
+}
+
+.vn-instances .vn-instance-idrow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  height: 24px;
+  flex: none;
+}
+
+.vn-instances .vn-instance-id {
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Resource meters: matte track, green fill, amber when hot. */
+.vn-instances .vn-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  height: 46px;
+  flex: none;
+  align-items: stretch;
+}
+
+.vn-instances .vn-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.vn-instances .vn-metric-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.vn-instances .vn-metric-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--vn-ink-3);
+}
+
+.vn-instances .vn-metric-value {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-instances .vn-meter {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--vn-surface-sunken);
+  overflow: hidden;
+}
+
+.vn-instances .vn-meter > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--vn-brand);
+}
+
+.vn-instances .vn-meter.is-warn > i {
+  background: var(--vn-warn);
+}
+
+.vn-instances .vn-metric-sub {
+  font-size: 10.5px;
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-instances .vn-heartbeat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  flex: none;
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+  min-width: 0;
+}
+
+.vn-instances .vn-heartbeat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--vn-idle);
+}
+
+.vn-instances .vn-heartbeat-dot.is-ok { background: var(--vn-ok); }
+.vn-instances .vn-heartbeat-dot.is-warn { background: var(--vn-warn); }
+.vn-instances .vn-heartbeat-dot.is-bad { background: var(--vn-err); }
+
+.vn-instances .vn-heartbeat-value {
+  color: var(--vn-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-instances .vn-heartbeat-value.is-warn { color: var(--vn-warn); }
+.vn-instances .vn-heartbeat-value.is-bad { color: var(--vn-err); }
+
+.vn-instances .vn-heartbeat-facts {
+  margin-left: auto;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==================== Table view ==================== */
+.vn-instances .vn-table .vn-meter {
+  width: 64px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 7px;
+}
+
+.vn-instances .vn-cell-metric {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ==================== Create page ==================== */
+.vn-instances .vn-create-panel {
+  max-width: 860px;
+}
+
+.vn-instances .vn-create-panel > .vn-panel-body {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vn-instances .ic-section {
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  padding: 12px;
+}
+
+.vn-instances .ic-section-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.vn-instances .ic-section-icon {
+  display: inline-flex;
+  color: var(--vn-brand);
+  font-size: var(--vn-glyph-sm);
+}
+
+.vn-instances .ic-section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-2);
+}
+
+.vn-instances .ic-section-hint {
+  font-size: 11px;
+  color: var(--vn-ink-3);
+  margin-left: auto;
+}
+
+.vn-instances .ic-form-alert.ant-alert {
+  margin-bottom: 10px;
+}
+
+.vn-instances .ic-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vn-instances .ic-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--vn-line-soft);
+}
+
+.vn-instances .ic-cluster-icon {
+  margin-right: 5px;
+  color: var(--vn-ink-3);
+}
+
+/* Dropdown option facts read as flat chips, not antd colour tags. */
+.vn-portal .ic-option-tag {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+  color: var(--vn-ink-3);
+  font-size: 10.5px;
+  line-height: 1.7;
+}
+
+.vn-portal .ic-option-image {
+  margin-inline: 6px;
+}

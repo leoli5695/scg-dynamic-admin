@@ -50,6 +50,9 @@ export const getAuthTone = (type: string): AuthTone => TYPE_TONE[type] ?? 'prima
 /** Page-scoped tone class shared by the card icon and type tag. */
 export const authToneClass = (type: string): string => `auth-tone-${getAuthTone(type)}`
 
+/** Vue-native tone class (vn semantic palette). */
+export const vnAuthToneClass = (type: string): string => `vn-atone-${getAuthTone(type)}`
+
 /** i18n key of the tooltip description; undefined for unknown types. */
 export const getAuthTypeDescKey = (type: string): string | undefined => TYPE_DESC_KEYS[type]
 

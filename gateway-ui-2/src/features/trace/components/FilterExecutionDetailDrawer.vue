@@ -83,7 +83,7 @@ function msFromMicros(value?: number): number {
     :open="open"
     placement="right"
     :width="500"
-    root-class-name="trace-drawer"
+    root-class-name="vn-portal vnp-portal trace-drawer"
     destroy-on-close
     @close="emit('close')"
   >

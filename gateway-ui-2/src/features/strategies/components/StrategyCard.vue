@@ -170,7 +170,7 @@ function summarizeMultiDim(config: StrategyConfig, t: TFunc): { segments: string
 }
 
 /** Identity + the 1-2 config values worth showing on the card. */
-function summarizeConfig(strategy: StrategyDefinition, t: TFunc): { segments: string[]; hidden: number } {
+export function summarizeConfig(strategy: StrategyDefinition, t: TFunc): { segments: string[]; hidden: number } {
   const config = strategy.config || {}
   // `enabled` is already shown as the card status; it would only add noise to the count.
   const allKeys = Object.keys(config).filter((key) => key !== 'enabled')
@@ -199,14 +199,15 @@ function summarizeConfig(strategy: StrategyDefinition, t: TFunc): { segments: st
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  CompassOutlined, CopyOutlined, DeleteOutlined, EditOutlined,
-  GlobalOutlined, PauseCircleOutlined, PlayCircleOutlined,
+  CompassOutlined, EditOutlined, GlobalOutlined,
+  PauseCircleOutlined, PlayCircleOutlined,
 } from '@/components/icons'
 import type { StrategyTypeInfo } from '@/types/strategy'
-import { message } from '@/utils/feedback'
-import { copyText } from '@/utils/clipboard'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
 import { toneForLegacyColor } from '../tones'
 import StrategyTypeIcon from './StrategyTypeIcon.vue'
+import StrategyActionsMenu from './StrategyActionsMenu.vue'
 
 const props = defineProps<{
   strategy: StrategyDefinition
@@ -225,129 +226,63 @@ const { t } = useI18n()
 const tr = (key: string, options?: Record<string, unknown>): string =>
   (options ? t(key, options) : t(key))
 
-const tone = computed(() => `strategy-tone-${toneForLegacyColor(props.typeInfo?.color)}`)
+const tone = computed(() => `vn-stone-${toneForLegacyColor(props.typeInfo?.color)}`)
 const summary = computed(() => summarizeConfig(props.strategy, tr))
-const statusText = computed(() =>
-  props.strategy.enabled ? t('common.enabled') : t('common.disabled'))
-
-async function copyId() {
-  const ok = await copyText(props.strategy.strategyId)
-  if (ok) message.success(t('message.copy_success'))
-  else message.error(t('message.copy_failed'))
-}
+const popupContainer = () => document.body
 </script>
 
 <template>
-  <a-card :class="['strategy-card', !strategy.enabled ? 'strategy-card-disabled' : '']">
-    <div class="strategy-card-header">
-      <div class="strategy-info">
-        <div :class="['strategy-icon', 'icon-tile', tone]">
+  <article :class="['vn-panel', 'vn-tile', 'vn-rail-' + (strategy.enabled ? 'ok' : 'idle')]">
+    <div class="vn-tile-head">
+      <div class="vn-tile-identity">
+        <span :class="['vn-tile-glyph', tone]" aria-hidden="true">
           <StrategyTypeIcon :name="typeInfo?.icon" />
-        </div>
-        <div class="strategy-details">
-          <div class="strategy-name-row">
-            <a-tooltip :title="strategy.strategyName">
-              <span class="strategy-name">{{ strategy.strategyName }}</span>
-            </a-tooltip>
-          </div>
-          <div class="strategy-id-row">
-            <a-tooltip :title="strategy.strategyId">
-              <span class="strategy-id">{{ strategy.strategyId }}</span>
-            </a-tooltip>
-            <a-tooltip :title="t('common.copy_id')">
-              <a-button type="text" size="small" class="copy-btn" @click.stop="copyId">
-                <template #icon><CopyOutlined /></template>
-              </a-button>
-            </a-tooltip>
-          </div>
-        </div>
+        </span>
+        <button type="button" class="vn-tile-name" :title="strategy.strategyName" @click="emit('edit', strategy)">
+          {{ strategy.strategyName }}
+        </button>
       </div>
-      <div class="strategy-actions">
-        <a-tooltip :title="t('common.edit')">
-          <a-button
-            type="text"
-            size="small"
-            class="action-btn"
-            :aria-label="t('common.edit')"
-            @click="emit('edit', strategy)"
-          >
-            <template #icon><EditOutlined /></template>
-          </a-button>
-        </a-tooltip>
-        <a-tooltip :title="strategy.enabled ? t('common.disable') : t('common.enable')">
-          <a-button
-            type="text"
-            size="small"
-            class="action-btn"
-            :aria-label="strategy.enabled ? t('common.disable') : t('common.enable')"
-            @click="emit('toggle', strategy)"
-          >
-            <template #icon><PauseCircleOutlined v-if="strategy.enabled" /><PlayCircleOutlined v-else /></template>
-          </a-button>
-        </a-tooltip>
-        <a-tooltip :title="t('common.delete')">
-          <a-button
-            type="text"
-            size="small"
-            danger
-            class="action-btn"
-            :aria-label="t('common.delete')"
-            @click="emit('delete', strategy)"
-          >
-            <template #icon><DeleteOutlined /></template>
-          </a-button>
-        </a-tooltip>
+      <div class="vn-iconbtn-group">
+        <VnIconButton
+          :icon="strategy.enabled ? PauseCircleOutlined : PlayCircleOutlined"
+          :label="strategy.enabled ? t('common.disable') : t('common.enable')"
+          @click="emit('toggle', strategy)"
+        />
+        <VnIconButton :icon="EditOutlined" :label="t('common.edit')" @click="emit('edit', strategy)" />
+        <StrategyActionsMenu :strategy-id="strategy.strategyId" @delete="emit('delete', strategy)" />
       </div>
     </div>
 
-    <div class="strategy-meta">
-      <a-tag
-        class="strategy-scope-tag status-badge"
-        :class="strategy.scope === 'GLOBAL' ? 'status-badge-info' : 'status-badge-neutral'"
-      >
+    <div class="vn-tile-meta">
+      <VnBadge :tone="strategy.enabled ? 'ok' : 'idle'">{{ strategy.enabled ? t('common.enabled') : t('common.disabled') }}</VnBadge>
+      <span class="vn-chip">
         <GlobalOutlined v-if="strategy.scope === 'GLOBAL'" />
         <CompassOutlined v-else />
         {{ strategy.scope === 'GLOBAL' ? t('strategy.scope_global') : t('strategy.scope_route') }}
-      </a-tag>
+      </span>
       <a-tooltip
         v-if="strategy.scope === 'ROUTE' && strategy.routeId"
         :title="`${t('strategy.bound_route')}: ${strategy.routeId}`"
+        overlay-class-name="vn-tooltip"
+        :get-popup-container="popupContainer"
       >
-        <span class="strategy-route-chip">
-          <CompassOutlined />
-          <span class="strategy-route-id">{{ strategy.routeId }}</span>
+        <span class="vn-chip vn-route-id-chip">
+          <span class="vn-chip-text">{{ strategy.routeId }}</span>
         </span>
       </a-tooltip>
-      <a-tag
-        class="strategy-status status-badge"
-        :class="strategy.enabled ? 'status-badge-success' : 'status-badge-neutral'"
-      >
+    </div>
+
+    <div class="vn-tile-band">
+      <span class="vn-band-label" :title="typeLabel">{{ typeLabel }}</span>
+      <span v-if="summary.hidden > 0" class="vn-band-more">+{{ summary.hidden }}</span>
+      <span v-if="summary.segments.length" class="vn-chips">
         <span
-          class="status-dot"
-          :class="strategy.enabled ? 'status-dot-success' : 'status-dot-neutral'"
-        />
-        {{ statusText }}
-      </a-tag>
-    </div>
-
-    <div class="strategy-type-row">
-      <a-tag class="strategy-type-tag">
-        {{ typeLabel }}
-      </a-tag>
-      <span
-        v-for="(segment, index) in summary.segments"
-        :key="`${segment}-${index}`"
-        class="strategy-summary-chip"
-      >{{ segment }}</span>
-      <span v-if="summary.hidden > 0" class="strategy-more-chip">
-        {{ t('strategy.more_config_entries', { count: summary.hidden }) }}
+          v-for="(segment, index) in summary.segments"
+          :key="`${segment}-${index}`"
+          class="vn-chip"
+        ><span class="vn-chip-text">{{ segment }}</span></span>
       </span>
+      <span v-else class="vn-tile-empty">—</span>
     </div>
-
-    <div v-if="strategy.description" class="strategy-description">
-      <a-tooltip :title="strategy.description">
-        <span class="strategy-description-text">{{ strategy.description }}</span>
-      </a-tooltip>
-    </div>
-  </a-card>
+  </article>
 </template>

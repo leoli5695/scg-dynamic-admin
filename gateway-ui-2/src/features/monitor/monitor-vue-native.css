@@ -1,0 +1,159 @@
+/**
+ * Monitor page composition on the Vue-native layer. Layout only; surfaces, ink,
+ * badges and control chrome come from vue-native.css / vn-pages.css. Charts keep
+ * their functionality; only the shell / cards / tool row align to the baseline.
+ */
+
+.vn-monitor {
+  padding: 0;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vn-monitor .vn-toolbar,
+.vn-monitor .vn-metarow { margin-bottom: 0; }
+.vn-monitor-range-select { width: 130px; }
+.vn-monitor-time-chip { flex: none; }
+
+.vn-monitor-initial-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 0;
+}
+
+/* ==================== Pod selector ==================== */
+.vn-monitor-pod-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+}
+.vn-monitor-pod-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vn-ink-2);
+}
+.vn-monitor-pod-label .anticon { color: var(--vn-brand); }
+.vn-monitor-pod-select { width: 260px; }
+.vn-monitor-pod-divider { width: 1px; align-self: stretch; background: var(--vn-line-soft); }
+.vn-monitor-pod-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+.vn-monitor-pod-meta-item { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ==================== Instances table ==================== */
+.vn-monitor-instances-body { padding: 8px 12px 12px; }
+.vn-monitor-instance-status { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ==================== Snapshot metric cards ==================== */
+.vn-monitor-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+@media (max-width: 1300px) {
+  .vn-monitor-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .vn-monitor-metrics-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.vn-monitor-metric-card { display: flex; flex-direction: column; }
+.vn-monitor-metric-card > .vn-panel-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.vn-monitor-progress-block { display: flex; flex-direction: column; gap: 4px; }
+.vn-monitor-progress-label {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+.vn-monitor-progress-caption { font-size: 11px; color: var(--vn-ink-3); font-variant-numeric: tabular-nums; }
+.vn-monitor-region-row { display: flex; flex-direction: column; gap: 3px; }
+.vn-monitor-region-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.vn-monitor-region-name { font-size: 11.5px; color: var(--vn-ink-2); }
+
+.vn-monitor-stat-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.vn-monitor-stat-row--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.vn-monitor-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vn-monitor-stat-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+.vn-monitor-stat-value {
+  font-size: 14px;
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink);
+}
+.vn-monitor-stat-value.is-lg { font-size: 19px; }
+.vn-monitor-stat-value em { font-style: normal; font-size: 11px; font-weight: 500; color: var(--vn-ink-3); margin-left: 3px; }
+.vn-monitor-primary { color: var(--vn-brand); }
+
+.vn-monitor-divider { height: 1px; background: var(--vn-line-soft); margin: 2px 0; }
+.vn-monitor-helper-line { margin: 0; font-size: 11px; color: var(--vn-ink-3); }
+
+.vn-monitor-gc-head { display: flex; align-items: center; }
+.vn-monitor-gc-alert { margin: 0; }
+.vn-monitor-gc-reason { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--vn-ink-2); }
+.vn-monitor-gc-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+}
+.vn-monitor-gc-block.is-warn { border-color: rgba(240, 180, 41, 0.35); }
+.vn-monitor-gc-block-title { font-size: 11px; font-weight: 600; color: var(--vn-ink-2); }
+.vn-monitor-gc-block-title.is-warn { color: var(--vn-warn); }
+.vn-monitor-gc-block-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+
+/* ==================== History charts ==================== */
+.vn-monitor-domain-seg { margin-bottom: 12px; }
+.vn-monitor-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.vn-monitor-chart-grid.is-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) {
+  .vn-monitor-chart-grid,
+  .vn-monitor-chart-grid.is-three { grid-template-columns: minmax(0, 1fr); }
+}
+.vn-monitor-chart-card { display: flex; flex-direction: column; }
+.vn-monitor-chart-card > .vn-panel-body { padding: 8px 10px 10px; }
+.vn-monitor-chart-title { font-size: 12px; font-weight: 600; color: var(--vn-ink-2); }
+.vn-monitor-chart { width: 100%; height: 220px; }
+.vn-monitor-chart-empty {
+  display: grid;
+  place-items: center;
+  height: 220px;
+  font-size: 12px;
+  color: var(--vn-ink-3);
+}
+.vn-monitor-state { display: grid; place-items: center; padding: 40px 0; }
+.vn-monitor-history-empty { padding: 8px 0; }
+.vn-monitor-table-state { display: grid; place-items: center; padding: 40px 0; }
+.vn-monitor-uri { color: var(--vn-ink); }

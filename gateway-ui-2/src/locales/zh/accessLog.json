@@ -1,5 +1,6 @@
 {
   "access_log.title": "访问日志配置",
+  "access_log.description_helper": "配置访问日志的采集与输出，并查看实时或历史请求记录",
   "access_log.collection_guide": "日志采集指南 (Fluent Bit)",
   "access_log.advanced_config": "高级配置（可选）",
   "access_log.storage_hint_msg": "当前日志实时采集，未落库存储",

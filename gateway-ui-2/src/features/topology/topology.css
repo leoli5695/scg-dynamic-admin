@@ -1,256 +1,141 @@
 /**
- * Traffic topology styles.
- * The login skin (styles/login-theme.css + variables.css + iconography.css)
- * owns surfaces, borders, radii and colors. This file only adds layout, chart
- * geometry, tooltip composition and the node legend; the page root stays
- * transparent. SVG chart only — no canvas, no blur layers.
+ * Traffic topology composition on the Vue-native layer.
+ * Layout only — surfaces, ink, radii and control chrome come from
+ * styles/vue-native.css. The ECharts graph keeps its own geometry; this file
+ * skins the shell, ranking node cards, legend and context menu. Nothing here
+ * leaks outside `.vn-scope`.
  */
 
-/* ==================== Page layout ==================== */
-.topology-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  max-width: 1460px;
-  margin-inline: auto;
+.vn-scope.topology-page {
+  padding: 0;
   min-height: 100%;
-  color: var(--text-primary);
-}
-
-.topology-page > .ant-alert {
-  margin: 0;
-}
-
-/* ==================== Header ==================== */
-.topology-page-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.topology-page-heading {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  min-width: 0;
+  gap: 12px;
 }
 
-.topology-page-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+.vn-scope.topology-page > .ant-alert {
   margin: 0;
-  font-size: 24px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
 }
 
-.topology-page-title .lg-icon-tile {
-  font-size: var(--icon-glyph-lg);
-}
-
-.topology-page-subtitle {
-  margin: 0;
-  max-width: 860px;
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--text-secondary);
-}
-
-.topology-page-actions {
+/* ==================== Canvas panel ==================== */
+.vn-scope .topology-canvas {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
+  flex-direction: column;
 }
 
-/* ==================== Toolbar ==================== */
-.topology-toolbar {
+.vn-scope .topology-canvas-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 18px;
+  gap: 16px;
   flex-wrap: wrap;
   padding: 12px 16px;
 }
 
-.topology-search {
-  width: min(290px, 100%);
+.vn-scope .topology-canvas-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--vn-ink);
 }
 
-.topology-toolbar-controls {
+.vn-scope .topology-canvas-title .anticon {
+  font-size: var(--vn-glyph);
+  color: var(--vn-brand);
+}
+
+.vn-scope .topology-canvas-status {
   display: flex;
   align-items: center;
-  gap: 8px 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.topology-range-select {
-  width: 132px;
-}
-
-.topology-toggle {
+.vn-scope .topology-toggle {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 30px;
-  padding: 4px 8px;
+  min-height: 28px;
+  padding: 3px 8px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--vn-r-control);
   font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  transition: color var(--duration-fast) var(--ease-default),
-    background var(--duration-fast) var(--ease-default);
-}
-
-.topology-toggle.is-emphasized {
-  border-color: var(--border-subtle);
-  background: var(--accent-soft);
-  color: var(--text-primary);
-}
-
-.topology-toggle.is-emphasized > .anticon {
-  color: var(--icon-ink-accent);
-  font-size: var(--icon-glyph);
-}
-
-/* ==================== KPI cards ==================== */
-.topology-kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-4);
-}
-
-.topology-kpi {
-  min-width: 0;
-  padding: 16px 18px 15px;
-}
-
-.topology-kpi strong {
-  display: block;
-  margin-top: 8px;
-  overflow: hidden;
-  font-size: 28px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
+  color: var(--vn-ink-2);
   white-space: nowrap;
 }
 
-.topology-kpi strong.is-error {
-  color: var(--error-color);
+.vn-scope .topology-toggle.is-emphasized {
+  border-color: var(--vn-line-soft);
+  background: var(--vn-brand-soft);
+  color: var(--vn-ink);
 }
 
-.topology-kpi strong em {
-  margin-left: 5px;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 500;
-  color: var(--text-secondary);
+.vn-scope .topology-toggle.is-emphasized > .anticon {
+  color: var(--vn-brand);
+  font-size: var(--vn-glyph);
 }
 
-.topology-kpi small {
-  display: block;
-  margin-top: 8px;
-  overflow: hidden;
-  font-size: 11px;
-  color: var(--text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.vn-scope .topology-aggregate-badge {
+  border-color: rgba(127, 157, 255, 0.28);
+  background: rgba(127, 157, 255, 0.10);
+  color: #7f9dff;
 }
 
-/* ==================== Canvas panel ==================== */
-.topology-canvas {
-  display: flex;
-  flex-direction: column;
-}
-
-.topology-canvas-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 18px 22px 14px;
-}
-
-.topology-canvas-header h2 {
-  margin: 4px 0 0;
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.topology-canvas-status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.topology-aggregate-badge {
-  border-color: color-mix(in srgb, var(--accent-color) 32%, transparent);
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-  color: var(--accent-color);
-}
-
-.topology-live {
+.vn-scope .topology-live {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--success-color);
+  color: var(--vn-ok);
 }
 
-.topology-live i {
+.vn-scope .topology-live i {
   width: 6px;
   height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--success-color);
+  border-radius: 50%;
+  background: var(--vn-ok);
 }
 
-.topology-chart-hint {
+.vn-scope .topology-chart-hint {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding: 10px 22px;
-  border-top: 1px solid var(--border-subtle);
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 16px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--vn-line-soft);
+  border-bottom: 1px solid var(--vn-line-soft);
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--vn-ink-3);
 }
 
-.topology-visible-count {
+.vn-scope .topology-visible-count {
   flex: none;
-  font-family: var(--font-mono);
+  font-family: var(--vn-mono);
   font-size: 10px;
-  color: var(--text-secondary);
+  color: var(--vn-ink-2);
 }
 
-.topology-workspace {
+.vn-scope .topology-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 254px;
   min-height: 560px;
 }
 
-.topology-workspace:has(> .topology-chart-region:only-child) {
+.vn-scope .topology-workspace:has(> .topology-chart-region:only-child) {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.topology-chart-region {
+.vn-scope .topology-chart-region {
   position: relative;
   min-width: 0;
 }
 
-.topology-chart-viewport {
+.vn-scope .topology-chart-viewport {
   width: 100%;
   height: 560px;
   overflow: auto;
@@ -258,11 +143,11 @@
   scrollbar-gutter: stable;
 }
 
-.topology-chart {
+.vn-scope .topology-chart {
   position: relative;
 }
 
-.topology-state-overlay {
+.vn-scope .topology-state-overlay {
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -270,269 +155,282 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
-  background: color-mix(in srgb, var(--bg-base) 76%, transparent);
+  gap: 16px;
+  background: rgba(14, 20, 32, 0.76);
 }
 
-.topology-state-hint {
+.vn-scope .topology-state-hint {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--vn-ink-2);
 }
 
-/* ==================== Ranking aside ==================== */
-.topology-ranking {
+/* ==================== Ranking aside (matte node cards) ==================== */
+.vn-scope .topology-ranking {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 18px 15px 14px;
-  border-left: 1px solid var(--border-subtle);
+  padding: 14px 12px 12px;
+  border-left: 1px solid var(--vn-line-soft);
 }
 
-.topology-ranking-header {
+.vn-scope .topology-ranking-header {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 0 4px 14px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 4px 12px;
+  border-bottom: 1px solid var(--vn-line-soft);
 }
 
-.topology-ranking-title {
+.vn-scope .topology-ranking-glyph {
+  font-size: var(--vn-glyph);
+  color: var(--vn-brand);
+  margin-top: 2px;
+}
+
+.vn-scope .topology-ranking-title {
   display: block;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--vn-ink);
 }
 
-.topology-ranking-header small {
+.vn-scope .topology-ranking-header small {
   display: block;
   margin-top: 3px;
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--vn-ink-3);
 }
 
-.topology-ranking-list {
+.vn-scope .topology-ranking-list {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  padding-block: 13px;
+  padding-block: 12px;
 }
 
-.topology-route-rank {
+.vn-scope .topology-route-rank {
   width: 100%;
-  padding: 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
+  padding: 9px 10px;
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  background: var(--vn-surface-sunken);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-default),
-    background var(--duration-fast) var(--ease-default);
+  transition: border-color var(--vn-fast) var(--vn-ease), background var(--vn-fast) var(--vn-ease);
 }
 
-.topology-route-rank:hover,
-.topology-route-rank.is-selected {
-  border-color: var(--border-default);
-  background: var(--bg-hover);
+.vn-scope .topology-route-rank:hover {
+  border-color: var(--vn-line-strong);
+  background: var(--vn-surface-raised);
 }
 
-.topology-route-rank.is-selected {
-  box-shadow: inset 2px 0 var(--primary-color);
+.vn-scope .topology-route-rank.is-selected {
+  border-color: var(--vn-brand-line);
+  background: var(--vn-brand-soft);
+  box-shadow: inset 2px 0 var(--vn-brand);
 }
 
-.topology-route-rank-topline {
+.vn-scope .topology-route-rank-topline {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.topology-route-position {
-  font-family: var(--font-mono);
+.vn-scope .topology-route-position {
+  font-family: var(--vn-mono);
   font-size: 9px;
-  color: var(--text-muted);
+  color: var(--vn-ink-3);
 }
 
-.topology-route-rank-topline strong {
+.vn-scope .topology-route-rank-topline strong {
   min-width: 0;
   overflow: hidden;
   font-size: 11px;
   font-weight: 550;
-  color: var(--text-primary);
+  color: var(--vn-ink);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.topology-route-rank-topline em {
+.vn-scope .topology-route-rank-topline em {
   margin-left: auto;
-  font-family: var(--font-mono);
+  font-family: var(--vn-mono);
   font-size: 9px;
   font-style: normal;
-  color: var(--success-color);
+  color: var(--vn-ok);
 }
 
-.topology-route-rank-topline em.is-error {
-  color: var(--error-color);
+.vn-scope .topology-route-rank-topline em.is-error {
+  color: var(--vn-err);
 }
 
-.topology-route-rank-meta {
+.vn-scope .topology-route-rank-meta {
   display: block;
   margin: 5px 0 7px 26px;
   overflow: hidden;
   font-size: 9px;
-  color: var(--text-muted);
+  color: var(--vn-ink-3);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.topology-route-rank-line {
+.vn-scope .topology-route-rank-line {
   display: block;
   height: 2px;
   margin-left: 26px;
   overflow: hidden;
-  border-radius: var(--radius-full);
-  background: var(--border-subtle);
+  border-radius: 999px;
+  background: var(--vn-line-soft);
 }
 
-.topology-route-rank-line i {
+.vn-scope .topology-route-rank-line i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--gradient-primary);
+  background: var(--vn-brand);
 }
 
-.topology-ranking-summary {
+.vn-scope .topology-ranking-summary {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: auto;
-  padding-top: 13px;
-  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+  border-top: 1px solid var(--vn-line-soft);
 }
 
-.topology-ranking-summary > div {
+.vn-scope .topology-ranking-summary > div {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 3px 6px;
   padding: 8px;
-  border-radius: var(--radius-md);
-  background: var(--bg-section);
+  border-radius: var(--vn-r-control);
+  background: var(--vn-surface-sunken);
+  border: 1px solid var(--vn-line-soft);
 }
 
-.topology-ranking-summary .anticon {
-  font-size: var(--icon-glyph-sm);
-  color: var(--icon-ink-accent);
+.vn-scope .topology-ranking-summary .anticon {
+  font-size: var(--vn-glyph-sm);
+  color: var(--vn-brand);
 }
 
-.topology-ranking-summary span {
+.vn-scope .topology-ranking-summary span {
   font-size: 9px;
-  color: var(--text-muted);
+  color: var(--vn-ink-3);
 }
 
-.topology-ranking-summary strong {
+.vn-scope .topology-ranking-summary strong {
   grid-column: 2;
   font-size: 13px;
-  color: var(--text-primary);
+  color: var(--vn-ink);
 }
 
 /* ==================== Legend ==================== */
-.topology-legend {
+.vn-scope .topology-legend {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px 18px;
-  padding: 13px 22px;
-  border-top: 1px solid var(--border-subtle);
-  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  padding: 12px 16px;
+  border-top: 1px solid var(--vn-line-soft);
 }
 
-.topology-legend-item {
+.vn-scope .topology-legend-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-scope .topology-legend-item {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   font-size: 10px;
-  color: var(--text-secondary);
+  color: var(--vn-ink-2);
 }
 
-.topology-legend-item i {
+.vn-scope .topology-legend-item i {
   display: inline-block;
   width: 11px;
   height: 11px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--vn-line-strong);
 }
 
-.topology-legend-item .legend-circle {
-  border-radius: var(--radius-full);
+.vn-scope .topology-legend-item .legend-circle {
+  border-radius: 50%;
 }
 
-.topology-legend-item .legend-diamond {
+.vn-scope .topology-legend-item .legend-diamond {
   transform: rotate(45deg);
 }
 
-.topology-legend-item .legend-diamond.is-disabled {
+.vn-scope .topology-legend-item .legend-diamond.is-disabled {
   border-style: dashed;
 }
 
-.topology-legend-item .legend-rect {
+.vn-scope .topology-legend-item .legend-rect {
   border-radius: 2px;
 }
 
 /* ==================== Node context menu ==================== */
-.topology-menu-overlay {
+.vn-scope .topology-menu-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-dropdown);
+  z-index: var(--z-dropdown, 1000);
 }
 
-.topology-menu {
+.vn-scope .topology-menu {
   position: fixed;
-  z-index: calc(var(--z-dropdown) + 1);
+  z-index: calc(var(--z-dropdown, 1000) + 1);
   min-width: 176px;
   padding: 6px;
-  border-radius: var(--radius-lg);
+  box-shadow: var(--vn-shadow-pop);
 }
 
-.topology-menu-item {
+.vn-scope .topology-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
   padding: 8px 10px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--vn-r-chip);
   background: transparent;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--vn-ink-2);
   text-align: left;
   cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-default),
-    color var(--duration-fast) var(--ease-default);
+  transition: background var(--vn-fast) var(--vn-ease), color var(--vn-fast) var(--vn-ease);
 }
 
-.topology-menu-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+.vn-scope .topology-menu-item:hover {
+  background: var(--vn-surface-hover);
+  color: var(--vn-ink);
 }
 
-.topology-menu-item .anticon {
-  font-size: var(--icon-glyph);
-  color: var(--icon-ink-accent);
+.vn-scope .topology-menu-item .anticon {
+  font-size: var(--vn-glyph);
+  color: var(--vn-brand);
 }
 
-.topology-menu-divider {
+.vn-scope .topology-menu-divider {
   display: block;
   height: 1px;
   margin: 5px 4px;
-  background: var(--border-subtle);
+  background: var(--vn-line-soft);
 }
 
 /* ==================== Chart tooltips (ECharts HTML) ==================== */
-.topology-page .topology-tip {
+.vn-scope .topology-tip {
   min-width: 190px;
   font-size: 12px;
   line-height: 1.6;
 }
 
-.topology-page .topology-tip-head {
+.vn-scope .topology-tip-head {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -541,26 +439,26 @@
   font-weight: 600;
 }
 
-.topology-page .topology-tip-head i {
+.vn-scope .topology-tip-head i {
   width: 8px;
   height: 8px;
   border-radius: 2px;
 }
 
-.topology-page .topology-tip-title {
+.vn-scope .topology-tip-title {
   margin-bottom: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--vn-ink);
 }
 
-.topology-page .topology-tip-kind {
+.vn-scope .topology-tip-kind {
   margin-bottom: 8px;
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--vn-ink-3);
 }
 
-.topology-page .topology-tip-row {
+.vn-scope .topology-tip-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -568,108 +466,92 @@
   margin-bottom: 3px;
 }
 
-.topology-page .topology-tip-label {
-  color: var(--text-secondary);
+.vn-scope .topology-tip-label {
+  color: var(--vn-ink-2);
 }
 
-.topology-page .topology-tip-block {
+.vn-scope .topology-tip-block {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--vn-line-soft);
 }
 
-.topology-page .topology-tip-section {
+.vn-scope .topology-tip-section {
   margin-bottom: 6px;
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--vn-ink-3);
 }
 
-.topology-page .topology-tip-highlight {
+.vn-scope .topology-tip-highlight {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
   margin-top: 8px;
   padding: 6px 10px;
-  border-radius: var(--radius-md);
-  background: var(--accent-soft);
+  border-radius: var(--vn-r-control);
+  background: var(--vn-brand-soft);
 }
 
-.topology-page .topology-tip-highlight strong {
+.vn-scope .topology-tip-highlight strong {
   font-size: 14px;
   font-weight: 600;
 }
 
-.topology-page .topology-tip-instances {
+.vn-scope .topology-tip-instances {
   max-height: 100px;
   overflow-y: auto;
 }
 
-.topology-page .topology-tip-instance {
+.vn-scope .topology-tip-instance {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 3px 0;
 }
 
-.topology-page .topology-tip-weight {
+.vn-scope .topology-tip-weight {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--vn-ink-3);
 }
 
 /* ==================== Responsive ==================== */
 @media (max-width: 1200px) {
-  .topology-kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .topology-workspace {
+  .vn-scope .topology-workspace {
     grid-template-columns: minmax(0, 1fr) 224px;
   }
 }
 
 @media (max-width: 900px) {
-  .topology-workspace {
+  .vn-scope .topology-workspace {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .topology-ranking {
+  .vn-scope .topology-ranking {
     border-left: 0;
-    border-top: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--vn-line-soft);
   }
 
-  .topology-ranking-list {
+  .vn-scope .topology-ranking-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .topology-ranking-summary {
+  .vn-scope .topology-ranking-summary {
     margin-top: 0;
   }
 }
 
 @media (max-width: 640px) {
-  .topology-toolbar {
-    align-items: stretch;
-  }
-
-  .topology-search {
-    width: 100%;
-  }
-
-  .topology-kpi-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .topology-canvas-header,
-  .topology-chart-hint {
+  .vn-scope .topology-canvas-header,
+  .vn-scope .topology-chart-hint {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .topology-ranking-list {
+  .vn-scope .topology-ranking-list {
     grid-template-columns: 1fr;
   }
 }

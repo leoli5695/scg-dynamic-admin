@@ -3,6 +3,7 @@
  * Usage example modal — fetches GET /api/auth/policies/{id}/usage-example
  * and renders auth-type-specific header/curl snippets as copyable code blocks.
  */
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   ExclamationCircleOutlined, QuestionCircleOutlined, ReloadOutlined,
@@ -11,10 +12,13 @@ import { getAuthPolicyUsageExample } from '@/api/authPolicies'
 import { useRequest } from '@/composables/useRequest'
 import type { AuthPolicyDefinition } from '@/types/authPolicy'
 import { message } from '@/utils/feedback'
+import VnBadge from '@/components/vn/VnBadge.vue'
 import CodeBlock from './CodeBlock.vue'
 
 const props = defineProps<{
-  policy: AuthPolicyDefinition
+  policy?: AuthPolicyDefinition
+  /** Kept mounted by the page and toggled here. */
+  open?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -23,39 +27,47 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
+const isOpen = computed(() => props.open !== false)
+
 const { data: example, loading, error, run } = useRequest(
-  (signal) => getAuthPolicyUsageExample(props.policy.policyId ?? '', { signal }),
+  (signal) => getAuthPolicyUsageExample(props.policy?.policyId ?? '', { signal }),
   {
+    immediate: false,
     deps: [],
     onError: () => message.error(t('auth_policy.usage_example_failed')),
   },
 )
+
+watch(isOpen, (open) => {
+  if (open && props.policy?.policyId) run()
+})
 </script>
 
 <template>
   <a-modal
-    :open="true"
-    :width="720"
+    :open="isOpen"
+    :width="640"
     :footer="null"
-    wrap-class-name="auth-policy-usage-modal"
-    destroy-on-close
+    :style="{ top: '24px' }"
+    wrap-class-name="vn-portal vn-modal"
     @cancel="emit('close')"
   >
     <template #title>
-      <div class="auth-modal-head">
-        <span class="auth-modal-glyph is-usage" aria-hidden="true"><QuestionCircleOutlined /></span>
-        <span class="auth-modal-heading">
-          <span class="auth-modal-title">{{ t('auth_policy.usage_example') }}</span>
-          <span class="auth-modal-subtitle">{{ policy.policyName }} ({{ policy.authType }})</span>
-        </span>
+      <div class="vn-modal-head">
+        <span class="vn-modal-head-glyph" aria-hidden="true"><QuestionCircleOutlined /></span>
+        <div>
+          <div class="vn-modal-title">{{ t('auth_policy.usage_example') }}</div>
+          <div class="vn-modal-subtitle">{{ policy?.policyName }} ({{ policy?.authType }})</div>
+        </div>
       </div>
     </template>
 
     <a-spin :spinning="loading">
-      <div v-if="error" class="auth-state auth-state-inline">
-        <span class="auth-state-glyph is-error" aria-hidden="true"><ExclamationCircleOutlined /></span>
-        <h4 class="auth-state-title">{{ t('auth_policy.usage_example_failed') }}</h4>
-        <p class="auth-state-desc">{{ error.message }}</p>
+      <div class="auth-usage-scroll">
+      <div v-if="error" class="auth-state-inline">
+        <span class="auth-confirm-glyph" aria-hidden="true"><ExclamationCircleOutlined /></span>
+        <h4 class="auth-confirm-title">{{ t('auth_policy.usage_example_failed') }}</h4>
+        <p class="auth-confirm-desc">{{ error.message }}</p>
         <a-button @click="run">
           <template #icon><ReloadOutlined /></template>
           {{ t('common.refresh') }}
@@ -69,12 +81,12 @@ const { data: example, loading, error, run } = useRequest(
           <CodeBlock :label="t('auth_policy.jwt_header_format')" :code="example.headerValue" />
           <CodeBlock v-if="example.curlExample" :label="t('auth_policy.curl_example')" :code="example.curlExample" />
           <div v-if="example.tokenExpiresIn" class="auth-usage-chips">
-            <span class="status-badge status-badge-success">
+            <VnBadge tone="ok">
               {{ t('auth_policy.token_expires') }}: {{ example.tokenExpiresIn }}
-            </span>
-            <span class="status-badge status-badge-info">
+            </VnBadge>
+            <VnBadge tone="info">
               {{ t('auth_policy.algorithm') }}: {{ example.algorithm }}
-            </span>
+            </VnBadge>
           </div>
         </template>
 
@@ -85,7 +97,7 @@ const { data: example, loading, error, run } = useRequest(
           />
           <CodeBlock v-if="example.curlExample" :label="t('auth_policy.curl_example')" :code="example.curlExample" />
           <div v-if="example.prefixNote" class="auth-usage-chips">
-            <span class="status-badge status-badge-warning">{{ example.prefixNote }}</span>
+            <VnBadge tone="warn">{{ example.prefixNote }}</VnBadge>
           </div>
         </template>
 
@@ -107,7 +119,7 @@ const { data: example, loading, error, run } = useRequest(
             :code="example.curlWithAuthFlag"
           />
           <div v-if="example.realm" class="auth-usage-chips">
-            <span class="status-badge status-badge-info">{{ t('auth_policy.realm') }}: {{ example.realm }}</span>
+            <VnBadge tone="info">{{ t('auth_policy.realm') }}: {{ example.realm }}</VnBadge>
           </div>
         </template>
 
@@ -119,11 +131,11 @@ const { data: example, loading, error, run } = useRequest(
           />
           <CodeBlock :label="t('auth_policy.oauth2_use_token')" :code="example.headerValue" />
           <div class="auth-usage-chips">
-            <span class="status-badge status-badge-info">{{ t('auth_policy.client_id') }}: {{ example.clientId }}</span>
-            <span class="status-badge status-badge-success">{{ t('auth_policy.token_endpoint') }}: {{ example.tokenEndpoint }}</span>
-            <span v-if="example.requiredScopes" class="status-badge status-badge-warning">
+            <VnBadge tone="info">{{ t('auth_policy.client_id') }}: {{ example.clientId }}</VnBadge>
+            <VnBadge tone="ok">{{ t('auth_policy.token_endpoint') }}: {{ example.tokenEndpoint }}</VnBadge>
+            <VnBadge v-if="example.requiredScopes" tone="warn">
               {{ t('auth_policy.required_scopes') }}: {{ example.requiredScopes }}
-            </span>
+            </VnBadge>
           </div>
           <p v-if="example.note" class="auth-usage-note">{{ example.note }}</p>
         </template>
@@ -132,13 +144,13 @@ const { data: example, loading, error, run } = useRequest(
           <div class="auth-usage-block">
             <span class="auth-usage-label">{{ t('auth_policy.hmac_required_headers') }}</span>
             <div class="auth-usage-chips">
-              <span
+              <VnBadge
                 v-for="(header, index) in example.requiredHeaders ?? []"
                 :key="`${header.name}-${index}`"
-                class="status-badge status-badge-info"
+                tone="info"
               >
                 {{ header.name }}: {{ header.value }}
-              </span>
+              </VnBadge>
             </div>
           </div>
           <div class="auth-usage-block">
@@ -148,21 +160,22 @@ const { data: example, loading, error, run } = useRequest(
           </div>
           <CodeBlock v-if="example.curlExample" :label="t('auth_policy.curl_example')" :code="example.curlExample" />
           <div class="auth-usage-chips">
-            <span class="status-badge status-badge-info">
+            <VnBadge tone="info">
               {{ t('auth_policy.signature_algorithm') }}: {{ example.signatureAlgorithm }}
-            </span>
-            <span class="status-badge status-badge-warning">
+            </VnBadge>
+            <VnBadge tone="warn">
               {{ t('auth_policy.access_key') }}: {{ example.accessKey }}
-            </span>
+            </VnBadge>
           </div>
           <p v-if="example.note" class="auth-usage-note">{{ example.note }}</p>
         </template>
 
         <div v-else class="auth-usage-note">{{ t('auth_policy.no_example_available') }}</div>
       </template>
+      </div>
     </a-spin>
 
-    <div class="auth-modal-footer">
+    <div class="modal-footer-modern">
       <a-button @click="emit('close')">{{ t('common.close') }}</a-button>
     </div>
   </a-modal>

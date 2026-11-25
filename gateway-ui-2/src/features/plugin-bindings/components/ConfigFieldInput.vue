@@ -62,6 +62,7 @@ function onTextareaInput(value: string) {
     v-else-if="field.type === 'select'"
     :value="selectValue"
     :options="field.options ?? []"
+    popup-class-name="vn-portal"
     style="width: 100%"
     @update:value="emit('update:modelValue', $event)"
   />

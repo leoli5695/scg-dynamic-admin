@@ -1,0 +1,419 @@
+/**
+ * Auth policies page composition on the Vue-native layer.
+ * Layout only — surfaces, ink, radii and control chrome come from
+ * styles/vue-native.css; shared catalog/portal patterns from
+ * styles/vue-native-shared.css. Nothing leaks outside `.vn-scope` / `.vn-portal`.
+ */
+
+.vn-auth {
+  padding: 0;
+  min-height: 100%;
+}
+
+/* ==================== Tile ==================== */
+.vn-auth .vn-tile-meta {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  height: 24px;
+  flex: none;
+}
+
+.vn-auth .vn-auth-idrow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  height: 24px;
+  flex: none;
+}
+
+.vn-auth .vn-auth-id {
+  color: var(--vn-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Auth type tones snapped onto the vn semantic palette. */
+.vn-auth .vn-atone-primary,
+.vn-portal .vn-atone-primary { color: var(--vn-info); }
+.vn-auth .vn-atone-success,
+.vn-portal .vn-atone-success { color: var(--vn-ok); }
+.vn-auth .vn-atone-accent,
+.vn-portal .vn-atone-accent { color: var(--vn-info); }
+.vn-auth .vn-atone-warning,
+.vn-portal .vn-atone-warning { color: var(--vn-warn); }
+.vn-auth .vn-atone-error,
+.vn-portal .vn-atone-error { color: var(--vn-err); }
+
+.vn-auth .vn-route-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==================== Editor modal ==================== */
+.vn-portal .auth-impact-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line);
+  background: var(--vn-surface-sunken);
+}
+
+.vn-portal .auth-impact-block.is-blocked {
+  border-color: rgba(240, 180, 41, 0.3);
+  background: rgba(240, 180, 41, 0.08);
+}
+
+.vn-portal .auth-impact-glyph {
+  flex: none;
+  color: var(--vn-info);
+  font-size: var(--vn-glyph);
+  margin-top: 1px;
+}
+
+.vn-portal .auth-impact-block.is-blocked .auth-impact-glyph {
+  color: var(--vn-warn);
+}
+
+.vn-portal .auth-impact-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vn-portal .auth-impact-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vn-ink);
+}
+
+.vn-portal .auth-impact-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .auth-impact-status {
+  font-size: 11.5px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .auth-impact-routes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.vn-portal .auth-impact-route {
+  padding: 1px 7px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+  font-family: var(--vn-mono);
+  font-size: 10.5px;
+  color: var(--vn-ink-2);
+}
+
+/* ==================== Binding modal ==================== */
+.vn-portal .auth-binding-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vn-portal .auth-binding-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface);
+}
+
+.vn-portal .auth-binding-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vn-portal .auth-binding-priority {
+  flex: none;
+  font-size: 11px;
+  color: var(--vn-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.vn-portal .auth-binding-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex: none;
+}
+
+.vn-portal .auth-binding-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  font-size: 12px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .auth-binding-empty-glyph {
+  color: var(--vn-ink-3);
+  font-size: var(--vn-glyph);
+}
+
+.vn-portal .auth-binding-form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.vn-portal .auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.vn-portal .auth-field-priority {
+  flex: none;
+  width: 120px;
+}
+
+.vn-portal .auth-field-label {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .auth-select-empty {
+  color: var(--vn-ink-3);
+  font-size: 11.5px;
+}
+
+.vn-portal .auth-section-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--vn-ink-3);
+}
+
+/* ==================== Usage example modal ==================== */
+.vn-portal .auth-usage-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px 16px;
+}
+
+.vn-portal .auth-code-block {
+  border: 1px solid var(--vn-line-soft);
+  border-radius: var(--vn-r-control);
+  background: var(--vn-surface-sunken);
+  overflow: hidden;
+}
+
+.vn-portal .auth-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--vn-line-soft);
+}
+
+.vn-portal .auth-code-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .auth-code-copy.ant-btn {
+  margin-left: auto;
+  height: 24px;
+  padding-inline: 7px;
+  font-size: 11.5px;
+  color: var(--vn-ink-2);
+}
+
+.vn-portal .auth-code-body {
+  margin: 0;
+  padding: 9px 11px;
+  font-family: var(--vn-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--vn-ink-2);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.vn-portal .auth-usage-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vn-portal .auth-usage-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.vn-portal .auth-usage-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .auth-usage-credentials {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vn-portal .auth-inline-code {
+  padding: 6px 9px;
+  border-radius: var(--vn-r-chip);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+  font-family: var(--vn-mono);
+  font-size: 11px;
+  color: var(--vn-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.vn-portal .auth-usage-muted {
+  font-size: 11px;
+  color: var(--vn-ink-3);
+  overflow-wrap: anywhere;
+}
+
+.vn-portal .auth-usage-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .auth-usage-error {
+  padding: 8px 10px;
+  border-radius: var(--vn-r-control);
+  border: 1px solid rgba(242, 85, 90, 0.3);
+  background: rgba(242, 85, 90, 0.08);
+  font-size: 11.5px;
+  color: #ff8a8d;
+}
+
+.vn-portal .auth-state-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 28px 18px;
+}
+
+/* ==================== Delete confirmation ==================== */
+.vn-portal .auth-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 7px;
+  padding: 24px 22px 16px;
+}
+
+.vn-portal .auth-confirm-glyph {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 4px;
+  border-radius: var(--vn-r-panel);
+  border: 1px solid rgba(240, 180, 41, 0.3);
+  background: rgba(240, 180, 41, 0.1);
+  color: var(--vn-warn);
+  font-size: var(--vn-glyph-xl);
+}
+
+.vn-portal .auth-confirm-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--vn-ink);
+}
+
+.vn-portal .auth-confirm-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .auth-confirm-target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--vn-r-control);
+  border: 1px solid var(--vn-line-soft);
+  background: var(--vn-surface-sunken);
+}
+
+.vn-portal .auth-confirm-name {
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--vn-ink);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .auth-confirm-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .auth-confirm-meta-label {
+  color: var(--vn-ink-3);
+}
+
+.vn-portal .auth-confirm-id {
+  font-family: var(--vn-mono);
+  font-size: 10.5px;
+  color: var(--vn-ink-3);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-portal .auth-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 18px;
+  border-top: 1px solid var(--vn-line-soft);
+}

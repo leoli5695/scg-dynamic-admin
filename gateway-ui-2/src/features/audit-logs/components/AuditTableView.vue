@@ -2,8 +2,9 @@
 /**
  * Audit table view — Vue port of gateway-ui/.../audit-logs/components/TableView.tsx.
  * Stats, filter bar, paged table, retention actions and CSV/JSON export. Filters
- * are committed by the search button so typing does not re-query. Rollback is
- * delegated to the page root, which owns the shared reload counter.
+ * are committed by the search button so typing does not re-query; the target-type
+ * segment applies immediately. Rollback is delegated to the page root, which owns
+ * the shared reload counter. Rendered on the Vue-native design layer.
  */
 import { computed, onUnmounted, reactive, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -25,6 +26,10 @@ import {
 import type { AuditLog } from '@/api/auditLogs'
 import { message } from '@/utils/feedback'
 import { parseServerTime } from '@/utils/serverTime'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
 import {
   canRollback, formatIpAddress, getTargetName, operationMeta, rowToneClass, targetMeta,
 } from '../auditUtils'
@@ -151,13 +156,6 @@ watch(
 
 onUnmounted(() => fetchController?.abort())
 
-const targetTypeOptions = computed(() => [
-  { value: 'ROUTE', label: t('audit.target_route') },
-  { value: 'SERVICE', label: t('audit.target_service') },
-  { value: 'STRATEGY', label: t('audit.target_strategy') },
-  { value: 'AUTH_POLICY', label: t('audit.target_auth_policy') },
-])
-
 const operationTypeOptions = computed(() => [
   { value: 'CREATE', label: t('audit.op_create') },
   { value: 'UPDATE', label: t('audit.op_update') },
@@ -168,6 +166,36 @@ const operationTypeOptions = computed(() => [
   { value: 'BIND', label: t('audit.op_bind') },
   { value: 'UNBIND', label: t('audit.op_unbind') },
 ])
+
+/* ---------- Tool row: target-type segment + compact stat rail ---------- */
+
+const targetTypeOptions = computed<VnSegmentOption<string>[]>(() => [
+  { key: '', label: t('audit.all_types') },
+  { key: 'ROUTE', label: t('audit.target_route') },
+  { key: 'SERVICE', label: t('audit.target_service') },
+  { key: 'STRATEGY', label: t('audit.target_strategy') },
+  { key: 'AUTH_POLICY', label: t('audit.target_auth_policy') },
+])
+
+const targetTypeSeg = computed<string>({
+  get: () => draft.targetType,
+  set: (value) => {
+    draft.targetType = value
+    applyFilters()
+  },
+})
+
+const statItems = computed<VnStatItem[]>(() => [
+  { key: 'total', value: stats.value?.total ?? 0, label: t('audit.total_records'), icon: HistoryOutlined },
+  { key: 'today', value: stats.value?.today ?? 0, label: t('audit.today_ops'), icon: ClockCircleOutlined, accent: 'var(--vn-info)' },
+  { key: 'creates', value: stats.value?.creates ?? 0, label: t('audit.create_ops'), icon: PlusOutlined, accent: 'var(--vn-ok)' },
+  { key: 'expired', value: cleanupStats.value?.cleanableCount ?? 0, label: t('audit.expired_logs'), icon: DeleteOutlined, accent: 'var(--vn-warn)' },
+])
+
+const isFiltered = computed(() => Boolean(
+  applied.value.targetType || applied.value.operationType || applied.value.targetId.trim()
+  || applied.value.operator.trim() || applied.value.startTime || applied.value.endTime,
+))
 
 const rows = computed<AuditRow[]>(() => logs.value.map((log) => {
   const op = operationMeta(log.operationType)
@@ -188,6 +216,19 @@ const rows = computed<AuditRow[]>(() => logs.value.map((log) => {
     rollbackable: canRollback(log.operationType, log.oldValue),
   }
 }))
+
+/** Audit capsule tones → Vue-native dot-badge tones. */
+function badgeTone(tone: string): 'ok' | 'warn' | 'err' | 'info' | 'idle' {
+  switch (tone) {
+    case 'success': return 'ok'
+    case 'warning': return 'warn'
+    case 'error': return 'err'
+    case 'info':
+    case 'cyan':
+    case 'violet': return 'info'
+    default: return 'idle'
+  }
+}
 
 const columns = computed<ColumnsType<AuditRow>>(() => [
   { title: 'ID', dataIndex: 'id', key: 'id', width: 64 },
@@ -317,81 +358,27 @@ function rowClassName(record: AuditRow): string {
 </script>
 
 <template>
-  <section class="audit-stats">
-    <div class="lg-panel audit-stat">
-      <div class="audit-stat-head">
-        <span class="lg-section-title">{{ t('audit.total_records') }}</span>
-        <span class="icon-tile icon-tile--sm audit-stat-icon is-info"><HistoryOutlined /></span>
-      </div>
-      <div class="audit-stat-value">{{ stats?.total ?? 0 }}</div>
-    </div>
-    <div class="lg-panel audit-stat">
-      <div class="audit-stat-head">
-        <span class="lg-section-title">{{ t('audit.today_ops') }}</span>
-        <span class="icon-tile icon-tile--sm audit-stat-icon is-primary"><ClockCircleOutlined /></span>
-      </div>
-      <div class="audit-stat-value is-primary">{{ stats?.today ?? 0 }}</div>
-    </div>
-    <div class="lg-panel audit-stat">
-      <div class="audit-stat-head">
-        <span class="lg-section-title">{{ t('audit.create_ops') }}</span>
-        <span class="icon-tile icon-tile--sm audit-stat-icon is-success"><PlusOutlined /></span>
-      </div>
-      <div class="audit-stat-value is-success">{{ stats?.creates ?? 0 }}</div>
-    </div>
-    <div class="lg-panel audit-retention">
-      <div class="audit-retention-copy">
-        <span class="lg-section-title">{{ t('audit.expired_logs') }}</span>
-        <div class="audit-retention-value">
-          {{ cleanupStats?.cleanableCount || 0 }}
-          <small>
-            {{ t('audit.records') }} · {{ t('audit.retention') }}
-            {{ cleanupStats?.retentionDays || 30 }} {{ t('audit.days') }}
-          </small>
-        </div>
-      </div>
-      <div class="audit-retention-actions">
-        <a-popconfirm
-          :title="t('audit.cleanup_confirm')"
-          :description="`${t('audit.will_delete')} ${cleanupStats?.retentionDays || 30} ${t('audit.days')} ${cleanupStats?.cleanableCount || 0} ${t('audit.records')}`"
-          :ok-text="t('common.confirm')"
-          :cancel-text="t('common.cancel')"
-          :get-popup-container="getPopupContainer"
-          @confirm="handleCleanup"
-        >
-          <a-button type="primary" danger size="small" :loading="cleanupLoading">
-            <template #icon><DeleteOutlined /></template>
-            {{ t('audit.cleanup') }}
-          </a-button>
-        </a-popconfirm>
-        <a-popconfirm
-          :title="t('audit.clear_all_confirm')"
-          :description="t('audit.clear_all_warning')"
-          :ok-text="t('common.confirm')"
-          :cancel-text="t('common.cancel')"
-          :ok-button-props="{ danger: true }"
-          :get-popup-container="getPopupContainer"
-          @confirm="handleClearAll"
-        >
-          <a-button danger size="small" :loading="cleanupLoading">
-            <template #icon><DeleteOutlined /></template>
-            {{ t('audit.clear_all') }}
-          </a-button>
-        </a-popconfirm>
-      </div>
-    </div>
-  </section>
+  <div class="vn-metarow">
+    <VnSegmented v-model="targetTypeSeg" :options="targetTypeOptions" :label="t('audit.target_type')" />
+    <VnStatRail :items="statItems" :label="t('audit.total_records')" />
+    <a-input
+      v-model:value="draft.targetId"
+      :placeholder="t('audit.target_id')"
+      allow-clear
+      class="vn-search"
+      @press-enter="applyFilters"
+    >
+      <template #prefix><SearchOutlined /></template>
+    </a-input>
+    <span class="vn-filterbar-spacer" />
+    <span class="vn-result-count" role="status">{{ t('common.total') }} {{ total }} {{ t('audit.records') }}</span>
+    <a-button v-if="isFiltered" type="text" size="small" @click="resetFilters">
+      {{ t('common.reset') }}
+    </a-button>
+  </div>
 
-  <section class="lg-panel audit-filter-panel">
-    <div class="audit-filter-row">
-      <a-select
-        :value="draft.targetType || undefined"
-        :placeholder="t('audit.target_type')"
-        :options="targetTypeOptions"
-        allow-clear
-        class="audit-filter-select is-target"
-        @change="(value: string | undefined) => (draft.targetType = value || '')"
-      />
+  <div class="vn-panel audit-table-panel">
+    <div class="audit-filter-strip">
       <a-select
         :value="draft.operationType || undefined"
         :placeholder="t('audit.operation_type')"
@@ -400,15 +387,6 @@ function rowClassName(record: AuditRow): string {
         class="audit-filter-select is-op"
         @change="(value: string | undefined) => (draft.operationType = value || '')"
       />
-      <a-input
-        v-model:value="draft.targetId"
-        :placeholder="t('audit.target_id')"
-        allow-clear
-        class="audit-filter-input is-target-id"
-        @press-enter="applyFilters"
-      >
-        <template #prefix><SearchOutlined /></template>
-      </a-input>
       <a-input
         v-model:value="draft.operator"
         :placeholder="t('audit.operator')"
@@ -425,25 +403,17 @@ function rowClassName(record: AuditRow): string {
         class="audit-range-picker"
         @change="onRangeChange"
       />
-    </div>
-
-    <div class="audit-filter-row">
       <div class="audit-presets">
         <a-button size="small" @click="setPreset(0)">{{ t('audit.today') }}</a-button>
         <a-button size="small" @click="setPreset(7)">{{ t('audit.last_7d') }}</a-button>
         <a-button size="small" @click="setPreset(30)">{{ t('audit.last_30d') }}</a-button>
       </div>
-      <span class="audit-filter-spacer" />
+      <span class="vn-filterbar-spacer" />
       <a-button type="primary" @click="applyFilters">
         <template #icon><SearchOutlined /></template>
         {{ t('common.search') }}
       </a-button>
-      <a-button @click="resetFilters">{{ t('common.reset') }}</a-button>
-      <a-button :loading="loading" @click="reload">
-        <template #icon><ReloadOutlined /></template>
-        {{ t('common.refresh') }}
-      </a-button>
-      <a-dropdown :trigger="['click']" :get-popup-container="getPopupContainer">
+      <a-dropdown :trigger="['click']" :get-popup-container="getPopupContainer" overlay-class-name="vn-portal">
         <a-button :loading="exportLoading">
           <template #icon><DownloadOutlined /></template>
           {{ t('audit.export') }}
@@ -460,10 +430,36 @@ function rowClassName(record: AuditRow): string {
           </a-menu>
         </template>
       </a-dropdown>
+      <a-popconfirm
+        :title="t('audit.cleanup_confirm')"
+        :description="`${t('audit.will_delete')} ${cleanupStats?.retentionDays || 30} ${t('audit.days')} ${cleanupStats?.cleanableCount || 0} ${t('audit.records')}`"
+        :ok-text="t('common.confirm')"
+        :cancel-text="t('common.cancel')"
+        :get-popup-container="getPopupContainer"
+        overlay-class-name="vn-portal"
+        @confirm="handleCleanup"
+      >
+        <a-button danger size="small" :loading="cleanupLoading">
+          <template #icon><DeleteOutlined /></template>
+          {{ t('audit.cleanup') }}
+        </a-button>
+      </a-popconfirm>
+      <a-popconfirm
+        :title="t('audit.clear_all_confirm')"
+        :description="t('audit.clear_all_warning')"
+        :ok-text="t('common.confirm')"
+        :cancel-text="t('common.cancel')"
+        :ok-button-props="{ danger: true }"
+        :get-popup-container="getPopupContainer"
+        overlay-class-name="vn-portal"
+        @confirm="handleClearAll"
+      >
+        <a-button danger size="small" :loading="cleanupLoading">
+          {{ t('audit.clear_all') }}
+        </a-button>
+      </a-popconfirm>
     </div>
-  </section>
 
-  <section class="lg-panel audit-table-panel">
     <a-table
       :columns="columns"
       :data-source="rows"
@@ -477,22 +473,19 @@ function rowClassName(record: AuditRow): string {
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'id'">
-          <span class="audit-mono audit-id">{{ record.id }}</span>
+          <span class="vn-mono audit-id">{{ record.id }}</span>
         </template>
         <template v-else-if="column.key === 'operationType'">
-          <span :class="['audit-pill', `is-${record.opTone}`]">
-            <component :is="record.opIcon" />
-            {{ record.opLabel }}
-          </span>
+          <VnBadge :tone="badgeTone(record.opTone)">{{ record.opLabel }}</VnBadge>
         </template>
         <template v-else-if="column.key === 'targetType'">
-          <span :class="['audit-pill', `is-${record.targetTone}`]">
+          <span class="vn-chip">
             <component :is="record.targetIcon" />
             {{ record.targetLabel }}
           </span>
         </template>
         <template v-else-if="column.key === 'target'">
-          <a-tooltip :title="`ID: ${record.targetId}`" placement="topLeft" :get-popup-container="getPopupContainer">
+          <a-tooltip :title="`ID: ${record.targetId}`" placement="topLeft" :get-popup-container="getPopupContainer" overlay-class-name="vn-tooltip">
             <span class="audit-target-name">{{ record.displayName }}</span>
           </a-tooltip>
         </template>
@@ -503,8 +496,8 @@ function rowClassName(record: AuditRow): string {
           </span>
         </template>
         <template v-else-if="column.key === 'ipAddress'">
-          <a-tooltip :title="record.ipAddress" :get-popup-container="getPopupContainer">
-            <span class="audit-mono">{{ record.ipText }}</span>
+          <a-tooltip :title="record.ipAddress" :get-popup-container="getPopupContainer" overlay-class-name="vn-tooltip">
+            <span class="vn-mono">{{ record.ipText }}</span>
           </a-tooltip>
         </template>
         <template v-else-if="column.key === 'createdAt'">
@@ -514,57 +507,43 @@ function rowClassName(record: AuditRow): string {
           </span>
         </template>
         <template v-else-if="column.key === 'actions'">
-          <div class="audit-row-actions">
-            <a-tooltip :title="t('audit.view_diff')" :get-popup-container="getPopupContainer">
-              <a-button
-                type="text"
-                class="action-btn audit-row-action"
-                :aria-label="t('audit.view_diff')"
-                @click="emit('show-diff', record.id)"
-              >
-                <template #icon><SwapOutlined /></template>
-              </a-button>
-            </a-tooltip>
-            <a-tooltip v-if="record.rollbackable" :title="t('audit.rollback')" :get-popup-container="getPopupContainer">
-              <a-popconfirm
-                :title="t('audit.rollback_confirm')"
-                :ok-text="t('common.confirm')"
-                :cancel-text="t('common.cancel')"
-                :get-popup-container="getPopupContainer"
-                @confirm="emit('rollback', record.id)"
-              >
-                <a-button type="text" danger class="action-btn audit-row-action" :aria-label="t('audit.rollback')">
-                  <template #icon><RollbackOutlined /></template>
-                </a-button>
-              </a-popconfirm>
-            </a-tooltip>
-            <a-tooltip :title="t('audit.delete')" :get-popup-container="getPopupContainer">
-              <a-popconfirm
-                :title="t('audit.delete_confirm')"
-                :description="t('audit.delete_warning')"
-                :ok-text="t('common.confirm')"
-                :cancel-text="t('common.cancel')"
-                :ok-button-props="{ danger: true }"
-                :get-popup-container="getPopupContainer"
-                @confirm="handleDelete(record.id)"
-              >
-                <a-button type="text" class="action-btn audit-row-action" :aria-label="t('audit.delete')">
-                  <template #icon><DeleteOutlined /></template>
-                </a-button>
-              </a-popconfirm>
-            </a-tooltip>
+          <div class="vn-iconbtn-group audit-row-actions">
+            <VnIconButton :icon="SwapOutlined" :label="t('audit.view_diff')" @click="emit('show-diff', record.id)" />
+            <a-popconfirm
+              v-if="record.rollbackable"
+              :title="t('audit.rollback_confirm')"
+              :ok-text="t('common.confirm')"
+              :cancel-text="t('common.cancel')"
+              :get-popup-container="getPopupContainer"
+              overlay-class-name="vn-portal"
+              @confirm="emit('rollback', record.id)"
+            >
+              <VnIconButton :icon="RollbackOutlined" :label="t('audit.rollback')" />
+            </a-popconfirm>
+            <a-popconfirm
+              :title="t('audit.delete_confirm')"
+              :description="t('audit.delete_warning')"
+              :ok-text="t('common.confirm')"
+              :cancel-text="t('common.cancel')"
+              :ok-button-props="{ danger: true }"
+              :get-popup-container="getPopupContainer"
+              overlay-class-name="vn-portal"
+              @confirm="handleDelete(record.id)"
+            >
+              <VnIconButton :icon="DeleteOutlined" :label="t('audit.delete')" danger />
+            </a-popconfirm>
           </div>
         </template>
       </template>
 
       <template #emptyText>
-        <div v-if="!loading" :class="['audit-empty', loadError ? 'is-error' : '']">
-          <span :class="['icon-tile', loadError ? 'audit-empty-error-icon' : 'icon-tile--muted']">
+        <div v-if="!loading" class="audit-empty">
+          <span :class="['vn-state-glyph', loadError && 'is-err']" aria-hidden="true">
             <ExclamationCircleOutlined v-if="loadError" />
             <HistoryOutlined v-else />
           </span>
-          <p class="audit-empty-title">{{ loadError || t('audit.no_logs') }}</p>
-          <p v-if="!loadError" class="audit-empty-hint">{{ t('audit.no_logs_hint') }}</p>
+          <p class="vn-state-title">{{ loadError || t('audit.no_logs') }}</p>
+          <p v-if="!loadError" class="vn-state-hint">{{ t('audit.no_logs_hint') }}</p>
           <a-button v-if="loadError" type="primary" @click="reload">
             <template #icon><ReloadOutlined /></template>
             {{ t('common.refresh') }}
@@ -572,5 +551,5 @@ function rowClassName(record: AuditRow): string {
         </div>
       </template>
     </a-table>
-  </section>
+  </div>
 </template>

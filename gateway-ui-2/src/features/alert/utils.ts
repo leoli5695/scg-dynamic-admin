@@ -160,3 +160,13 @@ export function levelTone(level?: string): BadgeTone {
 export function deliveryTone(status?: string): BadgeTone {
   return status === 'SENT' ? 'success' : 'error'
 }
+
+/** Map the legacy badge tone buckets onto the Vue-native badge tones. */
+export type VnTone = 'ok' | 'warn' | 'err' | 'info' | 'idle'
+export function vnTone(tone: BadgeTone): VnTone {
+  if (tone === 'success') return 'ok'
+  if (tone === 'warning') return 'warn'
+  if (tone === 'error') return 'err'
+  if (tone === 'info') return 'info'
+  return 'idle'
+}

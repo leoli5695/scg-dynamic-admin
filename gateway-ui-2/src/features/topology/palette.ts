@@ -1,40 +1,39 @@
 /**
- * Topology chart palette — hex mirror of the login skin tokens, kept in one
+ * Topology chart palette — hex mirror of the Vue-native tokens, kept in one
  * place because ECharts cannot consume CSS custom properties.
- * Sources: styles/variables.css (--gradient-primary stops, --primary-color,
- * --text-*, --bg-base) and styles/login-theme.css badge inks; cyan matches
- * features/monitor/chartTheme.ts so both chart pages read as one series family.
+ * Sources: styles/vue-native.css (--vn-info / --vn-ok / --vn-warn / --vn-err /
+ * --vn-ink-* / --vn-surface-* / --vn-line). Cyan matches the monitor series family.
  */
 
 export const TOPOLOGY_COLORS = {
-  /** --gradient-primary start: gateway nodes, default edges. */
-  blue: '#6998ef',
-  /** --primary-color: focused path + emphasis ring. */
+  /** --vn-info: gateway nodes, default edges. */
+  blue: '#5b9cf8',
+  /** gradient-text end: focused path + emphasis ring. */
   periwinkle: '#7f9dff',
-  /** --primary-light: selected node border. */
+  /** lighter periwinkle: selected node border. */
   periwinkleLight: '#a9c0ff',
   /** monitor series cyan: enabled routes. */
   cyan: '#4fd6e6',
-  /** --gradient-primary end: service-discovery nodes. */
-  violet: '#a492ea',
-  /** status-badge-success ink: static services, healthy instances. */
-  mint: '#86efac',
-  /** status-badge-warning ink: clients, partial health, warn edges. */
-  amber: '#fde68a',
-  /** status-badge-error ink: unhealthy nodes, error edges. */
-  rose: '#fca5a5',
-  /** --text-muted: disabled routes. */
-  muted: '#7d8dab',
-  /** --text-disabled: disabled route labels and edges. */
+  /** gradient-text end: service-discovery nodes. */
+  violet: '#7f9dff',
+  /** --vn-ok: static services, healthy instances. */
+  mint: '#42d392',
+  /** --vn-warn: clients, partial health, warn edges. */
+  amber: '#f0b429',
+  /** --vn-err: unhealthy nodes, error edges. */
+  rose: '#f2555a',
+  /** --vn-ink-3: disabled routes. */
+  muted: '#6f7d95',
+  /** dimmed ink: disabled route labels and edges. */
   disabled: '#4d5c74',
-  /** --bg-base: node ring, matches the page canvas. */
-  canvas: '#080d19',
-  textPrimary: '#edf2ff',
-  textSecondary: '#a5b4cb',
+  /** --vn-surface-sunken: node ring, matches the panel canvas. */
+  canvas: '#0e1420',
+  textPrimary: '#e6ebf5',
+  textSecondary: '#9aa7bd',
   textTertiary: '#8fa1c0',
-  tooltipBg: '#17233c',
-  tooltipBorder: 'rgba(145, 169, 222, 0.23)',
-  hairline: 'rgba(145, 169, 222, 0.18)',
+  tooltipBg: '#1a2233',
+  tooltipBorder: '#253048',
+  hairline: 'rgba(37, 48, 72, 0.6)',
 } as const;
 
 /** Stable identity: vue-echarts re-inits (and disposes) when initOptions identity changes. */

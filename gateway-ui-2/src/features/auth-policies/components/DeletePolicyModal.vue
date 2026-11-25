@@ -4,14 +4,16 @@
  * destructive step reads like the rest of the login-aligned modal family:
  * warning glyph, target preview and an explicit consequences note.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DeleteOutlined, WarningOutlined } from '@/components/icons'
 import type { AuthPolicyDefinition } from '@/types/authPolicy'
 
 const props = defineProps<{
-  policy: AuthPolicyDefinition
+  policy?: AuthPolicyDefinition
   bindingCount: number
+  /** Kept mounted by the page and toggled here. */
+  open?: boolean
   /** Resolves true when the policy was deleted (the modal then closes). */
   onConfirm: (policy: AuthPolicyDefinition) => Promise<boolean>
 }>()
@@ -22,11 +24,16 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const busy = ref(false)
+const isOpen = computed(() => props.open !== false)
 
-const typeLabel = computed(() => props.policy.authType)
+watch(isOpen, (open) => {
+  if (open) busy.value = false
+})
+
+const typeLabel = computed(() => props.policy?.authType ?? '')
 
 async function confirm() {
-  if (busy.value) return
+  if (busy.value || !props.policy) return
   busy.value = true
   try {
     const ok = await props.onConfirm(props.policy)
@@ -39,14 +46,13 @@ async function confirm() {
 
 <template>
   <a-modal
-    :open="true"
+    :open="isOpen"
     :width="440"
     :footer="null"
-    wrap-class-name="auth-policy-delete-modal"
+    wrap-class-name="vn-portal"
     :closable="false"
     :keyboard="!busy"
     :mask-closable="!busy"
-    destroy-on-close
     @cancel="emit('cancel')"
   >
     <div class="auth-confirm">
@@ -55,13 +61,13 @@ async function confirm() {
       <p class="auth-confirm-desc">{{ t('auth_policy.delete_confirm_content') }}</p>
 
       <div class="auth-confirm-target">
-        <span class="auth-confirm-name">{{ policy.policyName }}</span>
+        <span class="auth-confirm-name">{{ policy?.policyName }}</span>
         <span class="auth-confirm-meta">
-          <span class="auth-type-pill">{{ typeLabel }}</span>
-          <span class="auth-count">{{ bindingCount }}</span>
+          <span class="vn-chip">{{ typeLabel }}</span>
+          <span class="vn-chip-num">{{ bindingCount }}</span>
           <span class="auth-confirm-meta-label">{{ t('auth_policy.bound_routes') }}</span>
         </span>
-        <code v-if="policy.policyId" class="auth-confirm-id">{{ policy.policyId }}</code>
+        <code v-if="policy?.policyId" class="auth-confirm-id">{{ policy.policyId }}</code>
       </div>
 
       <div class="auth-confirm-actions">

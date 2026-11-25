@@ -7,12 +7,14 @@ import { computed, ref, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ColumnsType } from 'ant-design-vue/es/table'
 import {
-  CheckCircleOutlined, ExclamationCircleOutlined, EyeOutlined, ReloadOutlined,
+  CheckCircleOutlined, CopyOutlined, ExclamationCircleOutlined, EyeOutlined, ReloadOutlined,
 } from '@/components/icons'
 import { useRequest } from '@/composables/useRequest'
 import { getFullChain, getRecentFullChains } from '@/api/traces'
 import type { FullChainDetail, FullChainListItem, TraceConfig } from '@/api/traces'
 import { message } from '@/utils/feedback'
+import { copyText } from '@/utils/clipboard'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
 import { getStatusTone } from '../traceUtils'
 import FullChainDetailDrawer from './FullChainDetailDrawer.vue'
 
@@ -20,6 +22,12 @@ const props = defineProps<{ traceConfig?: TraceConfig }>()
 
 const { t } = useI18n()
 const PAGE_SIZE = 20
+
+async function copyTraceId(text?: string) {
+  if (!text) return
+  if (await copyText(text)) message.success(t('message.copy_success'))
+  else message.error(t('message.copy_failed'))
+}
 
 const page = ref(0)
 const selectedTraceId = ref<string | null>(null)
@@ -102,7 +110,7 @@ const columns = computed<ColumnsType<FullChainListItem>>(() => [
   { title: t('trace.chain_status'), dataIndex: 'chainStatus', key: 'chainStatus', width: 200 },
   { title: t('trace.downstream_services'), key: 'services', width: 226 },
   { title: t('trace.time'), dataIndex: 'traceTime', key: 'traceTime', width: 110 },
-  { title: '', key: 'actions', width: 56 },
+  { title: '', key: 'actions', width: 84, align: 'right' },
 ])
 
 const tablePagination = computed(() => ({
@@ -155,10 +163,8 @@ const tablePagination = computed(() => ({
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'traceId'">
-          <a-tooltip :title="record.traceId">
-            <a-typography-text :copyable="{ text: record.traceId, tooltips: false }" class="trace-mono">
-              {{ record.traceId?.slice(0, 12) }}…
-            </a-typography-text>
+          <a-tooltip :title="record.traceId" overlay-class-name="vn-tooltip">
+            <span class="trace-mono">{{ record.traceId?.slice(0, 12) }}…</span>
           </a-tooltip>
         </template>
         <template v-else-if="column.key === 'method'">
@@ -201,9 +207,10 @@ const tablePagination = computed(() => ({
           <span class="trace-mono">{{ record.traceTime ? record.traceTime.slice(5, 19).replace('T', ' ') : '-' }}</span>
         </template>
         <template v-else-if="column.key === 'actions'">
-          <a-button type="text" class="action-btn fc-open-btn" :aria-label="t('trace.view_details')" @click="openChain(record.traceId)">
-            <template #icon><EyeOutlined /></template>
-          </a-button>
+          <div class="vn-iconbtn-group">
+            <VnIconButton :icon="CopyOutlined" :label="t('common.copy')" inline @click="copyTraceId(record.traceId)" />
+            <VnIconButton :icon="EyeOutlined" :label="t('trace.view_details')" @click="openChain(record.traceId)" />
+          </div>
         </template>
       </template>
       <template #emptyText>

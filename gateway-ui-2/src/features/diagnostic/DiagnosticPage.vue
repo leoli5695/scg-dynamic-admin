@@ -3,15 +3,15 @@
  * System diagnostic page — Vue port of gateway-ui/src/features/diagnostic/index.tsx.
  * Runs full/quick diagnostics, shows per-component health cards, score trend
  * history and the compare-with-previous summary. Runs a quick diagnostic on
- * mount; optional auto-refresh interval. Visual language follows the login skin
- * (2026-11-20): transparent canvas, login panels, capsule badges and the
- * periwinkle→violet accent family.
+ * mount; optional auto-refresh interval. Rendered on the Vue-native design layer;
+ * API calls and payloads are unchanged.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  ApiOutlined, CloudServerOutlined, CompassOutlined, DashboardOutlined, DatabaseOutlined,
-  LockOutlined, MedicineBoxOutlined, RocketOutlined, SyncOutlined, ThunderboltOutlined,
+  ApiOutlined, CheckCircleOutlined, CloudServerOutlined, CompassOutlined, DashboardOutlined,
+  DatabaseOutlined, ExclamationCircleOutlined, LockOutlined, MedicineBoxOutlined,
+  RocketOutlined, SyncOutlined, ThunderboltOutlined,
 } from '@/components/icons'
 import { usePolling } from '@/composables/useRequest'
 import { ApiError, isAbortError } from '@/api/http'
@@ -19,11 +19,19 @@ import { runFullDiagnostic, runQuickDiagnostic } from '@/api/diagnostic'
 import type { DiagnosticReport } from '@/api/diagnostic'
 import { message } from '@/utils/feedback'
 import { parseServerTime } from '@/utils/serverTime'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
+import VnState from '@/components/vn/VnState.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import { useInstanceDetail } from '../instance-detail/context'
 import ComponentCard from './components/ComponentCard.vue'
 import HistoryTrendCard from './components/HistoryTrendCard.vue'
-import { getScoreColor, getScoreStatus, getStatusIcon, getStatusTone } from './utils'
+import { getScoreColor, getScoreStatus } from './utils'
+import '@/styles/vue-native.css'
+import '@/features/services/services-vue-native.css'
 import './diagnostic.css'
+
+defineOptions({ name: 'DiagnosticPage' })
 
 const { t } = useI18n()
 const detail = useInstanceDetail()
@@ -82,8 +90,6 @@ usePolling(
 
 const scoreColor = computed(() => getScoreColor(report.value?.overallScore ?? 0))
 const scoreStatus = computed(() => getScoreStatus(report.value?.overallScore ?? 0))
-const reportStatusIcon = computed(() => getStatusIcon(report.value?.status ?? ''))
-const reportStatusTone = computed(() => getStatusTone(report.value?.status ?? ''))
 const endTimeText = computed(() => parseServerTime(report.value?.endTime).toLocaleTimeString())
 
 const componentCards = computed(() => {
@@ -100,46 +106,77 @@ const componentCards = computed(() => {
   ]
 })
 
+/* ---------- Tool row: component-status filter + compact health rail ---------- */
+
+type StatusFilter = 'all' | 'HEALTHY' | 'WARNING' | 'CRITICAL'
+const statusFilter = ref<StatusFilter>('all')
+
+const statusOptions = computed<VnSegmentOption<string>[]>(() => [
+  { key: 'all', label: t('common.all') },
+  { key: 'HEALTHY', label: t('common.healthy'), icon: CheckCircleOutlined },
+  { key: 'WARNING', label: t('diagnostic.warnings'), icon: ExclamationCircleOutlined },
+  { key: 'CRITICAL', label: t('diagnostic.status_critical') },
+])
+
+const statusCounts = computed(() => {
+  const counts = { healthy: 0, warning: 0, critical: 0 }
+  for (const card of componentCards.value) {
+    const status = card.diagnostic?.status
+    if (status === 'HEALTHY') counts.healthy++
+    else if (status === 'WARNING') counts.warning++
+    else if (status === 'CRITICAL') counts.critical++
+  }
+  return counts
+})
+
+const statItems = computed<VnStatItem[]>(() => [
+  { key: 'HEALTHY', value: statusCounts.value.healthy, label: t('common.healthy'), icon: CheckCircleOutlined, accent: 'var(--vn-ok)', active: statusFilter.value === 'HEALTHY' },
+  { key: 'WARNING', value: statusCounts.value.warning, label: t('diagnostic.warnings'), icon: ExclamationCircleOutlined, accent: 'var(--vn-warn)', active: statusFilter.value === 'WARNING' },
+  { key: 'CRITICAL', value: statusCounts.value.critical, label: t('diagnostic.status_critical'), accent: 'var(--vn-err)', active: statusFilter.value === 'CRITICAL' },
+])
+
+function selectStatus(key: string) {
+  statusFilter.value = key as StatusFilter
+}
+
+const filteredComponentCards = computed(() => (
+  statusFilter.value === 'all'
+    ? componentCards.value
+    : componentCards.value.filter((card) => card.diagnostic?.status === statusFilter.value)
+))
+
 function onIntervalChange(value: unknown): void {
   refreshInterval.value = Number(value) || 60
 }
 </script>
 
 <template>
-  <div class="diagnostic-page">
-    <div v-if="loading && !report" class="lg-panel diagnostic-state diagnostic-initial-state">
+  <div class="diagnostic-page vn-scope">
+    <VnToolbar :title="t('diagnostic.title')" :lede="t('diagnostic.subtitle')">
+      <template #actions>
+        <a-button :loading="loading" @click="runDiagnostic('quick')">
+          <template #icon><ThunderboltOutlined /></template>
+          {{ t('diagnostic.quick_check') }}
+        </a-button>
+        <a-button type="primary" :loading="loading" @click="runDiagnostic('full')">
+          <template #icon><RocketOutlined /></template>
+          {{ t('diagnostic.full_check') }}
+        </a-button>
+      </template>
+    </VnToolbar>
+
+    <div v-if="loading && !report" class="vn-panel diagnostic-state diagnostic-initial-state">
       <a-spin size="large" />
       <span class="diagnostic-state-hint">{{ t('diagnostic.running') }}</span>
     </div>
 
     <template v-else>
-      <header class="diagnostic-header">
-        <div class="diagnostic-heading">
-          <span class="lg-eyebrow">{{ t('diagnostic.eyebrow') }}</span>
-          <h1 class="diagnostic-title">
-            <span class="lg-icon-tile" aria-hidden="true"><MedicineBoxOutlined /></span>
-            {{ t('diagnostic.title') }}
-          </h1>
-          <p class="diagnostic-subtitle">{{ t('diagnostic.subtitle') }}</p>
-        </div>
-        <div class="diagnostic-actions">
-          <a-button type="primary" :loading="loading" @click="runDiagnostic('full')">
-            <template #icon><RocketOutlined /></template>
-            {{ t('diagnostic.full_check') }}
-          </a-button>
-          <a-button :loading="loading" @click="runDiagnostic('quick')">
-            <template #icon><ThunderboltOutlined /></template>
-            {{ t('diagnostic.quick_check') }}
-          </a-button>
-        </div>
-      </header>
-
-      <div class="diagnostic-control-strip">
+      <div class="vn-metarow">
+        <VnSegmented v-model="statusFilter" :options="statusOptions" :label="t('diagnostic.status')" />
+        <VnStatRail :items="statItems" :label="t('diagnostic.status')" @select="selectStatus" />
+        <span class="vn-filterbar-spacer" />
         <span class="diagnostic-control-label"><SyncOutlined />{{ t('diagnostic.auto_refresh') }}</span>
-        <a-switch v-model:checked="autoRefresh">
-          <template #checkedChildren><SyncOutlined /></template>
-          <template #unCheckedChildren><SyncOutlined /></template>
-        </a-switch>
+        <a-switch v-model:checked="autoRefresh" />
         <a-select
           v-if="autoRefresh"
           class="diagnostic-interval-select"
@@ -160,7 +197,7 @@ function onIntervalChange(value: unknown): void {
       />
 
       <!-- Overall score -->
-      <a-card v-if="report" :bordered="false" class="diagnostic-score-card">
+      <section v-if="report" class="vn-panel diagnostic-score-card">
         <div class="diagnostic-score-layout">
           <div class="diagnostic-score-ring">
             <a-progress
@@ -180,18 +217,17 @@ function onIntervalChange(value: unknown): void {
           <div class="diagnostic-score-body">
             <div class="diagnostic-score-stats">
               <div class="diagnostic-stat">
-                <span class="diagnostic-stat-label">{{ t('diagnostic.status') }}</span>
+                <span class="vn-kv-label">{{ t('diagnostic.status') }}</span>
                 <span class="diagnostic-stat-value diagnostic-stat-status" :style="{ color: scoreColor }">
-                  <component :is="reportStatusIcon" :class="['diagnostic-status-icon', `is-${reportStatusTone}`]" />
                   {{ report.status }}
                 </span>
               </div>
               <div class="diagnostic-stat">
-                <span class="diagnostic-stat-label">{{ t('diagnostic.duration') }}</span>
+                <span class="vn-kv-label">{{ t('diagnostic.duration') }}</span>
                 <span class="diagnostic-stat-value">{{ report.duration }}</span>
               </div>
               <div class="diagnostic-stat">
-                <span class="diagnostic-stat-label">{{ t('diagnostic.timestamp') }}</span>
+                <span class="vn-kv-label">{{ t('diagnostic.timestamp') }}</span>
                 <span class="diagnostic-stat-value">{{ endTimeText }}</span>
               </div>
             </div>
@@ -204,12 +240,12 @@ function onIntervalChange(value: unknown): void {
             </div>
           </div>
         </div>
-      </a-card>
+      </section>
 
       <!-- Component diagnostics -->
       <div v-if="report" class="diagnostic-grid">
         <ComponentCard
-          v-for="card in componentCards"
+          v-for="card in filteredComponentCards"
           :key="card.key"
           :class="{ 'diagnostic-card-wide': card.wide }"
           :title="card.title"
@@ -221,12 +257,11 @@ function onIntervalChange(value: unknown): void {
       <!-- History trend + comparison -->
       <HistoryTrendCard :instance-id="instanceId" :report="report" :reload-key="reloadKey" />
 
-      <a-card v-if="!loading && !report" :bordered="false" class="diagnostic-empty-card">
-        <div class="diagnostic-empty">
-          <span class="diagnostic-empty-icon"><MedicineBoxOutlined /></span>
-          <p class="diagnostic-empty-text">{{ t('diagnostic.click_to_run') }}</p>
-        </div>
-      </a-card>
+      <VnState
+        v-if="!loading && !report"
+        :icon="MedicineBoxOutlined"
+        :title="t('diagnostic.click_to_run')"
+      />
     </template>
   </div>
 </template>

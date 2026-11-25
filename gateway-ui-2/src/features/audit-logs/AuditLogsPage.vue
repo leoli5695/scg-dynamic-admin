@@ -2,21 +2,28 @@
 /**
  * Audit logs page — Vue port of gateway-ui/src/features/audit-logs/index.tsx.
  * Switches between the table and timeline views and owns the shared diff drawer
- * plus the rollback flow. Visual language follows the login skin (2026-11-20):
- * transparent canvas, login panels, periwinkle→violet accents, capsule badges.
+ * plus the rollback flow. Rendered on the Vue-native design layer; API calls and
+ * payloads are unchanged.
  */
-import { computed, h, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { AppstoreOutlined, HistoryOutlined, OrderedListOutlined } from '@/components/icons'
+import { AppstoreOutlined, OrderedListOutlined, ReloadOutlined } from '@/components/icons'
 import { ApiError } from '@/api/http'
 import { rollbackAuditLog } from '@/api/auditLogs'
 import { useAuthStore } from '@/stores/auth'
 import { message } from '@/utils/feedback'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnToolbar from '@/components/vn/VnToolbar.vue'
 import AuditTableView from './components/AuditTableView.vue'
 import AuditTimelineView from './components/AuditTimelineView.vue'
 import AuditDiffDrawer from './components/AuditDiffDrawer.vue'
+import '@/styles/vue-native.css'
+import '@/features/services/services-vue-native.css'
 import './audit-logs.css'
+
+defineOptions({ name: 'AuditLogsPage' })
 
 type ViewMode = 'table' | 'timeline'
 
@@ -33,7 +40,10 @@ const deepTargetId = computed(() => {
 })
 
 const viewMode = ref<ViewMode>('table')
-const activeView = computed<ViewMode>(() => (deepTargetId.value ? 'table' : viewMode.value))
+const activeView = computed<ViewMode>({
+  get: () => (deepTargetId.value ? 'table' : viewMode.value),
+  set: (value) => { viewMode.value = value },
+})
 
 /** Bumped after any mutation so the table and its stats re-query together. */
 const reloadKey = ref(0)
@@ -41,20 +51,10 @@ const reloadKey = ref(0)
 const diffLogId = ref<number | null>(null)
 const drawerOpen = ref(false)
 
-const viewOptions = computed(() => [
-  {
-    value: 'table',
-    label: () => h('span', { class: 'audit-seg-label' }, [h(AppstoreOutlined), t('audit.view_table')]),
-  },
-  {
-    value: 'timeline',
-    label: () => h('span', { class: 'audit-seg-label' }, [h(OrderedListOutlined), t('audit.view_timeline')]),
-  },
+const viewOptions = computed<VnSegmentOption<ViewMode>[]>(() => [
+  { key: 'table', label: t('audit.view_table'), icon: AppstoreOutlined },
+  { key: 'timeline', label: t('audit.view_timeline'), icon: OrderedListOutlined },
 ])
-
-function onViewChange(value: string | number) {
-  viewMode.value = value === 'timeline' ? 'timeline' : 'table'
-}
 
 function showDiff(logId: number) {
   diffLogId.value = logId
@@ -74,25 +74,13 @@ async function handleRollback(logId: number) {
 </script>
 
 <template>
-  <div class="audit-page">
-    <header class="audit-header">
-      <div class="audit-heading">
-        <h1 class="audit-title">
-          <span class="lg-icon-tile" aria-hidden="true"><HistoryOutlined /></span>
-          {{ t('audit.title') }}
-        </h1>
-        <p class="audit-subtitle">{{ t('audit.no_logs_hint') }}</p>
-      </div>
-      <div class="audit-header-actions">
-        <a-segmented
-          class="audit-view-seg"
-          :value="activeView"
-          :options="viewOptions"
-          :disabled="Boolean(deepTargetId)"
-          @change="onViewChange"
-        />
-      </div>
-    </header>
+  <div class="audit-page vn-scope">
+    <VnToolbar :title="t('audit.title')" :lede="t('audit.no_logs_hint')">
+      <template #actions>
+        <VnSegmented v-model="activeView" :options="viewOptions" :label="t('audit.view_table')" />
+        <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" @click="reloadKey += 1" />
+      </template>
+    </VnToolbar>
 
     <AuditTableView
       v-if="activeView === 'table'"

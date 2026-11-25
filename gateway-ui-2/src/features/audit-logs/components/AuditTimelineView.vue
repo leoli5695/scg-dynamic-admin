@@ -3,6 +3,7 @@
  * Audit timeline view — Vue port of gateway-ui/.../audit-logs/components/TimelineView.tsx.
  * Day-grouped change feed rendered as a DOM/CSS rail (no canvas). Requires the
  * ADVANCED_AUDIT licence; failures surface as an inline alert, not a dead page.
+ * Rendered on the Vue-native design layer.
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -13,6 +14,10 @@ import {
 import { useRequest } from '@/composables/useRequest'
 import { getAuditTimeline } from '@/api/auditLogs'
 import type { TimelineDiffEntry } from '@/api/auditLogs'
+import VnBadge from '@/components/vn/VnBadge.vue'
+import VnIconButton from '@/components/vn/VnIconButton.vue'
+import VnSegmented, { type VnSegmentOption } from '@/components/vn/VnSegmented.vue'
+import VnStatRail, { type VnStatItem } from '@/components/vn/VnStatRail.vue'
 import { changeTone, operationTone, timelineIcon } from '../auditUtils'
 
 const props = defineProps<{ instanceId: string }>()
@@ -34,13 +39,18 @@ const timeline = computed(() => timelineRequest.data.value)
 const loading = computed(() => timelineRequest.loading.value)
 const loadError = computed(() => timelineRequest.error.value)
 
-const dayOptions = computed(() => [
-  { value: 1, label: t('audit.last_1d') },
-  { value: 3, label: t('audit.last_3d') },
-  { value: 7, label: t('audit.last_7d') },
-  { value: 14, label: t('audit.last_14d') },
-  { value: 30, label: t('audit.last_30d') },
+const dayOptions = computed<VnSegmentOption<string>[]>(() => [
+  { key: '1', label: t('audit.last_1d') },
+  { key: '3', label: t('audit.last_3d') },
+  { key: '7', label: t('audit.last_7d') },
+  { key: '14', label: t('audit.last_14d') },
+  { key: '30', label: t('audit.last_30d') },
 ])
+
+const daysSeg = computed<string>({
+  get: () => String(days.value),
+  set: (value) => { days.value = Number(value) || 7 },
+})
 
 const targetTypeOptions = computed(() => [
   { value: 'ROUTE', label: t('audit.target_route') },
@@ -54,6 +64,23 @@ const changeTypeCount = computed(() => Object.keys(timeline.value?.changesByType
 const dayCount = computed(() => timeline.value?.days?.length ?? 0)
 const hasDays = computed(() => dayCount.value > 0)
 
+const statItems = computed<VnStatItem[]>(() => [
+  { key: 'changes', value: timeline.value?.totalChanges ?? 0, label: t('audit.total_changes'), icon: HistoryOutlined },
+  { key: 'days', value: dayCount.value, label: t('audit.days_shown') },
+  { key: 'contributors', value: contributorCount.value, label: t('audit.contributors'), icon: TeamOutlined, accent: 'var(--vn-info)' },
+  { key: 'types', value: changeTypeCount.value, label: t('audit.change_types') },
+])
+
+function badgeTone(tone: string): 'ok' | 'warn' | 'err' | 'info' | 'idle' {
+  switch (tone) {
+    case 'success': return 'ok'
+    case 'warning': return 'warn'
+    case 'error': return 'err'
+    case 'info': return 'info'
+    default: return 'idle'
+  }
+}
+
 const diffColumns = computed<ColumnsType<TimelineDiffEntry>>(() => [
   { title: t('audit.field'), dataIndex: 'field', key: 'field', width: '30%' },
   { title: t('audit.old_value'), dataIndex: 'oldValue', key: 'oldValue', width: '35%' },
@@ -66,23 +93,19 @@ function diffRowClass(record: TimelineDiffEntry): string {
 </script>
 
 <template>
-  <section class="lg-panel audit-filter-panel audit-timeline-filters">
-    <div class="audit-filter-row">
-      <a-select v-model:value="days" :options="dayOptions" class="audit-filter-select is-days" />
-      <a-select
-        v-model:value="targetType"
-        :options="targetTypeOptions"
-        :placeholder="t('audit.all_types')"
-        allow-clear
-        class="audit-filter-select is-target"
-      />
-      <span class="audit-filter-spacer" />
-      <a-button :loading="loading" @click="timelineRequest.run()">
-        <template #icon><ReloadOutlined /></template>
-        {{ t('common.refresh') }}
-      </a-button>
-    </div>
-  </section>
+  <div class="vn-metarow">
+    <VnSegmented v-model="daysSeg" :options="dayOptions" :label="t('audit.days_shown')" />
+    <VnStatRail :items="statItems" :label="t('audit.total_changes')" />
+    <a-select
+      v-model:value="targetType"
+      :options="targetTypeOptions"
+      :placeholder="t('audit.all_types')"
+      allow-clear
+      class="audit-filter-select is-target"
+    />
+    <span class="vn-filterbar-spacer" />
+    <VnIconButton :icon="ReloadOutlined" :label="t('common.refresh')" :disabled="loading" @click="timelineRequest.run()" />
+  </div>
 
   <a-alert
     v-if="loadError"
@@ -93,36 +116,7 @@ function diffRowClass(record: TimelineDiffEntry): string {
     :description="loadError.message"
   />
 
-  <section v-if="timeline" class="audit-stats audit-timeline-stats">
-    <div class="lg-panel audit-stat">
-      <div class="audit-stat-head">
-        <span class="lg-section-title">{{ t('audit.total_changes') }}</span>
-        <span class="icon-tile icon-tile--sm audit-stat-icon is-info"><HistoryOutlined /></span>
-      </div>
-      <div class="audit-stat-value">{{ timeline.totalChanges }}</div>
-    </div>
-    <div class="lg-panel audit-stat">
-      <div class="audit-stat-head">
-        <span class="lg-section-title">{{ t('audit.days_shown') }}</span>
-      </div>
-      <div class="audit-stat-value">{{ dayCount }}</div>
-    </div>
-    <div class="lg-panel audit-stat">
-      <div class="audit-stat-head">
-        <span class="lg-section-title">{{ t('audit.contributors') }}</span>
-        <span class="icon-tile icon-tile--sm audit-stat-icon is-primary"><TeamOutlined /></span>
-      </div>
-      <div class="audit-stat-value">{{ contributorCount }}</div>
-    </div>
-    <div class="lg-panel audit-stat">
-      <div class="audit-stat-head">
-        <span class="lg-section-title">{{ t('audit.change_types') }}</span>
-      </div>
-      <div class="audit-stat-value">{{ changeTypeCount }}</div>
-    </div>
-  </section>
-
-  <section class="lg-panel audit-timeline-panel">
+  <div class="vn-panel audit-timeline-panel">
     <div v-if="loading && !timeline" class="audit-timeline-loading">
       <a-spin size="large" />
     </div>
@@ -131,17 +125,17 @@ function diffRowClass(record: TimelineDiffEntry): string {
       <div v-for="day in timeline?.days ?? []" :key="day.date" class="audit-tl-day">
         <div class="audit-tl-day-head">
           <span class="audit-tl-day-label">{{ day.label }}</span>
-          <span class="audit-count-pill">{{ day.changeCount }}</span>
+          <span class="vn-chip vn-chip-num">{{ day.changeCount }}</span>
         </div>
         <div class="audit-tl-events">
           <article v-for="event in day.events" :key="event.id" class="audit-tl-event">
             <span :class="['audit-tl-dot', `is-${operationTone(event.operation)}`]" aria-hidden="true">
               <component :is="timelineIcon(event.icon)" />
             </span>
-            <div class="audit-tl-card">
+            <div class="vn-panel audit-tl-card">
               <div class="audit-tl-head">
                 <span class="audit-tl-title">
-                  <span :class="['audit-pill', `is-${operationTone(event.operation)}`]">{{ event.operation }}</span>
+                  <VnBadge :tone="badgeTone(operationTone(event.operation))">{{ event.operation }}</VnBadge>
                   <strong>{{ event.targetName || event.targetId }}</strong>
                   <em>({{ event.targetType }})</em>
                 </span>
@@ -149,7 +143,7 @@ function diffRowClass(record: TimelineDiffEntry): string {
               </div>
               <div class="audit-tl-meta">
                 <span class="audit-operator"><UserOutlined /> {{ event.operator }}</span>
-                <span class="audit-tl-ip">{{ event.ipAddress }}</span>
+                <span class="audit-tl-ip vn-mono">{{ event.ipAddress }}</span>
               </div>
               <a-collapse
                 v-if="event.hasDiff && event.diff && event.diff.length"
@@ -168,7 +162,7 @@ function diffRowClass(record: TimelineDiffEntry): string {
                   >
                     <template #bodyCell="{ column, record }">
                       <template v-if="column.key === 'field'">
-                        <code class="audit-field">{{ record.field }}</code>
+                        <code class="audit-field vn-mono">{{ record.field }}</code>
                       </template>
                       <template v-else-if="column.key === 'oldValue'">
                         <span :class="record.oldValue ? 'audit-value-old' : 'audit-muted'">
@@ -191,8 +185,8 @@ function diffRowClass(record: TimelineDiffEntry): string {
     </div>
 
     <div v-else-if="!loading" class="audit-empty">
-      <span class="icon-tile icon-tile--muted"><HistoryOutlined /></span>
-      <p class="audit-empty-title">{{ t('audit.no_changes') }}</p>
+      <span class="vn-state-glyph" aria-hidden="true"><HistoryOutlined /></span>
+      <p class="vn-state-title">{{ t('audit.no_changes') }}</p>
     </div>
-  </section>
+  </div>
 </template>
