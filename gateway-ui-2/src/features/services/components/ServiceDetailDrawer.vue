@@ -90,7 +90,7 @@ async function copyId() {
 
         <p v-if="service.description" class="vn-detail-desc">{{ service.description }}</p>
 
-        <section class="vn-detail-section">
+        <section v-if="!isAi" class="vn-detail-section">
           <div class="vn-detail-section-head">{{ t('services.basic_config') }}</div>
           <div class="vn-kv">
             <div class="vn-kv-item">

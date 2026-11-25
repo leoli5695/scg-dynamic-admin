@@ -741,3 +741,41 @@
 .vn-portal .vn-form .ant-form-item-tooltip {
   color: var(--vn-ink-2);
 }
+
+.vn-portal.vn-provider-dropdown .ant-select-item-option {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+}
+
+.vn-portal.vn-provider-dropdown .ant-select-item-option-selected {
+  color: var(--vn-ok);
+}
+
+.vn-portal .vn-provider-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vn-portal .vn-provider-label {
+  min-width: 0;
+  white-space: normal;
+}
+
+.vn-portal .vn-provider-id {
+  flex: none;
+  font-size: 11px;
+  color: var(--vn-ink-2);
+}
+
+@media (max-width: 600px) {
+  .vn-portal .form-row-identity {
+    flex-wrap: wrap;
+  }
+
+  .vn-portal .form-row-identity .form-item-grow {
+    flex-basis: 100%;
+  }
+}

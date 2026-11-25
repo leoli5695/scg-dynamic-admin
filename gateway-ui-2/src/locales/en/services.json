@@ -121,5 +121,12 @@
   "services.provider_unhealthy": "Provider probe failed",
   "services.base_url_invalid": "Enter a valid HTTP or HTTPS URL",
   "services.replace_key": "Replace key",
-  "services.stats_scope": "{{category}} statistics"
+  "services.stats_scope": "{{category}} statistics",
+  "services.create_ai_description": "Configure a model provider and its credentials",
+  "services.provider_openai": "OpenAI",
+  "services.provider_anthropic": "Anthropic",
+  "services.provider_qwen": "Alibaba Cloud · Qwen",
+  "services.provider_deepseek": "DeepSeek",
+  "services.provider_zhipu": "Zhipu AI · GLM",
+  "services.provider_moonshot": "Moonshot AI · Kimi"
 }

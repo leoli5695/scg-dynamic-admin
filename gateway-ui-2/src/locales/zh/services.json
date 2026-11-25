@@ -121,5 +121,12 @@
   "services.provider_unhealthy": "提供商探测异常",
   "services.base_url_invalid": "请输入有效的 HTTP 或 HTTPS 地址",
   "services.replace_key": "更换密钥",
-  "services.stats_scope": "{{category}}统计"
+  "services.stats_scope": "{{category}}统计",
+  "services.create_ai_description": "配置模型提供商和访问凭证",
+  "services.provider_openai": "OpenAI",
+  "services.provider_anthropic": "Anthropic",
+  "services.provider_qwen": "阿里云百炼 · 通义千问",
+  "services.provider_deepseek": "DeepSeek",
+  "services.provider_zhipu": "智谱 AI · GLM",
+  "services.provider_moonshot": "月之暗面 · Kimi"
 }

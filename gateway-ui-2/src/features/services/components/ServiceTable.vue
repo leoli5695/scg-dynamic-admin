@@ -29,7 +29,7 @@ const healthyOf = (s: ServiceDefinition) =>
         <tr>
           <th>{{ t('services.name') }}</th>
           <th>{{ t(isAi ? 'services.provider_health' : 'services.status') }}</th>
-          <th>{{ t('services.loadBalancer') }}</th>
+          <th v-if="!isAi">{{ t('services.loadBalancer') }}</th>
           <th>{{ t(isAi ? 'services.provider_type' : 'services.instances') }}</th>
           <th class="vn-table-actions-head">{{ t('services.actions') }}</th>
         </tr>
@@ -57,7 +57,7 @@ const healthyOf = (s: ServiceDefinition) =>
               {{ t(getCatalogStatus(service).textKey, getCatalogStatus(service).params ?? {}) }}
             </VnBadge>
           </td>
-          <td class="vn-row-dim">
+          <td v-if="!isAi" class="vn-row-dim">
             {{ t(getLoadBalancerLabelKey(service.loadBalancer || 'weighted')) }}
           </td>
           <td>

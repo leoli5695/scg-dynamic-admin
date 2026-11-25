@@ -84,6 +84,20 @@ watch(isOpen, (open) => {
 
 const category = computed<ServiceCategory>(() => formState.category ?? (isEdit.value ? props.service?.category ?? 'NORMAL' : 'NORMAL'))
 const isAi = computed(() => category.value === 'AI')
+const modalDescription = computed(() => {
+  if (isEdit.value) return t('services.edit_description')
+  return t(isAi.value ? 'services.create_ai_description' : 'services.create_description')
+})
+
+const providerOptions = computed(() => AI_PROVIDER_TYPES.map((value) => ({
+  value,
+  label: t('services.provider_' + value),
+})))
+
+function matchesProvider(input: string, option?: { label?: string; value?: string }) {
+  const query = input.trim().toLowerCase()
+  return Boolean(option?.label?.toLowerCase().includes(query) || option?.value?.includes(query))
+}
 
 const categoryOptions = computed(() => [
   { value: 'NORMAL', label: h('span', {}, [h(ClusterOutlined, { style: 'margin-right:6px' }), t('services.category_normal')]) },
@@ -148,7 +162,7 @@ async function handleFinish() {
         </span>
         <div>
           <div class="vn-modal-title">{{ t(isEdit ? 'services.edit' : 'services.create') }}</div>
-          <div class="vn-modal-subtitle">{{ t(isEdit ? 'services.edit_description' : 'services.create_description') }}</div>
+          <div class="vn-modal-subtitle">{{ modalDescription }}</div>
         </div>
       </div>
     </template>
@@ -175,7 +189,7 @@ async function handleFinish() {
                 <div v-if="isEdit" class="vn-readonly vn-mono">{{ formState.name }}</div>
                 <a-input v-else v-model:value="formState.name" :placeholder="t('services.name_placeholder')" />
               </a-form-item>
-              <a-form-item name="loadBalancer" :label="t('services.loadBalancer')" class="form-item-lb">
+              <a-form-item v-if="!isAi" name="loadBalancer" :label="t('services.loadBalancer')" class="form-item-lb">
                 <LoadBalancerSelect v-model:value="formState.loadBalancer" />
               </a-form-item>
             </div>
@@ -193,7 +207,22 @@ async function handleFinish() {
           </div>
           <div class="section-content">
             <a-form-item name="providerType" :label="t('services.provider_type')" :rules="[{ required: true, message: t('services.provider_type_required') }]">
-              <a-select v-model:value="formState.providerType" :placeholder="t('services.provider_type_placeholder')" show-search :options="AI_PROVIDER_TYPES.map((p) => ({ label: p, value: p }))" />
+              <a-select
+                v-model:value="formState.providerType"
+                :placeholder="t('services.provider_type_placeholder')"
+                :options="providerOptions"
+                :filter-option="matchesProvider"
+                :list-height="300"
+                popup-class-name="vn-portal vn-provider-dropdown"
+                show-search
+              >
+                <template #option="{ label, value }">
+                  <div class="vn-provider-option">
+                    <span class="vn-provider-label">{{ label }}</span>
+                    <span v-if="label.toLowerCase() !== value" class="vn-provider-id vn-mono">{{ value }}</span>
+                  </div>
+                </template>
+              </a-select>
             </a-form-item>
             <a-form-item
               name="apiKey"

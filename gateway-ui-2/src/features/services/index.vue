@@ -144,7 +144,7 @@ async function handleCreate(values: ServiceFormValues, instances: ServiceInstanc
     await createService({
       name: values.name,
       description: values.description,
-      loadBalancer: values.loadBalancer || 'weighted',
+      ...(!isAi ? { loadBalancer: values.loadBalancer || 'weighted' } : {}),
       instances: isAi ? [] : instances,
       category: values.category || 'NORMAL',
       ...(isAi ? { providerType: values.providerType, baseUrl: values.baseUrl, apiKey: values.apiKey } : {}),
@@ -167,7 +167,7 @@ async function handleUpdate(values: ServiceFormValues, instances: ServiceInstanc
     const saved = await updateService(editing.name, {
       name: editing.name,
       description: values.description,
-      loadBalancer: values.loadBalancer || 'weighted',
+      loadBalancer: isAi ? editing.loadBalancer : (values.loadBalancer || 'weighted'),
       instances: isAi ? [] : instances,
       category: values.category || editing.category || 'NORMAL',
       ...(isAi ? {
