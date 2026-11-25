@@ -335,7 +335,10 @@ const statItems = computed<VnStatItem[]>(() => {
 
     <!-- Catalog -->
     <template v-else>
-      <TransitionGroup v-if="view === 'grid'" name="vn-item" tag="div" class="vn-grid">
+      <!-- Keyed by category: a whole-batch swap renders instantly instead of
+           animating two disjoint key sets against each other. Within a category
+           the same instance persists, so filtering still reflows smoothly. -->
+      <TransitionGroup v-if="view === 'grid'" :key="category" name="vn-item" tag="div" class="vn-grid">
         <ServiceTile
           v-for="row in tileRows"
           :key="row.service.name"
@@ -348,6 +351,7 @@ const statItems = computed<VnStatItem[]>(() => {
       </TransitionGroup>
       <ServiceTable
         v-else
+        :key="category"
         :rows="tileRows"
         @detail="selectedService = $event"
         @edit="openEditModal"
