@@ -54,7 +54,7 @@ const warning = computed(() => {
       </div>
       <div class="vn-iconbtn-group">
         <VnIconButton :icon="EditOutlined" :label="t('common.edit')" @click="emit('edit', service)" />
-        <ServiceActionsMenu @delete="emit('delete', service)" />
+        <ServiceActionsMenu :service-id="service.serviceId" @delete="emit('delete', service)" />
       </div>
     </div>
     <div class="vn-tile-meta">

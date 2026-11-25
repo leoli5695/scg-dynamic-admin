@@ -71,7 +71,7 @@ const healthyOf = (s: ServiceDefinition) =>
           <td>
             <div class="vn-iconbtn-group">
               <VnIconButton :icon="EditOutlined" :label="t('common.edit')" @click="emit('edit', service)" />
-              <ServiceActionsMenu @delete="emit('delete', service)" />
+              <ServiceActionsMenu :service-id="service.serviceId" @delete="emit('delete', service)" />
             </div>
           </td>
         </tr>
