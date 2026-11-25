@@ -79,18 +79,20 @@ function copyId() {
           <a-tooltip :title="service.name" overlay-class-name="vn-tooltip">
             <span class="vn-tile-name">{{ service.name }}</span>
           </a-tooltip>
+          <!-- Copy and the row actions share this line: the name gets the full
+               title row, and a long id ellipsises instead of pushing them out. -->
           <div class="vn-tile-idrow">
             <a-tooltip :title="displayId" overlay-class-name="vn-tooltip">
               <span class="vn-mono vn-tile-id">{{ displayId }}</span>
             </a-tooltip>
             <VnIconButton :icon="CopyOutlined" :label="t('common.copy_id')" inline @click="copyId" />
+            <div class="vn-iconbtn-group">
+              <VnIconButton :icon="EyeOutlined" :label="t('common.detail')" @click="emit('detail', service)" />
+              <VnIconButton :icon="EditOutlined" :label="t('common.edit')" @click="emit('edit', service)" />
+              <VnIconButton :icon="DeleteOutlined" :label="t('common.delete')" danger @click="emit('delete', service)" />
+            </div>
           </div>
         </div>
-      </div>
-      <div class="vn-iconbtn-group">
-        <VnIconButton :icon="EyeOutlined" :label="t('common.detail')" @click="emit('detail', service)" />
-        <VnIconButton :icon="EditOutlined" :label="t('common.edit')" @click="emit('edit', service)" />
-        <VnIconButton :icon="DeleteOutlined" :label="t('common.delete')" danger @click="emit('delete', service)" />
       </div>
     </div>
 

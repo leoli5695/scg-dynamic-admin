@@ -31,15 +31,17 @@
 }
 
 /* ==================== Tile ====================
-   Fixed band grid: every tile reserves the same rows in the same order, so the
-   instance pool's top edge and height match across a row regardless of instance
-   count, warning presence or whether a description exists. Only the last band
-   may grow (an expanded description), and it sits below the pool. */
+   Fixed bands above the pool keep its top edge identical across a row. The pool
+   itself is flexible with a one-line minimum, so a row of single-instance cards
+   stays compact while a row containing a two-line card grows to match — the
+   grid stretches every tile to the row height and the pool absorbs the slack,
+   which keeps pool height, pool bottom and the disclosure top aligned per row.
+   Warning and disclosure bands are always present so nothing shifts. */
 .vn-scope .vn-tile {
-  --vn-band-head: 38px;
+  --vn-band-head: 40px;
   --vn-band-meta: 26px;
   --vn-band-warn: 18px;
-  --vn-band-pool: 93px;
+  --vn-band-pool-min: 64px;
   --vn-band-desc: 30px;
 
   display: grid;
@@ -47,10 +49,9 @@
     var(--vn-band-head)
     var(--vn-band-meta)
     var(--vn-band-warn)
-    var(--vn-band-pool)
+    minmax(var(--vn-band-pool-min), 1fr)
     minmax(var(--vn-band-desc), auto);
   gap: 8px;
-  align-content: start;
   padding: 14px 14px 12px 16px;
   overflow: hidden;
   transition:
@@ -77,11 +78,12 @@
   background: var(--vn-surface-raised);
 }
 
+/* Grid items default to min-width:auto, which lets the head grow past its
+   column and pushes the action buttons outside the card. Constrain it so the
+   name/id ellipsise instead. */
 .vn-scope .vn-tile-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -89,6 +91,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  flex: 1;
   min-width: 0;
 }
 
@@ -101,9 +104,9 @@
 
 .vn-scope .vn-tile-names {
   min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1px;
 }
 
 .vn-scope .vn-tile-name {
@@ -118,26 +121,40 @@
   white-space: nowrap;
 }
 
+/* id + copy + row actions on one fixed-height line. No `gap`: antd renders
+   popups into the trigger's parent, so a gap would charge an extra column for
+   the injected node and nudge the row. Spacing uses margins instead. */
 .vn-scope .vn-tile-idrow {
   display: flex;
   align-items: center;
-  gap: 2px;
-  height: 18px;
+  height: 20px;
+  margin-top: 1px;
   min-width: 0;
 }
 
 .vn-scope .vn-tile-id {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--vn-ink-3);
-  line-height: 18px;
+  line-height: 20px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 150px;
 }
 
 .vn-scope .vn-tile-idrow .vn-iconbtn {
-  --vn-hit: 18px;
-  --vn-glyph: 12px;
+  --vn-hit: 20px;
+  --vn-glyph: 13px;
+  flex: none;
+}
+
+.vn-scope .vn-tile-idrow .copy-btn {
+  margin-left: 2px;
+}
+
+.vn-scope .vn-tile-idrow .vn-iconbtn-group {
+  margin-left: auto;
+  flex: none;
 }
 
 .vn-scope .vn-tile-meta {
@@ -145,6 +162,7 @@
   align-items: center;
   gap: 6px;
   flex-wrap: nowrap;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -212,15 +230,21 @@
   overflow: hidden;
 }
 
+/* Content-height list capped at two chip lines, so a very narrow card cannot
+   grow the pool without bound; the row's tallest card sets the shared height. */
 .vn-scope .vn-pool-list {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   align-content: flex-start;
-  height: 100%;
+  max-height: 49px;
   overflow: hidden;
 }
 
+/* No `color` here: the tone class (vn-ink-ok / err / idle) must supply it so the
+   dot's `currentColor` reads green for a live node and red for a down one. A
+   neutral colour here ties that rule's specificity and, loading later, wins —
+   which is what made every dot grey. The address text is pinned neutral below. */
 .vn-scope .vn-endpoint {
   display: inline-flex;
   align-items: center;
@@ -229,13 +253,22 @@
   border-radius: var(--vn-r-chip);
   border: 1px solid var(--vn-line-soft);
   background: var(--vn-surface);
-  color: var(--vn-ink-2);
   line-height: 1.5;
 }
 
 .vn-scope .vn-endpoint .vn-mono {
   font-size: 11px;
   color: var(--vn-ink-2);
+}
+
+/* A down node also gets a faint red edge so it is scannable without the dot. */
+.vn-scope .vn-endpoint.vn-ink-err {
+  border-color: rgba(242, 85, 90, 0.32);
+}
+
+/* Disabled nodes read as inactive, not as failures. */
+.vn-scope .vn-endpoint.vn-ink-idle .vn-mono {
+  color: var(--vn-ink-3);
 }
 
 .vn-scope .vn-endpoint-more {
@@ -552,11 +585,21 @@
   padding: 9px 10px 10px;
 }
 
+/* Right-alignment must not depend on the header's child count. The app's
+   ConfigProvider renders popups into the trigger's parent (App.vue
+   getPopupContainer), so opening this button's tooltip appends a zero-width
+   static div here. Under `space-between` that makes the button the middle of
+   three children and drags it to the centre of the row. An auto margin keeps it
+   flush right no matter how many siblings get injected. */
 .vn-portal .instance-row-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   margin-bottom: 7px;
+}
+
+.vn-portal .instance-row-header > .action-btn {
+  margin-left: auto;
 }
 
 .vn-portal .instance-label {
@@ -645,20 +688,27 @@
   min-height: 0;
 }
 
+/* Same injected-sibling hazard as the instance row header: the close button is
+   a direct tooltip trigger. Auto margin instead of space-between, and no `gap`
+   (a gap would still charge one extra column for the injected node). */
 .vn-portal .vn-detail-head {
   flex: none;
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  justify-content: flex-start;
   padding: 14px 16px;
   border-bottom: 1px solid var(--vn-line-soft);
+}
+
+.vn-portal .vn-detail-head > .action-btn {
+  margin-left: auto;
 }
 
 .vn-portal .vn-detail-head-left {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  margin-right: 10px;
   min-width: 0;
 }
 

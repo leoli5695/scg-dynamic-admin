@@ -469,10 +469,17 @@
   color: var(--vn-err);
 }
 
-.vn-scope .vn-iconbtn-group {
+/* Margin spacing rather than `gap`, so an antd popup container injected as a
+   last child cannot add a phantom column and shift the buttons. */
+.vn-scope .vn-iconbtn-group,
+.vn-portal .vn-iconbtn-group {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+}
+
+.vn-scope .vn-iconbtn-group > .vn-iconbtn + .vn-iconbtn,
+.vn-portal .vn-iconbtn-group > .vn-iconbtn + .vn-iconbtn {
+  margin-left: 2px;
 }
 
 /* ==================== State panel (empty / error / loading) ================= */
