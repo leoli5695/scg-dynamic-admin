@@ -1,10 +1,9 @@
 <script setup lang="ts">
 /**
- * Page header that lives outside any panel: eyebrow, title, one-line lede and
- * an actions slot. Replaces the icon-tile + gradient-title header.
+ * Page header that lives outside any panel: title with an inline gradient
+ * subtitle on the same baseline, plus an actions slot.
  */
 defineProps<{
-  eyebrow?: string
   title: string
   lede?: string
 }>()
@@ -13,9 +12,10 @@ defineProps<{
 <template>
   <div class="vn-toolbar">
     <div class="vn-toolbar-copy">
-      <span v-if="eyebrow" class="vn-eyebrow">{{ eyebrow }}</span>
-      <h2 class="vn-title">{{ title }}</h2>
-      <p v-if="lede" class="vn-lede">{{ lede }}</p>
+      <h2 class="vn-title">
+        <span class="vn-title-text">{{ title }}</span>
+        <span v-if="lede" class="vn-lede-inline">{{ lede }}</span>
+      </h2>
     </div>
     <div v-if="$slots.actions" class="vn-toolbar-actions">
       <slot name="actions" />

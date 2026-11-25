@@ -63,6 +63,9 @@
 
   --vn-mono: 'JetBrains Mono', 'SF Mono', Monaco, Consolas, monospace;
 
+  /* Brand green into the login palette's periwinkle — bridges both languages. */
+  --vn-gradient-text: linear-gradient(90deg, #42d392, #7f9dff);
+
   color: var(--vn-ink);
 }
 
@@ -78,11 +81,27 @@
 
 .vn-scope .vn-title {
   margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
   font-size: 22px;
   font-weight: 650;
   letter-spacing: -0.015em;
   line-height: 1.25;
   color: var(--vn-ink);
+}
+
+/* Subtitle rides the title's baseline instead of taking its own row. */
+.vn-scope .vn-lede-inline {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+  background: var(--vn-gradient-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .vn-scope .vn-lede {
@@ -168,37 +187,33 @@
   border-top: 1px solid var(--vn-line-soft);
 }
 
-/* ==================== Stat rail: one panel, hairline-divided cells ==========
-   The bottom edge is owned by the cells, not the panel: every cell carries the
-   same 2px bottom rule and the active one just recolours it. That keeps all four
-   cells the same height, puts the active indicator exactly on the shared bottom
-   edge, and avoids a second line under the panel border. */
+/* ==================== Stat strip: compact, lives in the tool row ============
+   One line per cell. The bottom edge is owned by the cells, not the panel:
+   every cell carries the same 2px bottom rule and the active one just recolours
+   it, so all cells stay equal height with one clean shared bottom line. */
 .vn-scope .vn-statrail {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
+  display: inline-flex;
   align-items: stretch;
+  flex: none;
   overflow: hidden;
-  margin-bottom: 12px;
   border-bottom: 0;
-  border-radius: var(--vn-r-panel) var(--vn-r-panel) 0 0;
+  border-radius: var(--vn-r-control) var(--vn-r-control) 0 0;
 }
 
 .vn-scope .vn-stat {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  height: 68px;
-  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px;
   border: 0;
   border-left: 1px solid var(--vn-line-soft);
   border-bottom: 2px solid var(--vn-line);
   background: transparent;
-  text-align: left;
   font: inherit;
   color: inherit;
   cursor: pointer;
+  white-space: nowrap;
   transition: background var(--vn-fast) var(--vn-ease);
 }
 
@@ -215,31 +230,32 @@
   border-bottom-color: var(--vn-stat-accent, var(--vn-brand));
 }
 
-.vn-scope .vn-stat-top {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--vn-stat-accent, var(--vn-ink-3));
+.vn-scope .vn-stat-icon {
   font-size: var(--vn-glyph-sm);
+  color: var(--vn-stat-accent, var(--vn-ink-3));
+  flex: none;
 }
 
 .vn-scope .vn-stat-value {
-  font-size: 23px;
+  font-size: 15px;
   font-weight: 640;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   color: var(--vn-ink);
 }
 
 .vn-scope .vn-stat-label {
   font-size: 11.5px;
-  line-height: 1.3;
   color: var(--vn-ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* ==================== Tool row: metrics + category + search, one line ======= */
+.vn-scope .vn-metarow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
 }
 
 /* ==================== Segmented control (native, replaces antd tabs) ======== */
@@ -296,15 +312,7 @@
   color: var(--vn-brand);
 }
 
-/* ==================== Filter bar ==================== */
-.vn-scope .vn-filterbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
+/* ==================== Tool row extras ==================== */
 .vn-scope .vn-filterbar-spacer {
   flex: 1;
   min-width: 8px;
@@ -857,16 +865,28 @@
   background: var(--vn-surface-hover);
 }
 
-.vn-tooltip.ant-tooltip .ant-tooltip-inner {
+/* Every tooltip inside a vn surface gets the matte compact popover — including
+   the ones antd renders for `a-form-item :tooltip`, which carry no
+   overlay-class-name and would otherwise fall back to the global blue
+   colorBgSpotlight banner. Scoped to vn surfaces so the login page (outside
+   .vn-scope/.vn-portal) keeps its own look without touching theme.ts. */
+.vn-tooltip.ant-tooltip .ant-tooltip-inner,
+.vn-scope .ant-tooltip .ant-tooltip-inner,
+.vn-portal .ant-tooltip .ant-tooltip-inner {
   background: var(--vn-surface-raised);
   border: 1px solid var(--vn-line);
   border-radius: var(--vn-r-chip);
   color: var(--vn-ink);
   font-size: 11.5px;
+  line-height: 1.5;
+  padding: 6px 9px;
+  max-width: 280px;
   box-shadow: var(--vn-shadow-pop);
 }
 
-.vn-tooltip.ant-tooltip .ant-tooltip-arrow::before {
+.vn-tooltip.ant-tooltip .ant-tooltip-arrow::before,
+.vn-scope .ant-tooltip .ant-tooltip-arrow::before,
+.vn-portal .ant-tooltip .ant-tooltip-arrow::before {
   background: var(--vn-surface-raised);
 }
 
@@ -997,6 +1017,20 @@
 .vn-portal.ant-drawer .ant-drawer-mask {
   background: rgba(4, 7, 14, 0.6);
   backdrop-filter: none;
+}
+
+/* antd renders a form-item help tooltip into the trigger's parent, and the
+   18px-tall `label` is position:relative — so it becomes the offsetParent and
+   the popup is aligned against that tiny box, landing on top of the control
+   below instead of above the label. Letting the nearest positioned ancestor be
+   the panel instead restores correct placement. */
+.vn-scope .ant-form-item-label,
+.vn-scope .ant-form-item-label > label,
+.vn-scope .ant-form-item-tooltip,
+.vn-portal .ant-form-item-label,
+.vn-portal .ant-form-item-label > label,
+.vn-portal .ant-form-item-tooltip {
+  position: static;
 }
 
 /* ==================== Vue Transition / TransitionGroup ==================== */

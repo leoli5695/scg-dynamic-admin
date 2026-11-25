@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * Metric rail: one flat panel divided by hairlines. Cells double as filters —
- * the active cell grows an accent underline rather than becoming a filled pill.
+ * Compact metric strip: one line per cell (icon, label, value), hairline
+ * dividers, and a shared bottom rule that recolours for the active filter.
+ * Cells double as filters.
  */
 import type { Component } from 'vue'
 
@@ -10,7 +11,7 @@ export interface VnStatItem {
   value: number
   label: string
   icon?: Component
-  /** CSS colour for the icon row and the active underline. */
+  /** CSS colour for the icon and the active bottom rule. */
   accent?: string
   active?: boolean
 }
@@ -30,10 +31,8 @@ const emit = defineEmits<{ (e: 'select', key: string): void }>()
       :aria-pressed="item.active ?? false"
       @click="emit('select', item.key)"
     >
-      <span class="vn-stat-top">
-        <component :is="item.icon" v-if="item.icon" />
-        <span class="vn-stat-label">{{ item.label }}</span>
-      </span>
+      <component :is="item.icon" v-if="item.icon" class="vn-stat-icon" />
+      <span class="vn-stat-label">{{ item.label }}</span>
       <span class="vn-stat-value">{{ item.value }}</span>
     </button>
   </div>

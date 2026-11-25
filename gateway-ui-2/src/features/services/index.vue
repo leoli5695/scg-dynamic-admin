@@ -256,7 +256,6 @@ const statItems = computed<VnStatItem[]>(() => {
 <template>
   <div class="services-page vn-services vn-scope">
     <VnToolbar
-      :eyebrow="t('services.eyebrow')"
       :title="t('services.title')"
       :lede="t('services.description_helper')"
     >
@@ -274,9 +273,9 @@ const statItems = computed<VnStatItem[]>(() => {
       </template>
     </VnToolbar>
 
-    <VnStatRail :items="statItems" :label="t('services.stats_services')" @select="selectStat" />
-
-    <div class="vn-filterbar">
+    <!-- Metrics, category and search share one tool row to save vertical space. -->
+    <div class="vn-metarow">
+      <VnStatRail :items="statItems" :label="t('services.stats_services')" @select="selectStat" />
       <VnSegmented v-model="category" :options="categoryOptions" :label="t('services.category')" />
       <a-input
         ref="searchInput"
